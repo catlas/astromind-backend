@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pyswisseph
+openai
+python-dotenv
+requests
+pydantic
+timezonefinder
+pytz
+
