@@ -168,7 +168,7 @@ class ChartRequest(BaseModel):
         ge=-180, le=180,
         description="Географска дължина за транзит (за релокация). Ако не е предоставена, използва се birth lon."
     )
-    # Partner/Relationship полета
+    # Partner/Relationship fields
     partner_name: Optional[str] = Field(
         default=None,
         description="Име на партньора (за synastry анализ)"
