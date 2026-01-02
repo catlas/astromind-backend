@@ -1,0 +1,60 @@
+INFO:     Will watch for changes in these directories: ['/Users/Evgeni/CursorProjects/astro-project/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [26929] using StatReload
+INFO:     Started server process [26950]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54582 - "POST /generate-docx HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54631 - "OPTIONS /interpret-stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54631 - "POST /interpret-stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54669 - "OPTIONS /generate-docx HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54669 - "POST /generate-docx HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54680 - "POST /generate-docx HTTP/1.1" 500 Internal Server Error
+WARNING:  StatReload detected changes in 'docx_generator.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26950]
+INFO:     Started server process [30049]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'docx_generator.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30049]
+INFO:     Started server process [30138]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'docx_generator.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30138]
+INFO:     Started server process [30206]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'docx_generator.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30206]
+INFO:     Started server process [30267]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'docx_generator.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30267]
+INFO:     Started server process [30314]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'docx_generator.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [30314]
+INFO:     Started server process [30360]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

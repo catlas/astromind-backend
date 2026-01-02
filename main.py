@@ -5,14 +5,17 @@ FastAPI сървър за астрологично приложение
 
 from fastapi import FastAPI, HTTPException  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+from fastapi.responses import StreamingResponse, Response  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 import json
+import asyncio
 import engine
 from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
 from aspects_engine import calculate_natal_aspects
+from docx_generator import DOCXGenerator
 
 # Инициализация на FastAPI приложението
 app = FastAPI(
@@ -279,6 +282,170 @@ async def calculate_chart(request: ChartRequest):
         raise HTTPException(status_code=500, detail=f"Грешка при изчисляване на картата: {str(e)}")
 
 
+@app.post("/interpret-stream")
+async def interpret_chart_stream(request: ChartRequest):
+    """
+    Streaming endpoint за динамична прогноза (месец по месец).
+    Използва Server-Sent Events (SSE) за да изпраща резултатите в реално време.
+    
+    Този endpoint се използва само когато is_dynamic=True.
+    """
+    
+    async def generate_monthly_stream():
+        """Generator функция за streaming на месечни прогнози"""
+        try:
+            # Validate dynamic mode
+            if not request.is_dynamic:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Този endpoint изисква is_dynamic=True'}, ensure_ascii=False)}\n\n"
+                return
+            
+            if not request.end_date:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'end_date е задължително за динамична прогноза'}, ensure_ascii=False)}\n\n"
+                return
+            
+            # Initialize engine
+            engine_instance = engine.AstrologyEngine()
+            
+            # Calculate natal chart
+            natal_chart_data = engine_instance.calculate_chart(
+                date=request.date,
+                time=request.time,
+                lat=request.lat,
+                lon=request.lon
+            )
+            
+            # Calculate partner chart if provided
+            partner_chart_data = None
+            if request.partner_date and request.partner_time and request.partner_lat is not None and request.partner_lon is not None:
+                partner_chart_data = engine_instance.calculate_chart(
+                    date=request.partner_date,
+                    time=request.partner_time,
+                    lat=request.partner_lat,
+                    lon=request.partner_lon
+                )
+            
+            # Calculate natal aspects for user
+            natal_aspects_data = None
+            try:
+                natal_aspects_data = calculate_natal_aspects(natal_chart_data, use_wider_orbs=False)
+            except Exception as e:
+                print(f"Warning: Could not calculate natal aspects for streaming: {e}")
+            
+            # Calculate natal aspects for partner if present
+            partner_natal_aspects_data = None
+            if partner_chart_data:
+                try:
+                    partner_natal_aspects_data = calculate_natal_aspects(partner_chart_data, use_wider_orbs=False)
+                except Exception as e:
+                    print(f"Warning: Could not calculate partner natal aspects for streaming: {e}")
+            
+            # Scan period for timeline events
+            # For dynamic forecast, use target_date as start (or current date if not provided)
+            # NEVER use birth date (request.date) as start_date for forecast!
+            if request.target_date:
+                start_date = request.target_date
+            else:
+                # Default to current date if no target_date provided
+                from datetime import datetime
+                start_date = datetime.now().strftime("%Y-%m-%d")
+            
+            end_date = request.end_date
+            
+            scanner = TransitScanner()
+            all_events = scanner.scan_period(
+                natal_chart=natal_chart_data,
+                start_date=start_date,
+                end_date=end_date,
+                lat=request.lat,
+                lon=request.lon,
+                partner_chart=partner_chart_data
+            )
+            
+            timeline_events = _filter_and_limit_events(all_events)
+            
+            # Group events by month
+            from collections import defaultdict
+            events_by_month = defaultdict(list)
+            for event in timeline_events:
+                month_key = event['date'][:7]  # "YYYY-MM"
+                events_by_month[month_key].append(event)
+            
+            sorted_months = sorted(events_by_month.keys())
+            
+            if not sorted_months:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Няма събития за анализиране в избрания период'}, ensure_ascii=False)}\n\n"
+                return
+            
+            # Month names in Bulgarian
+            month_names = {
+                "01": "Януари", "02": "Февруари", "03": "Март", "04": "Април",
+                "05": "Май", "06": "Юни", "07": "Юли", "08": "Август",
+                "09": "Септември", "10": "Октомври", "11": "Ноември", "12": "Декември"
+            }
+            
+            # Send initial metadata with natal chart data
+            start_month = f"{month_names.get(sorted_months[0][5:7], sorted_months[0][5:7])} {sorted_months[0][:4]}"
+            end_month = f"{month_names.get(sorted_months[-1][5:7], sorted_months[-1][5:7])} {sorted_months[-1][:4]}"
+            
+            start_event_data = {
+                'type': 'start',
+                'total_months': len(sorted_months),
+                'start_month': start_month,
+                'end_month': end_month,
+                'natal_chart': natal_chart_data,
+                'partner_chart': partner_chart_data,
+                'natal_aspects': natal_aspects_data,
+                'partner_natal_aspects': partner_natal_aspects_data
+            }
+            
+            yield f"data: {json.dumps(start_event_data, ensure_ascii=False)}\n\n"
+            
+            # Process each month
+            for idx, month in enumerate(sorted_months):
+                monthly_events = events_by_month[month]
+                month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
+                
+                # Send month_start event
+                yield f"data: {json.dumps({'type': 'month_start', 'month': month_display, 'index': idx, 'total': len(sorted_months)}, ensure_ascii=False)}\n\n"
+                
+                # Process month with AI interpreter using callback
+                monthly_text = await ai_interpreter._process_monthly_chunk(
+                    month=month,
+                    monthly_events=monthly_events,
+                    report_type=request.report_type or "general",
+                    language="bg",
+                    natal_chart=natal_chart_data,
+                    partner_chart=partner_chart_data,
+                    user_display_name=request.name or "User",
+                    partner_display_name=request.partner_name or "Partner",
+                    question=request.question or "",
+                    has_partner=bool(partner_chart_data)
+                )
+                
+                # Send month_complete event
+                yield f"data: {json.dumps({'type': 'month_complete', 'month': month_display, 'text': monthly_text, 'index': idx, 'total': len(sorted_months)}, ensure_ascii=False)}\n\n"
+                
+                # Small delay to prevent overwhelming the client
+                await asyncio.sleep(0.1)
+            
+            # Send completion event
+            yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
+            
+        except Exception as e:
+            error_message = f"Грешка при генериране на прогноза: {str(e)}"
+            yield f"data: {json.dumps({'type': 'error', 'message': error_message}, ensure_ascii=False)}\n\n"
+    
+    return StreamingResponse(
+        generate_monthly_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
+
 @app.post("/interpret", response_model=InterpretationResponse)
 async def interpret_chart(request: ChartRequest):
     """
@@ -500,6 +667,59 @@ async def interpret_chart(request: ChartRequest):
         raise HTTPException(status_code=500, detail=f"Грешка при обработка: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Неочаквана грешка: {str(e)}")
+
+
+class DOCXRequest(BaseModel):
+    """Request model for DOCX generation"""
+    user_name: str
+    birth_date: str
+    birth_time: str
+    birth_city: str
+    report_type: str
+    natal_chart: Optional[Dict] = None
+    natal_aspects: Optional[List] = None
+    monthly_results: List[Dict] = Field(default_factory=list)
+
+
+@app.post("/generate-docx")
+async def generate_docx(request: DOCXRequest):
+    """
+    Generate DOCX report for periods > 6 months
+    """
+    try:
+        generator = DOCXGenerator()
+        
+        # Prepare data for DOCX generation
+        docx_data = {
+            'user_name': request.user_name,
+            'birth_date': request.birth_date,
+            'birth_time': request.birth_time,
+            'birth_city': request.birth_city,
+            'report_type': request.report_type,
+            'natal_chart': request.natal_chart,
+            'natal_aspects': request.natal_aspects,
+            'monthly_results': request.monthly_results
+        }
+        
+        # Generate DOCX
+        docx_bytes = generator.generate_docx(docx_data)
+        
+        # Return DOCX file - URL encode filename for Cyrillic support
+        from urllib.parse import quote
+        user_name_safe = docx_data.get('user_name', 'Report').replace(' ', '_')
+        filename = f"Astrology_Report_{user_name_safe}_{datetime.now().strftime('%Y-%m-%d')}.docx"
+        filename_encoded = quote(filename)
+        
+        return Response(
+            content=docx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Грешка при генериране на DOCX: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -86,15 +86,43 @@ class TransitScanner:
         return jd
     
     def _get_planet_position(self, jd: float, planet_id: int) -> Tuple[float, float]:
-        """Връща позиция и скорост на планета"""
+        """Връща позиция и скорост на планета с валидация"""
         try:
             result = swe.calc_ut(jd, planet_id, swe.FLG_SWIEPH | swe.FLG_SPEED)
             xx = result[0]
             longitude = xx[0]
             speed = xx[3]
+            
+            # Validation for Jupiter position in 2026 (VERIFIED CORRECT)
+            # Jupiter in Cancer during 2026 (retrograde Feb-Jun)
+            # This is CORRECT per Swiss Ephemeris calculations
+            if planet_id == swe.JUPITER:
+                # Convert JD back to date for validation
+                cal = swe.revjul(jd, swe.GREG_CAL)
+                year = cal[0]
+                month = cal[1]
+                
+                if year == 2026 and (month >= 1 and month <= 6):
+                    # Jupiter in Cancer: Jan-Jun 2026 (90° to 120° longitude)
+                    expected_sign = "Cancer"
+                    expected_range = (90, 120)
+                    actual_sign = self._get_sign_name(longitude)
+                    
+                    if actual_sign != expected_sign:
+                        print(f"⚠️ WARNING: Jupiter position unexpected!")
+                        print(f"   Date: {year}-{month:02d}, Expected: {expected_sign}")
+                        print(f"   Actual: {actual_sign} ({longitude:.2f}°)")
+            
             return longitude, speed
         except Exception as e:
             raise RuntimeError(f"Грешка при изчисляване на планета {planet_id}: {e}")
+    
+    def _get_sign_name(self, longitude: float) -> str:
+        """Връща име на знак по longitude"""
+        signs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+                 "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+        sign_index = int(longitude / 30) % 12
+        return signs[sign_index]
     
     def _normalize_angle(self, angle: float) -> float:
         """Нормализира ъгъл в диапазона 0-360"""

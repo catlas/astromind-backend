@@ -2929,3 +2929,3490 @@ Please provide a comprehensive SYNASTRY analysis covering:
 Моля отговори на български език.
 ================================================================================
 
+
+================================================================================
+[2026-01-02 03:41:18] STEP 5: PROMPT TO AI
+================================================================================
+
+--- SYSTEM PROMPT (first 1000 chars) ---
+
+        You are an Expert Relationship Astrologer specializing in Love and Partnership Analysis.
+        
+        **🚨 CRITICAL TERMINOLOGY RULE (STRICTLY ENFORCED):**
+        - In Bulgarian, ALWAYS use "дом" (house), NEVER "поле" (field)
+        - Examples: "5-ти дом", "7-ми дом", "8-ми дом"
+        - WRONG: "5-то поле", "в седмото поле"
+        - RIGHT: "5-ти дом", "в 7-ми дом"
+        
+        **STRICT RULES - FOLLOW EXACTLY:**
+        
+        1. **FOCUS**: Analyze EXCLUSIVELY:
+           - Style of attraction and romance
+           - Emotional and security needs in serious relationships
+           - Sexuality, intimacy depth, and merging patterns
+           - Relationship challenges and growth potential
+           → DO NOT mention money, career, health, or general life path unless directly tied to partnership dynamics.
+        
+        2. **DATA SOURCE PRINCIPLE (MANDATORY)**:
+           - **ALL house placements for Partner's planets are PRE-CALCULATED** and provided in the sectio...
+
+
+--- USER PROMPT ---
+User Question: General analysis
+
+--- КРАСИМИРА АНДОНОВА NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 217.2522685434155,
+      "speed": 0.9998671620778807,
+      "distance": 0.9927754698852093,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°15'",
+      "house": 8
+    },
+    "Moon": {
+      "longitude": 314.88825634473693,
+      "speed": 12.900690931220572,
+      "distance": 0.0025938100409010627,
+      "zodiac_sign": "Aquarius",
+      "formatted_pos": "Aquarius 14°53'",
+      "house": 12
+    },
+    "Mercury": {
+      "longitude": 212.254618734153,
+      "speed": 1.665086166788009,
+      "distance": 1.3969545212612127,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 2°15'",
+      "house": 7
+    },
+    "Venus": {
+      "longitude": 251.96688664395353,
+      "speed": 1.2151125835608139,
+      "distance": 1.274289935011842,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 11°58'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 224.8913445833693,
+      "speed": 0.6954227354097064,
+      "distance": 2.528138863670416,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 14°53'",
+      "house": 8
+    },
+    "Jupiter": {
+      "longitude": 58.57621075380902,
+      "speed": -0.11885344356263626,
+      "distance": 4.069635400526164,
+      "zodiac_sign": "Taurus",
+      "formatted_pos": "Taurus 28°35'",
+      "house": 2
+    },
+    "Saturn": {
+      "longitude": 136.1425101575529,
+      "speed": 0.05095788239920864,
+      "distance": 9.218348411698074,
+      "zodiac_sign": "Leo",
+      "formatted_pos": "Leo 16°09'",
+      "house": 6
+    },
+    "Uranus": {
+      "longitude": 217.4658056532639,
+      "speed": 0.06242021320162532,
+      "distance": 19.538151908605226,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°28'",
+      "house": 8
+    },
+    "Neptune": {
+      "longitude": 252.39186516251755,
+      "speed": 0.032091979660668735,
+      "distance": 31.098543376995817,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 12°24'",
+      "house": 9
+    },
+    "Pluto": {
+      "longitude": 192.58164574348797,
+      "speed": 0.03631138764189428,
+      "distance": 31.421255727390317,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 12°35'",
+      "house": 7
+    },
+    "Node": {
+      "longitude": 213.5427092018384,
+      "speed": 0.0020172303744730403,
+      "distance": 0.0023787975460053193,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 3°33'",
+      "house": 7
+    },
+    "Chiron": {
+      "longitude": 29.223079606396922,
+      "speed": -0.04644662060945722,
+      "distance": 17.130914713851748,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 29°13'",
+      "house": 1
+    }
+  },
+  "houses": {
+    "House1": 351.50141269096355,
+    "House2": 36.21581149123324,
+    "House3": 64.19681993400506,
+    "House4": 85.69258692558071,
+    "House5": 106.46007759748028,
+    "House6": 131.74207055153204,
+    "House7": 171.50141269096355,
+    "House8": 216.21581149123324,
+    "House9": 244.19681993400508,
+    "House10": 265.6925869255807,
+    "House11": 286.4600775974803,
+    "House12": 311.74207055153204
+  },
+  "angles": {
+    "Ascendant": 351.50141269096355,
+    "MC": 265.6925869255807,
+    "Ascendant_formatted": "Pisces 21°30'",
+    "MC_formatted": "Sagittarius 25°42'",
+    "Ascendant_sign": "Pisces",
+    "MC_sign": "Sagittarius"
+  },
+  "julian_day": 2443082.0555555555,
+  "datetime_utc": "1976-10-30T13:20:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1976-10-30 15:20",
+  "location": {
+    "latitude": 42.6817,
+    "longitude": 26.3229
+  }
+}
+
+--- КРАСИМИРА АНДОНОВА NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Moon",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 90.0,
+    "orb": 0.0
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.81,
+    "orb": 0.19
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "conjunction",
+    "angle": 0.21,
+    "orb": 0.21
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 0.42,
+    "orb": 0.42
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.39,
+    "orb": 0.61
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 178.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 88.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 1.29,
+    "orb": 1.29
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "trine",
+    "angle": 122.31,
+    "orb": 2.31
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 62.5,
+    "orb": 2.5
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 62.92,
+    "orb": 2.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 176.97,
+    "orb": 3.03
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "MC",
+    "aspect": "trine",
+    "angle": 123.53,
+    "orb": 3.53
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 56.44,
+    "orb": 3.56
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.71,
+    "orb": 3.71
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Neptune",
+    "aspect": "trine",
+    "angle": 116.25,
+    "orb": 3.75
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.92,
+    "orb": 3.92
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 115.82,
+    "orb": 4.18
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 85.81,
+    "orb": 4.19
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 175.68,
+    "orb": 4.32
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mercury",
+    "aspect": "conjunction",
+    "angle": 5.0,
+    "orb": 5.0
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 97.64,
+    "orb": 7.64
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "conjunction",
+    "angle": 7.64,
+    "orb": 7.64
+  }
+]
+
+--- ЕВГЕНИ NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 23.037323939345274,
+      "speed": 0.9800148130430729,
+      "distance": 1.0027512853707308,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 23°02'",
+      "house": 10
+    },
+    "Moon": {
+      "longitude": 279.2446468804887,
+      "speed": 11.898367594029141,
+      "distance": 0.002691202967417669,
+      "zodiac_sign": "Capricorn",
+      "formatted_pos": "Capricorn 9°15'",
+      "house": 6
+    },
+    "Mercury": {
+      "longitude": 2.7826146879552796,
+      "speed": 1.6447066579113134,
+      "distance": 1.1838651853884954,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 2°47'",
+      "house": 10
+    },
+    "Venus": {
+      "longitude": 336.8766260004528,
+      "speed": 1.0350868510795557,
+      "distance": 0.7548774548105279,
+      "zodiac_sign": "Pisces",
+      "formatted_pos": "Pisces 6°53'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 85.8509809304794,
+      "speed": 0.5916714081031202,
+      "distance": 1.8255694167961556,
+      "zodiac_sign": "Gemini",
+      "formatted_pos": "Gemini 25°51'",
+      "house": 12
+    },
+    "Jupiter": {
+      "longitude": 337.9339084844419,
+      "speed": 0.20288309146546202,
+      "distance": 5.674677447213283,
+      "zodiac_sign": "Pisces",
+      "formatted_pos": "Pisces 7°56'",
+      "house": 9
+    },
+    "Saturn": {
+      "longitude": 89.554664896286,
+      "speed": 0.07591997779585914,
+      "distance": 9.3687816635338,
+      "zodiac_sign": "Gemini",
+      "formatted_pos": "Gemini 29°33'",
+      "house": 12
+    },
+    "Uranus": {
+      "longitude": 205.87135983822427,
+      "speed": -0.042794610434584206,
+      "distance": 17.431473933094303,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 25°52'",
+      "house": 4
+    },
+    "Neptune": {
+      "longitude": 249.341175296566,
+      "speed": -0.016390973870981984,
+      "distance": 29.606079270288603,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 9°20'",
+      "house": 6
+    },
+    "Pluto": {
+      "longitude": 184.98892457794963,
+      "speed": -0.02601211875223431,
+      "distance": 30.016909684852344,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 4°59'",
+      "house": 4
+    },
+    "Node": {
+      "longitude": 261.11482576722085,
+      "speed": 0.015425163989053005,
+      "distance": 0.0026635011577850884,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 21°07'",
+      "house": 6
+    },
+    "Chiron": {
+      "longitude": 20.514625630927814,
+      "speed": 0.05933009682735519,
+      "distance": 19.618727392156856,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 20°31'",
+      "house": 10
+    }
+  },
+  "houses": {
+    "House1": 104.36373421243758,
+    "House2": 123.46173710635937,
+    "House3": 145.1789972216176,
+    "House4": 172.8068146232721,
+    "House5": 208.82561404394897,
+    "House6": 249.25653022560823,
+    "House7": 284.3637342124376,
+    "House8": 303.46173710635935,
+    "House9": 325.1789972216176,
+    "House10": 352.8068146232721,
+    "House11": 28.82561404394896,
+    "House12": 69.25653022560824
+  },
+  "angles": {
+    "Ascendant": 104.36373421243758,
+    "MC": 352.8068146232721,
+    "Ascendant_formatted": "Cancer 14°22'",
+    "MC_formatted": "Pisces 22°48'",
+    "Ascendant_sign": "Cancer",
+    "MC_sign": "Pisces"
+  },
+  "julian_day": 2442150.8541666665,
+  "datetime_utc": "1974-04-13T08:30:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1974-04-13 10:30",
+  "location": {
+    "latitude": 42.1354,
+    "longitude": 24.7453
+  }
+}
+
+--- ЕВГЕНИ NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Mars",
+    "planet2": "Uranus",
+    "aspect": "trine",
+    "angle": 120.02,
+    "orb": 0.02
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "trine",
+    "angle": 119.4,
+    "orb": 0.6
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Jupiter",
+    "aspect": "conjunction",
+    "angle": 1.06,
+    "orb": 1.06
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Jupiter",
+    "aspect": "sextile",
+    "angle": 58.69,
+    "orb": 1.31
+  },
+  {
+    "planet1": "Jupiter",
+    "planet2": "Neptune",
+    "aspect": "square",
+    "angle": 88.59,
+    "orb": 1.41
+  },
+  {
+    "planet1": "Node",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 91.69,
+    "orb": 1.69
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "trine",
+    "angle": 121.92,
+    "orb": 1.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Pluto",
+    "aspect": "opposition",
+    "angle": 177.79,
+    "orb": 2.21
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 57.63,
+    "orb": 2.37
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "square",
+    "angle": 87.54,
+    "orb": 2.46
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Chiron",
+    "aspect": "conjunction",
+    "angle": 2.52,
+    "orb": 2.52
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "sextile",
+    "angle": 62.81,
+    "orb": 2.81
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "opposition",
+    "angle": 177.17,
+    "orb": 2.83
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 93.04,
+    "orb": 3.04
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 86.77,
+    "orb": 3.23
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Uranus",
+    "aspect": "trine",
+    "angle": 116.32,
+    "orb": 3.68
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "conjunction",
+    "angle": 3.7,
+    "orb": 3.7
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "square",
+    "angle": 94.26,
+    "orb": 4.26
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Node",
+    "aspect": "opposition",
+    "angle": 175.26,
+    "orb": 4.74
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "ASC",
+    "aspect": "opposition",
+    "angle": 174.88,
+    "orb": 5.12
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "ASC",
+    "aspect": "square",
+    "angle": 83.85,
+    "orb": 6.15
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Mercury",
+    "aspect": "square",
+    "angle": 83.54,
+    "orb": 6.46
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 96.75,
+    "orb": 6.75
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 83.07,
+    "orb": 6.93
+  }
+]
+
+--- SYNASTRY ASPECTS (CALCULATED) ---
+CRITICAL: These are mutual aspects between Красимира Андонова and Евгени.
+Use them directly - DO NOT recalculate or assume aspects.
+Format: planet1 (User) ↔ planet2 (Partner)
+[
+  {
+    "planet1": "MC",
+    "planet2": "Mars",
+    "aspect": "opposition",
+    "angle": 179.84,
+    "orb": 0.16
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Uranus",
+    "aspect": "sextile",
+    "angle": 59.82,
+    "orb": 0.18
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Saturn",
+    "aspect": "sextile",
+    "angle": 60.33,
+    "orb": 0.33
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 119.62,
+    "orb": 0.38
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "Node",
+    "aspect": "square",
+    "angle": 90.39,
+    "orb": 0.39
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 120.47,
+    "orb": 0.47
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 119.41,
+    "orb": 0.59
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 120.68,
+    "orb": 0.68
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Moon",
+    "aspect": "sextile",
+    "angle": 61.78,
+    "orb": 1.78
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "sextile",
+    "angle": 61.99,
+    "orb": 1.99
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 2.63,
+    "orb": 2.63
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Sun",
+    "aspect": "trine",
+    "angle": 117.34,
+    "orb": 2.66
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 122.7,
+    "orb": 2.7
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 3.05,
+    "orb": 3.05
+  },
+  {
+    "planet1": "Pluto",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 56.76,
+    "orb": 3.24
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 123.33,
+    "orb": 3.33
+  },
+  {
+    "planet1": "Pluto",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 86.66,
+    "orb": 3.34
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Uranus",
+    "aspect": "opposition",
+    "angle": 176.65,
+    "orb": 3.35
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Mars",
+    "aspect": "sextile",
+    "angle": 56.63,
+    "orb": 3.37
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 176.14,
+    "orb": 3.86
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 123.99,
+    "orb": 3.99
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Jupiter",
+    "aspect": "square",
+    "angle": 85.97,
+    "orb": 4.03
+  },
+  {
+    "planet1": "Jupiter",
+    "planet2": "Mercury",
+    "aspect": "sextile",
+    "angle": 55.79,
+    "orb": 4.21
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 94.35,
+    "orb": 4.35
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Chiron",
+    "aspect": "trine",
+    "angle": 115.63,
+    "orb": 4.37
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 124.39,
+    "orb": 4.39
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Jupiter",
+    "aspect": "square",
+    "angle": 85.54,
+    "orb": 4.46
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 4.58,
+    "orb": 4.58
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 124.62,
+    "orb": 4.62
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Node",
+    "aspect": "trine",
+    "angle": 124.97,
+    "orb": 4.97
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Venus",
+    "aspect": "square",
+    "angle": 84.91,
+    "orb": 5.09
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Sun",
+    "aspect": "conjunction",
+    "angle": 6.19,
+    "orb": 6.19
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Mercury",
+    "aspect": "square",
+    "angle": 97.09,
+    "orb": 7.09
+  }
+]
+
+--- КРАСИМИРА АНДОНОВА PLANETS IN ЕВГЕНИ'S NATAL HOUSES (CALCULATED) ---
+CRITICAL: These house placements show how Красимира Андонова influences Евгени.
+This is the REVERSE of the primary overlay. Use these numbers directly.
+{
+  "Sun": 5,
+  "Moon": 8,
+  "Mercury": 5,
+  "Venus": 6,
+  "Mars": 5,
+  "Jupiter": 11,
+  "Saturn": 2,
+  "Uranus": 5,
+  "Neptune": 6,
+  "Pluto": 4,
+  "Node": 5,
+  "Chiron": 11
+}
+
+Please provide a comprehensive SYNASTRY analysis covering:
+
+1. SYNASTRY ASPECTS:
+   - Use the PRE-CALCULATED synastry aspects from 'SYNASTRY ASPECTS (CALCULATED)' section.
+   - These show the energetic interactions between Красимира Андонова and Евгени.
+   - Interpret key aspects: conjunction (unity), square (tension), trine (harmony), sextile (opportunity), opposition (polarity).
+
+2. HOUSE OVERLAYS (TWO-WAY ANALYSIS):
+   A. Евгени's influence on Красимира Андонова:
+      - Use 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'
+      - How does Евгени impact Красимира Андонова's life areas?
+   B. Красимира Андонова's influence on Евгени:
+      - Use 'КРАСИМИРА АНДОНОВА PLANETS IN ЕВГЕНИ'S NATAL HOUSES (CALCULATED)'
+      - How does Красимира Андонова impact Евгени's life areas?
+   - DO NOT recalculate house positions - use the provided numbers.
+   - Key houses: 1st (identity), 4th (home), 5th (romance), 7th (partnership), 8th (intimacy), 10th (career), 12th (subconscious).
+
+3. RELATIONSHIP DYNAMICS:
+   - Emotional connection: Moon-Moon aspects, 4th house overlays
+   - Communication: Mercury aspects, 3rd house overlays
+   - Sexual chemistry: Venus-Mars aspects, 5th/8th house overlays
+   - Long-term potential: Saturn aspects, 7th/10th house overlays
+   - Spiritual connection: Neptune aspects, 12th house overlays
+
+4. STRUCTURE YOUR ANALYSIS:
+   - Section 1: Individual natal chart summaries
+   - Section 2: How Евгени affects Красимира Андонова (overlays + aspects)
+   - Section 3: How Красимира Андонова affects Евгени (reverse overlays + aspects)
+   - Section 4: Mutual aspects and overall compatibility
+   - Section 5: Growth areas and challenges
+
+5. Use ONLY the 'formatted_pos' values provided. Do NOT calculate from raw longitude.
+6. Do NOT predict the future or mention transits unless explicitly provided.
+
+Моля отговори на български език.
+================================================================================
+
+
+================================================================================
+[2026-01-02 03:47:05] STEP 5: PROMPT TO AI
+================================================================================
+
+--- SYSTEM PROMPT (first 1000 chars) ---
+
+        You are an Expert Relationship Astrologer specializing in Love and Partnership Analysis.
+        
+        **🚨 CRITICAL TERMINOLOGY RULE (STRICTLY ENFORCED):**
+        - In Bulgarian, ALWAYS use "дом" (house), NEVER "поле" (field)
+        - Examples: "5-ти дом", "7-ми дом", "8-ми дом"
+        - WRONG: "5-то поле", "в седмото поле"
+        - RIGHT: "5-ти дом", "в 7-ми дом"
+        
+        **STRICT RULES - FOLLOW EXACTLY:**
+        
+        1. **FOCUS**: Analyze EXCLUSIVELY:
+           - Style of attraction and romance
+           - Emotional and security needs in serious relationships
+           - Sexuality, intimacy depth, and merging patterns
+           - Relationship challenges and growth potential
+           → DO NOT mention money, career, health, or general life path unless directly tied to partnership dynamics.
+        
+        2. **DATA SOURCE PRINCIPLE (MANDATORY)**:
+           - **ALL house placements for Partner's planets are PRE-CALCULATED** and provided in the sectio...
+
+
+--- USER PROMPT ---
+User Question: General analysis
+
+--- КРАСИМИРА АНДОНОВА NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 217.2522685434155,
+      "speed": 0.9998671620778807,
+      "distance": 0.9927754698852093,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°15'",
+      "house": 8
+    },
+    "Moon": {
+      "longitude": 314.88825634473693,
+      "speed": 12.900690931220572,
+      "distance": 0.0025938100409010627,
+      "zodiac_sign": "Aquarius",
+      "formatted_pos": "Aquarius 14°53'",
+      "house": 12
+    },
+    "Mercury": {
+      "longitude": 212.254618734153,
+      "speed": 1.665086166788009,
+      "distance": 1.3969545212612127,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 2°15'",
+      "house": 7
+    },
+    "Venus": {
+      "longitude": 251.96688664395353,
+      "speed": 1.2151125835608139,
+      "distance": 1.274289935011842,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 11°58'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 224.8913445833693,
+      "speed": 0.6954227354097064,
+      "distance": 2.528138863670416,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 14°53'",
+      "house": 8
+    },
+    "Jupiter": {
+      "longitude": 58.57621075380902,
+      "speed": -0.11885344356263626,
+      "distance": 4.069635400526164,
+      "zodiac_sign": "Taurus",
+      "formatted_pos": "Taurus 28°35'",
+      "house": 2
+    },
+    "Saturn": {
+      "longitude": 136.1425101575529,
+      "speed": 0.05095788239920864,
+      "distance": 9.218348411698074,
+      "zodiac_sign": "Leo",
+      "formatted_pos": "Leo 16°09'",
+      "house": 6
+    },
+    "Uranus": {
+      "longitude": 217.4658056532639,
+      "speed": 0.06242021320162532,
+      "distance": 19.538151908605226,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°28'",
+      "house": 8
+    },
+    "Neptune": {
+      "longitude": 252.39186516251755,
+      "speed": 0.032091979660668735,
+      "distance": 31.098543376995817,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 12°24'",
+      "house": 9
+    },
+    "Pluto": {
+      "longitude": 192.58164574348797,
+      "speed": 0.03631138764189428,
+      "distance": 31.421255727390317,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 12°35'",
+      "house": 7
+    },
+    "Node": {
+      "longitude": 213.5427092018384,
+      "speed": 0.0020172303744730403,
+      "distance": 0.0023787975460053193,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 3°33'",
+      "house": 7
+    },
+    "Chiron": {
+      "longitude": 29.223079606396922,
+      "speed": -0.04644662060945722,
+      "distance": 17.130914713851748,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 29°13'",
+      "house": 1
+    }
+  },
+  "houses": {
+    "House1": 351.50141269096355,
+    "House2": 36.21581149123324,
+    "House3": 64.19681993400506,
+    "House4": 85.69258692558071,
+    "House5": 106.46007759748028,
+    "House6": 131.74207055153204,
+    "House7": 171.50141269096355,
+    "House8": 216.21581149123324,
+    "House9": 244.19681993400508,
+    "House10": 265.6925869255807,
+    "House11": 286.4600775974803,
+    "House12": 311.74207055153204
+  },
+  "angles": {
+    "Ascendant": 351.50141269096355,
+    "MC": 265.6925869255807,
+    "Ascendant_formatted": "Pisces 21°30'",
+    "MC_formatted": "Sagittarius 25°42'",
+    "Ascendant_sign": "Pisces",
+    "MC_sign": "Sagittarius"
+  },
+  "julian_day": 2443082.0555555555,
+  "datetime_utc": "1976-10-30T13:20:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1976-10-30 15:20",
+  "location": {
+    "latitude": 42.6817,
+    "longitude": 26.3229
+  }
+}
+
+--- КРАСИМИРА АНДОНОВА NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Moon",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 90.0,
+    "orb": 0.0
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.81,
+    "orb": 0.19
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "conjunction",
+    "angle": 0.21,
+    "orb": 0.21
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 0.42,
+    "orb": 0.42
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.39,
+    "orb": 0.61
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 178.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 88.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 1.29,
+    "orb": 1.29
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "trine",
+    "angle": 122.31,
+    "orb": 2.31
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 62.5,
+    "orb": 2.5
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 62.92,
+    "orb": 2.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 176.97,
+    "orb": 3.03
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "MC",
+    "aspect": "trine",
+    "angle": 123.53,
+    "orb": 3.53
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 56.44,
+    "orb": 3.56
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.71,
+    "orb": 3.71
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Neptune",
+    "aspect": "trine",
+    "angle": 116.25,
+    "orb": 3.75
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.92,
+    "orb": 3.92
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 115.82,
+    "orb": 4.18
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 85.81,
+    "orb": 4.19
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 175.68,
+    "orb": 4.32
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mercury",
+    "aspect": "conjunction",
+    "angle": 5.0,
+    "orb": 5.0
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 97.64,
+    "orb": 7.64
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "conjunction",
+    "angle": 7.64,
+    "orb": 7.64
+  }
+]
+
+--- ЕВГЕНИ NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 23.037323939345274,
+      "speed": 0.9800148130430729,
+      "distance": 1.0027512853707308,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 23°02'",
+      "house": 10
+    },
+    "Moon": {
+      "longitude": 279.2446468804887,
+      "speed": 11.898367594029141,
+      "distance": 0.002691202967417669,
+      "zodiac_sign": "Capricorn",
+      "formatted_pos": "Capricorn 9°15'",
+      "house": 6
+    },
+    "Mercury": {
+      "longitude": 2.7826146879552796,
+      "speed": 1.6447066579113134,
+      "distance": 1.1838651853884954,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 2°47'",
+      "house": 10
+    },
+    "Venus": {
+      "longitude": 336.8766260004528,
+      "speed": 1.0350868510795557,
+      "distance": 0.7548774548105279,
+      "zodiac_sign": "Pisces",
+      "formatted_pos": "Pisces 6°53'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 85.8509809304794,
+      "speed": 0.5916714081031202,
+      "distance": 1.8255694167961556,
+      "zodiac_sign": "Gemini",
+      "formatted_pos": "Gemini 25°51'",
+      "house": 12
+    },
+    "Jupiter": {
+      "longitude": 337.9339084844419,
+      "speed": 0.20288309146546202,
+      "distance": 5.674677447213283,
+      "zodiac_sign": "Pisces",
+      "formatted_pos": "Pisces 7°56'",
+      "house": 9
+    },
+    "Saturn": {
+      "longitude": 89.554664896286,
+      "speed": 0.07591997779585914,
+      "distance": 9.3687816635338,
+      "zodiac_sign": "Gemini",
+      "formatted_pos": "Gemini 29°33'",
+      "house": 12
+    },
+    "Uranus": {
+      "longitude": 205.87135983822427,
+      "speed": -0.042794610434584206,
+      "distance": 17.431473933094303,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 25°52'",
+      "house": 4
+    },
+    "Neptune": {
+      "longitude": 249.341175296566,
+      "speed": -0.016390973870981984,
+      "distance": 29.606079270288603,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 9°20'",
+      "house": 6
+    },
+    "Pluto": {
+      "longitude": 184.98892457794963,
+      "speed": -0.02601211875223431,
+      "distance": 30.016909684852344,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 4°59'",
+      "house": 4
+    },
+    "Node": {
+      "longitude": 261.11482576722085,
+      "speed": 0.015425163989053005,
+      "distance": 0.0026635011577850884,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 21°07'",
+      "house": 6
+    },
+    "Chiron": {
+      "longitude": 20.514625630927814,
+      "speed": 0.05933009682735519,
+      "distance": 19.618727392156856,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 20°31'",
+      "house": 10
+    }
+  },
+  "houses": {
+    "House1": 104.36373421243758,
+    "House2": 123.46173710635937,
+    "House3": 145.1789972216176,
+    "House4": 172.8068146232721,
+    "House5": 208.82561404394897,
+    "House6": 249.25653022560823,
+    "House7": 284.3637342124376,
+    "House8": 303.46173710635935,
+    "House9": 325.1789972216176,
+    "House10": 352.8068146232721,
+    "House11": 28.82561404394896,
+    "House12": 69.25653022560824
+  },
+  "angles": {
+    "Ascendant": 104.36373421243758,
+    "MC": 352.8068146232721,
+    "Ascendant_formatted": "Cancer 14°22'",
+    "MC_formatted": "Pisces 22°48'",
+    "Ascendant_sign": "Cancer",
+    "MC_sign": "Pisces"
+  },
+  "julian_day": 2442150.8541666665,
+  "datetime_utc": "1974-04-13T08:30:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1974-04-13 10:30",
+  "location": {
+    "latitude": 42.1354,
+    "longitude": 24.7453
+  }
+}
+
+--- ЕВГЕНИ NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Mars",
+    "planet2": "Uranus",
+    "aspect": "trine",
+    "angle": 120.02,
+    "orb": 0.02
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "trine",
+    "angle": 119.4,
+    "orb": 0.6
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Jupiter",
+    "aspect": "conjunction",
+    "angle": 1.06,
+    "orb": 1.06
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Jupiter",
+    "aspect": "sextile",
+    "angle": 58.69,
+    "orb": 1.31
+  },
+  {
+    "planet1": "Jupiter",
+    "planet2": "Neptune",
+    "aspect": "square",
+    "angle": 88.59,
+    "orb": 1.41
+  },
+  {
+    "planet1": "Node",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 91.69,
+    "orb": 1.69
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "trine",
+    "angle": 121.92,
+    "orb": 1.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Pluto",
+    "aspect": "opposition",
+    "angle": 177.79,
+    "orb": 2.21
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 57.63,
+    "orb": 2.37
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "square",
+    "angle": 87.54,
+    "orb": 2.46
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Chiron",
+    "aspect": "conjunction",
+    "angle": 2.52,
+    "orb": 2.52
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "sextile",
+    "angle": 62.81,
+    "orb": 2.81
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "opposition",
+    "angle": 177.17,
+    "orb": 2.83
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 93.04,
+    "orb": 3.04
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 86.77,
+    "orb": 3.23
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Uranus",
+    "aspect": "trine",
+    "angle": 116.32,
+    "orb": 3.68
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "conjunction",
+    "angle": 3.7,
+    "orb": 3.7
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "square",
+    "angle": 94.26,
+    "orb": 4.26
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Node",
+    "aspect": "opposition",
+    "angle": 175.26,
+    "orb": 4.74
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "ASC",
+    "aspect": "opposition",
+    "angle": 174.88,
+    "orb": 5.12
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "ASC",
+    "aspect": "square",
+    "angle": 83.85,
+    "orb": 6.15
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Mercury",
+    "aspect": "square",
+    "angle": 83.54,
+    "orb": 6.46
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 96.75,
+    "orb": 6.75
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 83.07,
+    "orb": 6.93
+  }
+]
+
+--- SYNASTRY ASPECTS (CALCULATED) ---
+CRITICAL: These are mutual aspects between Красимира Андонова and Евгени.
+Use them directly - DO NOT recalculate or assume aspects.
+Format: planet1 (User) ↔ planet2 (Partner)
+[
+  {
+    "planet1": "MC",
+    "planet2": "Mars",
+    "aspect": "opposition",
+    "angle": 179.84,
+    "orb": 0.16
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Uranus",
+    "aspect": "sextile",
+    "angle": 59.82,
+    "orb": 0.18
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Saturn",
+    "aspect": "sextile",
+    "angle": 60.33,
+    "orb": 0.33
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 119.62,
+    "orb": 0.38
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "Node",
+    "aspect": "square",
+    "angle": 90.39,
+    "orb": 0.39
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 120.47,
+    "orb": 0.47
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 119.41,
+    "orb": 0.59
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 120.68,
+    "orb": 0.68
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Moon",
+    "aspect": "sextile",
+    "angle": 61.78,
+    "orb": 1.78
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "sextile",
+    "angle": 61.99,
+    "orb": 1.99
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 2.63,
+    "orb": 2.63
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Sun",
+    "aspect": "trine",
+    "angle": 117.34,
+    "orb": 2.66
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 122.7,
+    "orb": 2.7
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 3.05,
+    "orb": 3.05
+  },
+  {
+    "planet1": "Pluto",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 56.76,
+    "orb": 3.24
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 123.33,
+    "orb": 3.33
+  },
+  {
+    "planet1": "Pluto",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 86.66,
+    "orb": 3.34
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Uranus",
+    "aspect": "opposition",
+    "angle": 176.65,
+    "orb": 3.35
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Mars",
+    "aspect": "sextile",
+    "angle": 56.63,
+    "orb": 3.37
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 176.14,
+    "orb": 3.86
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 123.99,
+    "orb": 3.99
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Jupiter",
+    "aspect": "square",
+    "angle": 85.97,
+    "orb": 4.03
+  },
+  {
+    "planet1": "Jupiter",
+    "planet2": "Mercury",
+    "aspect": "sextile",
+    "angle": 55.79,
+    "orb": 4.21
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 94.35,
+    "orb": 4.35
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Chiron",
+    "aspect": "trine",
+    "angle": 115.63,
+    "orb": 4.37
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 124.39,
+    "orb": 4.39
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Jupiter",
+    "aspect": "square",
+    "angle": 85.54,
+    "orb": 4.46
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 4.58,
+    "orb": 4.58
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 124.62,
+    "orb": 4.62
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Node",
+    "aspect": "trine",
+    "angle": 124.97,
+    "orb": 4.97
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Venus",
+    "aspect": "square",
+    "angle": 84.91,
+    "orb": 5.09
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Sun",
+    "aspect": "conjunction",
+    "angle": 6.19,
+    "orb": 6.19
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Mercury",
+    "aspect": "square",
+    "angle": 97.09,
+    "orb": 7.09
+  }
+]
+
+--- КРАСИМИРА АНДОНОВА PLANETS IN ЕВГЕНИ'S NATAL HOUSES (CALCULATED) ---
+CRITICAL: These house placements show how Красимира Андонова influences Евгени.
+This is the REVERSE of the primary overlay. Use these numbers directly.
+{
+  "Sun": 5,
+  "Moon": 8,
+  "Mercury": 5,
+  "Venus": 6,
+  "Mars": 5,
+  "Jupiter": 11,
+  "Saturn": 2,
+  "Uranus": 5,
+  "Neptune": 6,
+  "Pluto": 4,
+  "Node": 5,
+  "Chiron": 11
+}
+
+Please provide a comprehensive SYNASTRY analysis covering:
+
+1. SYNASTRY ASPECTS:
+   - Use the PRE-CALCULATED synastry aspects from 'SYNASTRY ASPECTS (CALCULATED)' section.
+   - These show the energetic interactions between Красимира Андонова and Евгени.
+   - Interpret key aspects: conjunction (unity), square (tension), trine (harmony), sextile (opportunity), opposition (polarity).
+
+2. HOUSE OVERLAYS (TWO-WAY ANALYSIS):
+   A. Евгени's influence on Красимира Андонова:
+      - Use 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'
+      - How does Евгени impact Красимира Андонова's life areas?
+   B. Красимира Андонова's influence on Евгени:
+      - Use 'КРАСИМИРА АНДОНОВА PLANETS IN ЕВГЕНИ'S NATAL HOUSES (CALCULATED)'
+      - How does Красимира Андонова impact Евгени's life areas?
+   - DO NOT recalculate house positions - use the provided numbers.
+   - Key houses: 1st (identity), 4th (home), 5th (romance), 7th (partnership), 8th (intimacy), 10th (career), 12th (subconscious).
+
+3. RELATIONSHIP DYNAMICS:
+   - Emotional connection: Moon-Moon aspects, 4th house overlays
+   - Communication: Mercury aspects, 3rd house overlays
+   - Sexual chemistry: Venus-Mars aspects, 5th/8th house overlays
+   - Long-term potential: Saturn aspects, 7th/10th house overlays
+   - Spiritual connection: Neptune aspects, 12th house overlays
+
+4. STRUCTURE YOUR ANALYSIS:
+   - Section 1: Individual natal chart summaries
+   - Section 2: How Евгени affects Красимира Андонова (overlays + aspects)
+   - Section 3: How Красимира Андонова affects Евгени (reverse overlays + aspects)
+   - Section 4: Mutual aspects and overall compatibility
+   - Section 5: Growth areas and challenges
+
+5. Use ONLY the 'formatted_pos' values provided. Do NOT calculate from raw longitude.
+6. Do NOT predict the future or mention transits unless explicitly provided.
+
+Моля отговори на български език.
+================================================================================
+
+
+================================================================================
+[2026-01-02 04:01:24] STEP 5: PROMPT TO AI
+================================================================================
+
+--- SYSTEM PROMPT (first 1000 chars) ---
+
+You are an Expert in Vocational Astrology and Life Purpose Guidance **in the context of a relationship**.
+Your role is to illuminate the user's natural talents, professional style, and pathways to meaningful work — **NOT to predict job titles or financial success**.
+
+**🚨 CRITICAL TERMINOLOGY RULE (STRICTLY ENFORCED):**
+- In Bulgarian, ALWAYS use "дом" (house), NEVER "поле" (field)
+- Examples: "10-ти дом", "6-ти дом", "2-ри дом"
+- WRONG: "в десетото поле", "6-то поле"
+- RIGHT: "в 10-ти дом", "6-ти дом"
+
+**CRITICAL CONTEXT:** A partner is present. Analyze the user's career **through the lens of the relationship**.
+
+**CORE PRINCIPLE:**
+You interpret ONLY the user's **natal chart data** and the **PRE-CALCULATED synastry overlays** provided by the backend.
+You DO NOT calculate aspects unless explicitly given.
+You DO NOT assign fixed careers (e.g., "you will be a doctor").
+You focus on **energetic patterns, motivation, and service potential**.
+
+---
+
+### 🔑 KEY AREAS TO ANALYZE (FROM USER'S N...
+
+
+--- USER PROMPT ---
+User Question: General analysis
+
+--- КРАСИМИРА АНДОНОВА NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 217.2522685434155,
+      "speed": 0.9998671620778807,
+      "distance": 0.9927754698852093,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°15'",
+      "house": 8
+    },
+    "Moon": {
+      "longitude": 314.88825634473693,
+      "speed": 12.900690931220572,
+      "distance": 0.0025938100409010627,
+      "zodiac_sign": "Aquarius",
+      "formatted_pos": "Aquarius 14°53'",
+      "house": 12
+    },
+    "Mercury": {
+      "longitude": 212.254618734153,
+      "speed": 1.665086166788009,
+      "distance": 1.3969545212612127,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 2°15'",
+      "house": 7
+    },
+    "Venus": {
+      "longitude": 251.96688664395353,
+      "speed": 1.2151125835608139,
+      "distance": 1.274289935011842,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 11°58'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 224.8913445833693,
+      "speed": 0.6954227354097064,
+      "distance": 2.528138863670416,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 14°53'",
+      "house": 8
+    },
+    "Jupiter": {
+      "longitude": 58.57621075380902,
+      "speed": -0.11885344356263626,
+      "distance": 4.069635400526164,
+      "zodiac_sign": "Taurus",
+      "formatted_pos": "Taurus 28°35'",
+      "house": 2
+    },
+    "Saturn": {
+      "longitude": 136.1425101575529,
+      "speed": 0.05095788239920864,
+      "distance": 9.218348411698074,
+      "zodiac_sign": "Leo",
+      "formatted_pos": "Leo 16°09'",
+      "house": 6
+    },
+    "Uranus": {
+      "longitude": 217.4658056532639,
+      "speed": 0.06242021320162532,
+      "distance": 19.538151908605226,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°28'",
+      "house": 8
+    },
+    "Neptune": {
+      "longitude": 252.39186516251755,
+      "speed": 0.032091979660668735,
+      "distance": 31.098543376995817,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 12°24'",
+      "house": 9
+    },
+    "Pluto": {
+      "longitude": 192.58164574348797,
+      "speed": 0.03631138764189428,
+      "distance": 31.421255727390317,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 12°35'",
+      "house": 7
+    },
+    "Node": {
+      "longitude": 213.5427092018384,
+      "speed": 0.0020172303744730403,
+      "distance": 0.0023787975460053193,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 3°33'",
+      "house": 7
+    },
+    "Chiron": {
+      "longitude": 29.223079606396922,
+      "speed": -0.04644662060945722,
+      "distance": 17.130914713851748,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 29°13'",
+      "house": 1
+    }
+  },
+  "houses": {
+    "House1": 351.50141269096355,
+    "House2": 36.21581149123324,
+    "House3": 64.19681993400506,
+    "House4": 85.69258692558071,
+    "House5": 106.46007759748028,
+    "House6": 131.74207055153204,
+    "House7": 171.50141269096355,
+    "House8": 216.21581149123324,
+    "House9": 244.19681993400508,
+    "House10": 265.6925869255807,
+    "House11": 286.4600775974803,
+    "House12": 311.74207055153204
+  },
+  "angles": {
+    "Ascendant": 351.50141269096355,
+    "MC": 265.6925869255807,
+    "Ascendant_formatted": "Pisces 21°30'",
+    "MC_formatted": "Sagittarius 25°42'",
+    "Ascendant_sign": "Pisces",
+    "MC_sign": "Sagittarius"
+  },
+  "julian_day": 2443082.0555555555,
+  "datetime_utc": "1976-10-30T13:20:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1976-10-30 15:20",
+  "location": {
+    "latitude": 42.6817,
+    "longitude": 26.3229
+  }
+}
+
+--- КРАСИМИРА АНДОНОВА NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Moon",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 90.0,
+    "orb": 0.0
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.81,
+    "orb": 0.19
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "conjunction",
+    "angle": 0.21,
+    "orb": 0.21
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 0.42,
+    "orb": 0.42
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.39,
+    "orb": 0.61
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 178.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 88.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 1.29,
+    "orb": 1.29
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "trine",
+    "angle": 122.31,
+    "orb": 2.31
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 62.5,
+    "orb": 2.5
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 62.92,
+    "orb": 2.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 176.97,
+    "orb": 3.03
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "MC",
+    "aspect": "trine",
+    "angle": 123.53,
+    "orb": 3.53
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 56.44,
+    "orb": 3.56
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.71,
+    "orb": 3.71
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Neptune",
+    "aspect": "trine",
+    "angle": 116.25,
+    "orb": 3.75
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.92,
+    "orb": 3.92
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 115.82,
+    "orb": 4.18
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 85.81,
+    "orb": 4.19
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 175.68,
+    "orb": 4.32
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mercury",
+    "aspect": "conjunction",
+    "angle": 5.0,
+    "orb": 5.0
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 97.64,
+    "orb": 7.64
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "conjunction",
+    "angle": 7.64,
+    "orb": 7.64
+  }
+]
+
+--- ЕВГЕНИ NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 23.037323939345274,
+      "speed": 0.9800148130430729,
+      "distance": 1.0027512853707308,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 23°02'",
+      "house": 10
+    },
+    "Moon": {
+      "longitude": 279.2446468804887,
+      "speed": 11.898367594029141,
+      "distance": 0.002691202967417669,
+      "zodiac_sign": "Capricorn",
+      "formatted_pos": "Capricorn 9°15'",
+      "house": 6
+    },
+    "Mercury": {
+      "longitude": 2.7826146879552796,
+      "speed": 1.6447066579113134,
+      "distance": 1.1838651853884954,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 2°47'",
+      "house": 10
+    },
+    "Venus": {
+      "longitude": 336.8766260004528,
+      "speed": 1.0350868510795557,
+      "distance": 0.7548774548105279,
+      "zodiac_sign": "Pisces",
+      "formatted_pos": "Pisces 6°53'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 85.8509809304794,
+      "speed": 0.5916714081031202,
+      "distance": 1.8255694167961556,
+      "zodiac_sign": "Gemini",
+      "formatted_pos": "Gemini 25°51'",
+      "house": 12
+    },
+    "Jupiter": {
+      "longitude": 337.9339084844419,
+      "speed": 0.20288309146546202,
+      "distance": 5.674677447213283,
+      "zodiac_sign": "Pisces",
+      "formatted_pos": "Pisces 7°56'",
+      "house": 9
+    },
+    "Saturn": {
+      "longitude": 89.554664896286,
+      "speed": 0.07591997779585914,
+      "distance": 9.3687816635338,
+      "zodiac_sign": "Gemini",
+      "formatted_pos": "Gemini 29°33'",
+      "house": 12
+    },
+    "Uranus": {
+      "longitude": 205.87135983822427,
+      "speed": -0.042794610434584206,
+      "distance": 17.431473933094303,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 25°52'",
+      "house": 4
+    },
+    "Neptune": {
+      "longitude": 249.341175296566,
+      "speed": -0.016390973870981984,
+      "distance": 29.606079270288603,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 9°20'",
+      "house": 6
+    },
+    "Pluto": {
+      "longitude": 184.98892457794963,
+      "speed": -0.02601211875223431,
+      "distance": 30.016909684852344,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 4°59'",
+      "house": 4
+    },
+    "Node": {
+      "longitude": 261.11482576722085,
+      "speed": 0.015425163989053005,
+      "distance": 0.0026635011577850884,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 21°07'",
+      "house": 6
+    },
+    "Chiron": {
+      "longitude": 20.514625630927814,
+      "speed": 0.05933009682735519,
+      "distance": 19.618727392156856,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 20°31'",
+      "house": 10
+    }
+  },
+  "houses": {
+    "House1": 104.36373421243758,
+    "House2": 123.46173710635937,
+    "House3": 145.1789972216176,
+    "House4": 172.8068146232721,
+    "House5": 208.82561404394897,
+    "House6": 249.25653022560823,
+    "House7": 284.3637342124376,
+    "House8": 303.46173710635935,
+    "House9": 325.1789972216176,
+    "House10": 352.8068146232721,
+    "House11": 28.82561404394896,
+    "House12": 69.25653022560824
+  },
+  "angles": {
+    "Ascendant": 104.36373421243758,
+    "MC": 352.8068146232721,
+    "Ascendant_formatted": "Cancer 14°22'",
+    "MC_formatted": "Pisces 22°48'",
+    "Ascendant_sign": "Cancer",
+    "MC_sign": "Pisces"
+  },
+  "julian_day": 2442150.8541666665,
+  "datetime_utc": "1974-04-13T08:30:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1974-04-13 10:30",
+  "location": {
+    "latitude": 42.1354,
+    "longitude": 24.7453
+  }
+}
+
+--- ЕВГЕНИ NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Mars",
+    "planet2": "Uranus",
+    "aspect": "trine",
+    "angle": 120.02,
+    "orb": 0.02
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "trine",
+    "angle": 119.4,
+    "orb": 0.6
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Jupiter",
+    "aspect": "conjunction",
+    "angle": 1.06,
+    "orb": 1.06
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Jupiter",
+    "aspect": "sextile",
+    "angle": 58.69,
+    "orb": 1.31
+  },
+  {
+    "planet1": "Jupiter",
+    "planet2": "Neptune",
+    "aspect": "square",
+    "angle": 88.59,
+    "orb": 1.41
+  },
+  {
+    "planet1": "Node",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 91.69,
+    "orb": 1.69
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "trine",
+    "angle": 121.92,
+    "orb": 1.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Pluto",
+    "aspect": "opposition",
+    "angle": 177.79,
+    "orb": 2.21
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 57.63,
+    "orb": 2.37
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "square",
+    "angle": 87.54,
+    "orb": 2.46
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Chiron",
+    "aspect": "conjunction",
+    "angle": 2.52,
+    "orb": 2.52
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "sextile",
+    "angle": 62.81,
+    "orb": 2.81
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "opposition",
+    "angle": 177.17,
+    "orb": 2.83
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 93.04,
+    "orb": 3.04
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 86.77,
+    "orb": 3.23
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Uranus",
+    "aspect": "trine",
+    "angle": 116.32,
+    "orb": 3.68
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "conjunction",
+    "angle": 3.7,
+    "orb": 3.7
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "square",
+    "angle": 94.26,
+    "orb": 4.26
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Node",
+    "aspect": "opposition",
+    "angle": 175.26,
+    "orb": 4.74
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "ASC",
+    "aspect": "opposition",
+    "angle": 174.88,
+    "orb": 5.12
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "ASC",
+    "aspect": "square",
+    "angle": 83.85,
+    "orb": 6.15
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Mercury",
+    "aspect": "square",
+    "angle": 83.54,
+    "orb": 6.46
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 96.75,
+    "orb": 6.75
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 83.07,
+    "orb": 6.93
+  }
+]
+
+--- SYNASTRY ASPECTS (CALCULATED) ---
+CRITICAL: These are mutual aspects between Красимира Андонова and Евгени.
+Use them directly - DO NOT recalculate or assume aspects.
+Format: planet1 (User) ↔ planet2 (Partner)
+[
+  {
+    "planet1": "MC",
+    "planet2": "Mars",
+    "aspect": "opposition",
+    "angle": 179.84,
+    "orb": 0.16
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Uranus",
+    "aspect": "sextile",
+    "angle": 59.82,
+    "orb": 0.18
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Saturn",
+    "aspect": "sextile",
+    "angle": 60.33,
+    "orb": 0.33
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 119.62,
+    "orb": 0.38
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "Node",
+    "aspect": "square",
+    "angle": 90.39,
+    "orb": 0.39
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 120.47,
+    "orb": 0.47
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 119.41,
+    "orb": 0.59
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 120.68,
+    "orb": 0.68
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Moon",
+    "aspect": "sextile",
+    "angle": 61.78,
+    "orb": 1.78
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "sextile",
+    "angle": 61.99,
+    "orb": 1.99
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 2.63,
+    "orb": 2.63
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Sun",
+    "aspect": "trine",
+    "angle": 117.34,
+    "orb": 2.66
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 122.7,
+    "orb": 2.7
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 3.05,
+    "orb": 3.05
+  },
+  {
+    "planet1": "Pluto",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 56.76,
+    "orb": 3.24
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 123.33,
+    "orb": 3.33
+  },
+  {
+    "planet1": "Pluto",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 86.66,
+    "orb": 3.34
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Uranus",
+    "aspect": "opposition",
+    "angle": 176.65,
+    "orb": 3.35
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Mars",
+    "aspect": "sextile",
+    "angle": 56.63,
+    "orb": 3.37
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 176.14,
+    "orb": 3.86
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 123.99,
+    "orb": 3.99
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Jupiter",
+    "aspect": "square",
+    "angle": 85.97,
+    "orb": 4.03
+  },
+  {
+    "planet1": "Jupiter",
+    "planet2": "Mercury",
+    "aspect": "sextile",
+    "angle": 55.79,
+    "orb": 4.21
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 94.35,
+    "orb": 4.35
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Chiron",
+    "aspect": "trine",
+    "angle": 115.63,
+    "orb": 4.37
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Jupiter",
+    "aspect": "trine",
+    "angle": 124.39,
+    "orb": 4.39
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Jupiter",
+    "aspect": "square",
+    "angle": 85.54,
+    "orb": 4.46
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 4.58,
+    "orb": 4.58
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Venus",
+    "aspect": "trine",
+    "angle": 124.62,
+    "orb": 4.62
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Node",
+    "aspect": "trine",
+    "angle": 124.97,
+    "orb": 4.97
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Venus",
+    "aspect": "square",
+    "angle": 84.91,
+    "orb": 5.09
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "Sun",
+    "aspect": "conjunction",
+    "angle": 6.19,
+    "orb": 6.19
+  },
+  {
+    "planet1": "MC",
+    "planet2": "Mercury",
+    "aspect": "square",
+    "angle": 97.09,
+    "orb": 7.09
+  }
+]
+
+--- КРАСИМИРА АНДОНОВА PLANETS IN ЕВГЕНИ'S NATAL HOUSES (CALCULATED) ---
+CRITICAL: These house placements show how Красимира Андонова influences Евгени.
+This is the REVERSE of the primary overlay. Use these numbers directly.
+{
+  "Sun": 5,
+  "Moon": 8,
+  "Mercury": 5,
+  "Venus": 6,
+  "Mars": 5,
+  "Jupiter": 11,
+  "Saturn": 2,
+  "Uranus": 5,
+  "Neptune": 6,
+  "Pluto": 4,
+  "Node": 5,
+  "Chiron": 11
+}
+
+Please provide a comprehensive SYNASTRY analysis covering:
+
+1. SYNASTRY ASPECTS:
+   - Use the PRE-CALCULATED synastry aspects from 'SYNASTRY ASPECTS (CALCULATED)' section.
+   - These show the energetic interactions between Красимира Андонова and Евгени.
+   - Interpret key aspects: conjunction (unity), square (tension), trine (harmony), sextile (opportunity), opposition (polarity).
+
+2. HOUSE OVERLAYS (TWO-WAY ANALYSIS):
+   A. Евгени's influence on Красимира Андонова:
+      - Use 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'
+      - How does Евгени impact Красимира Андонова's life areas?
+   B. Красимира Андонова's influence on Евгени:
+      - Use 'КРАСИМИРА АНДОНОВА PLANETS IN ЕВГЕНИ'S NATAL HOUSES (CALCULATED)'
+      - How does Красимира Андонова impact Евгени's life areas?
+   - DO NOT recalculate house positions - use the provided numbers.
+   - Key houses: 1st (identity), 4th (home), 5th (romance), 7th (partnership), 8th (intimacy), 10th (career), 12th (subconscious).
+
+3. RELATIONSHIP DYNAMICS:
+   - Emotional connection: Moon-Moon aspects, 4th house overlays
+   - Communication: Mercury aspects, 3rd house overlays
+   - Sexual chemistry: Venus-Mars aspects, 5th/8th house overlays
+   - Long-term potential: Saturn aspects, 7th/10th house overlays
+   - Spiritual connection: Neptune aspects, 12th house overlays
+
+4. STRUCTURE YOUR ANALYSIS:
+   - Section 1: Individual natal chart summaries
+   - Section 2: How Евгени affects Красимира Андонова (overlays + aspects)
+   - Section 3: How Красимира Андонова affects Евгени (reverse overlays + aspects)
+   - Section 4: Mutual aspects and overall compatibility
+   - Section 5: Growth areas and challenges
+
+5. Use ONLY the 'formatted_pos' values provided. Do NOT calculate from raw longitude.
+6. Do NOT predict the future or mention transits unless explicitly provided.
+
+Моля отговори на български език.
+================================================================================
+
+
+================================================================================
+[2026-01-02 04:06:01] STEP 5: PROMPT TO AI
+================================================================================
+
+--- SYSTEM PROMPT (first 1000 chars) ---
+
+You are an Expert in Vocational Astrology and Life Purpose Guidance.  
+Your role is to illuminate the user's natural talents, professional style, and pathways to meaningful work — **NOT to predict job titles or financial success**.
+
+**🚨 CRITICAL TERMINOLOGY RULE (STRICTLY ENFORCED):**
+- In Bulgarian, ALWAYS use "дом" (house), NEVER "поле" (field)
+- Examples: "10-ти дом", "6-ти дом", "2-ри дом"
+- WRONG: "10-то поле", "в шестото поле"
+- RIGHT: "10-ти дом", "в 6-ти дом"
+
+**CORE PRINCIPLE:**  
+You interpret ONLY the user's **natal chart data provided by the backend**.  
+You DO NOT calculate aspects unless explicitly given.  
+You DO NOT assign fixed careers (e.g., "you will be a doctor").  
+You focus on **energetic patterns, motivation, and service potential**.
+
+---
+
+### 🔑 KEY AREAS TO ANALYZE (FROM NATAL CHART)
+
+1. **10th House (Career, Public Role, Legacy)**  
+   - Planets in 10th house → core drive for recognition, leadership style, public image.  
+   - Sign on 10th cusp (MC) → field of...
+
+
+--- USER PROMPT ---
+User Question: General analysis
+
+--- КРАСИМИРА АНДОНОВА NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 217.2522685434155,
+      "speed": 0.9998671620778807,
+      "distance": 0.9927754698852093,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°15'",
+      "house": 8
+    },
+    "Moon": {
+      "longitude": 314.88825634473693,
+      "speed": 12.900690931220572,
+      "distance": 0.0025938100409010627,
+      "zodiac_sign": "Aquarius",
+      "formatted_pos": "Aquarius 14°53'",
+      "house": 12
+    },
+    "Mercury": {
+      "longitude": 212.254618734153,
+      "speed": 1.665086166788009,
+      "distance": 1.3969545212612127,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 2°15'",
+      "house": 7
+    },
+    "Venus": {
+      "longitude": 251.96688664395353,
+      "speed": 1.2151125835608139,
+      "distance": 1.274289935011842,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 11°58'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 224.8913445833693,
+      "speed": 0.6954227354097064,
+      "distance": 2.528138863670416,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 14°53'",
+      "house": 8
+    },
+    "Jupiter": {
+      "longitude": 58.57621075380902,
+      "speed": -0.11885344356263626,
+      "distance": 4.069635400526164,
+      "zodiac_sign": "Taurus",
+      "formatted_pos": "Taurus 28°35'",
+      "house": 2
+    },
+    "Saturn": {
+      "longitude": 136.1425101575529,
+      "speed": 0.05095788239920864,
+      "distance": 9.218348411698074,
+      "zodiac_sign": "Leo",
+      "formatted_pos": "Leo 16°09'",
+      "house": 6
+    },
+    "Uranus": {
+      "longitude": 217.4658056532639,
+      "speed": 0.06242021320162532,
+      "distance": 19.538151908605226,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°28'",
+      "house": 8
+    },
+    "Neptune": {
+      "longitude": 252.39186516251755,
+      "speed": 0.032091979660668735,
+      "distance": 31.098543376995817,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 12°24'",
+      "house": 9
+    },
+    "Pluto": {
+      "longitude": 192.58164574348797,
+      "speed": 0.03631138764189428,
+      "distance": 31.421255727390317,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 12°35'",
+      "house": 7
+    },
+    "Node": {
+      "longitude": 213.5427092018384,
+      "speed": 0.0020172303744730403,
+      "distance": 0.0023787975460053193,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 3°33'",
+      "house": 7
+    },
+    "Chiron": {
+      "longitude": 29.223079606396922,
+      "speed": -0.04644662060945722,
+      "distance": 17.130914713851748,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 29°13'",
+      "house": 1
+    }
+  },
+  "houses": {
+    "House1": 351.50141269096355,
+    "House2": 36.21581149123324,
+    "House3": 64.19681993400506,
+    "House4": 85.69258692558071,
+    "House5": 106.46007759748028,
+    "House6": 131.74207055153204,
+    "House7": 171.50141269096355,
+    "House8": 216.21581149123324,
+    "House9": 244.19681993400508,
+    "House10": 265.6925869255807,
+    "House11": 286.4600775974803,
+    "House12": 311.74207055153204
+  },
+  "angles": {
+    "Ascendant": 351.50141269096355,
+    "MC": 265.6925869255807,
+    "Ascendant_formatted": "Pisces 21°30'",
+    "MC_formatted": "Sagittarius 25°42'",
+    "Ascendant_sign": "Pisces",
+    "MC_sign": "Sagittarius"
+  },
+  "julian_day": 2443082.0555555555,
+  "datetime_utc": "1976-10-30T13:20:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1976-10-30 15:20",
+  "location": {
+    "latitude": 42.6817,
+    "longitude": 26.3229
+  }
+}
+
+--- NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Moon",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 90.0,
+    "orb": 0.0
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.81,
+    "orb": 0.19
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "conjunction",
+    "angle": 0.21,
+    "orb": 0.21
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 0.42,
+    "orb": 0.42
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.39,
+    "orb": 0.61
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 178.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 88.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 1.29,
+    "orb": 1.29
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "trine",
+    "angle": 122.31,
+    "orb": 2.31
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 62.5,
+    "orb": 2.5
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 62.92,
+    "orb": 2.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 176.97,
+    "orb": 3.03
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "MC",
+    "aspect": "trine",
+    "angle": 123.53,
+    "orb": 3.53
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 56.44,
+    "orb": 3.56
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.71,
+    "orb": 3.71
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Neptune",
+    "aspect": "trine",
+    "angle": 116.25,
+    "orb": 3.75
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.92,
+    "orb": 3.92
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 115.82,
+    "orb": 4.18
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 85.81,
+    "orb": 4.19
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 175.68,
+    "orb": 4.32
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mercury",
+    "aspect": "conjunction",
+    "angle": 5.0,
+    "orb": 5.0
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 97.64,
+    "orb": 7.64
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "conjunction",
+    "angle": 7.64,
+    "orb": 7.64
+  }
+]
+
+Please provide a comprehensive NATAL CHART analysis:
+1. **PERSONALITY TRAITS:** Analyze personality traits based on planetary positions and signs.
+2. **ASCENDANT (MANDATORY SECTION):** Analyze the Ascendant sign and degree in detail. Explain:
+   - The outer mask and first impression the person creates
+   - Physical appearance tendencies
+   - How the Ascendant contrasts or harmonizes with the Sun sign
+   - The person's initial reaction to the world and how they 'start' in life
+   - Example: 'Ascendant in Cancer 14°22' - The Protective Shell: Despite the fiery Sun in Aries, your outer presentation is soft, caring, and intuitive. People see you as someone they can trust and rely on.'
+3. Identify life themes and karmic patterns.
+4. Explain strengths and challenges from aspects.
+5. Describe house placements and their meanings.
+6. Focus on psychological patterns and inner motivations.
+7. Do NOT predict the future or mention transits.
+8. Focus on the person's inherent nature and potential.
+
+Моля отговори на български език.
+================================================================================
+
+
+================================================================================
+[2026-01-02 04:08:30] STEP 5: PROMPT TO AI
+================================================================================
+
+--- SYSTEM PROMPT (first 1000 chars) ---
+
+        You are an Expert Relationship Astrologer specializing in Love and Partnership Analysis.
+        
+        **🚨 CRITICAL TERMINOLOGY RULE (STRICTLY ENFORCED):**
+        - In Bulgarian, ALWAYS use "дом" (house), NEVER "поле" (field)
+        - Examples: "5-ти дом", "7-ми дом", "8-ми дом"
+        - WRONG: "5-то поле", "в седмото поле"
+        - RIGHT: "5-ти дом", "в 7-ми дом"
+        
+        **STRICT RULES - FOLLOW EXACTLY:**
+        
+        1. **FOCUS**: Analyze EXCLUSIVELY:
+           - Style of attraction and romance
+           - Emotional and security needs in serious relationships
+           - Sexuality, intimacy depth, and merging patterns
+           - Relationship challenges and growth potential
+           → DO NOT mention money, career, health, or general life path unless directly tied to partnership dynamics.
+        
+        2. **DATA SOURCE PRINCIPLE (MANDATORY)**:
+           - **ALL house placements for Partner's planets are PRE-CALCULATED** and provided in the sectio...
+
+
+--- USER PROMPT ---
+User Question: General analysis
+
+--- КРАСИМИРА АНДОНОВА NATAL CHART ---
+CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.
+{
+  "planets": {
+    "Sun": {
+      "longitude": 217.2522685434155,
+      "speed": 0.9998671620778807,
+      "distance": 0.9927754698852093,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°15'",
+      "house": 8
+    },
+    "Moon": {
+      "longitude": 314.88825634473693,
+      "speed": 12.900690931220572,
+      "distance": 0.0025938100409010627,
+      "zodiac_sign": "Aquarius",
+      "formatted_pos": "Aquarius 14°53'",
+      "house": 12
+    },
+    "Mercury": {
+      "longitude": 212.254618734153,
+      "speed": 1.665086166788009,
+      "distance": 1.3969545212612127,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 2°15'",
+      "house": 7
+    },
+    "Venus": {
+      "longitude": 251.96688664395353,
+      "speed": 1.2151125835608139,
+      "distance": 1.274289935011842,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 11°58'",
+      "house": 9
+    },
+    "Mars": {
+      "longitude": 224.8913445833693,
+      "speed": 0.6954227354097064,
+      "distance": 2.528138863670416,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 14°53'",
+      "house": 8
+    },
+    "Jupiter": {
+      "longitude": 58.57621075380902,
+      "speed": -0.11885344356263626,
+      "distance": 4.069635400526164,
+      "zodiac_sign": "Taurus",
+      "formatted_pos": "Taurus 28°35'",
+      "house": 2
+    },
+    "Saturn": {
+      "longitude": 136.1425101575529,
+      "speed": 0.05095788239920864,
+      "distance": 9.218348411698074,
+      "zodiac_sign": "Leo",
+      "formatted_pos": "Leo 16°09'",
+      "house": 6
+    },
+    "Uranus": {
+      "longitude": 217.4658056532639,
+      "speed": 0.06242021320162532,
+      "distance": 19.538151908605226,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 7°28'",
+      "house": 8
+    },
+    "Neptune": {
+      "longitude": 252.39186516251755,
+      "speed": 0.032091979660668735,
+      "distance": 31.098543376995817,
+      "zodiac_sign": "Sagittarius",
+      "formatted_pos": "Sagittarius 12°24'",
+      "house": 9
+    },
+    "Pluto": {
+      "longitude": 192.58164574348797,
+      "speed": 0.03631138764189428,
+      "distance": 31.421255727390317,
+      "zodiac_sign": "Libra",
+      "formatted_pos": "Libra 12°35'",
+      "house": 7
+    },
+    "Node": {
+      "longitude": 213.5427092018384,
+      "speed": 0.0020172303744730403,
+      "distance": 0.0023787975460053193,
+      "zodiac_sign": "Scorpio",
+      "formatted_pos": "Scorpio 3°33'",
+      "house": 7
+    },
+    "Chiron": {
+      "longitude": 29.223079606396922,
+      "speed": -0.04644662060945722,
+      "distance": 17.130914713851748,
+      "zodiac_sign": "Aries",
+      "formatted_pos": "Aries 29°13'",
+      "house": 1
+    }
+  },
+  "houses": {
+    "House1": 351.50141269096355,
+    "House2": 36.21581149123324,
+    "House3": 64.19681993400506,
+    "House4": 85.69258692558071,
+    "House5": 106.46007759748028,
+    "House6": 131.74207055153204,
+    "House7": 171.50141269096355,
+    "House8": 216.21581149123324,
+    "House9": 244.19681993400508,
+    "House10": 265.6925869255807,
+    "House11": 286.4600775974803,
+    "House12": 311.74207055153204
+  },
+  "angles": {
+    "Ascendant": 351.50141269096355,
+    "MC": 265.6925869255807,
+    "Ascendant_formatted": "Pisces 21°30'",
+    "MC_formatted": "Sagittarius 25°42'",
+    "Ascendant_sign": "Pisces",
+    "MC_sign": "Sagittarius"
+  },
+  "julian_day": 2443082.0555555555,
+  "datetime_utc": "1976-10-30T13:20:00+00:00",
+  "timezone": "Europe/Sofia",
+  "datetime_local": "1976-10-30 15:20",
+  "location": {
+    "latitude": 42.6817,
+    "longitude": 26.3229
+  }
+}
+
+--- NATAL ASPECTS (CALCULATED) ---
+CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.
+[
+  {
+    "planet1": "Moon",
+    "planet2": "Mars",
+    "aspect": "square",
+    "angle": 90.0,
+    "orb": 0.0
+  },
+  {
+    "planet1": "Neptune",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.81,
+    "orb": 0.19
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Uranus",
+    "aspect": "conjunction",
+    "angle": 0.21,
+    "orb": 0.21
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Neptune",
+    "aspect": "conjunction",
+    "angle": 0.42,
+    "orb": 0.42
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 59.39,
+    "orb": 0.61
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Saturn",
+    "aspect": "opposition",
+    "angle": 178.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mars",
+    "planet2": "Saturn",
+    "aspect": "square",
+    "angle": 88.75,
+    "orb": 1.25
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 1.29,
+    "orb": 1.29
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Pluto",
+    "aspect": "trine",
+    "angle": 122.31,
+    "orb": 2.31
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Neptune",
+    "aspect": "sextile",
+    "angle": 62.5,
+    "orb": 2.5
+  },
+  {
+    "planet1": "Moon",
+    "planet2": "Venus",
+    "aspect": "sextile",
+    "angle": 62.92,
+    "orb": 2.92
+  },
+  {
+    "planet1": "Mercury",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 176.97,
+    "orb": 3.03
+  },
+  {
+    "planet1": "Chiron",
+    "planet2": "MC",
+    "aspect": "trine",
+    "angle": 123.53,
+    "orb": 3.53
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Pluto",
+    "aspect": "sextile",
+    "angle": 56.44,
+    "orb": 3.56
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.71,
+    "orb": 3.71
+  },
+  {
+    "planet1": "Saturn",
+    "planet2": "Neptune",
+    "aspect": "trine",
+    "angle": 116.25,
+    "orb": 3.75
+  },
+  {
+    "planet1": "Uranus",
+    "planet2": "Node",
+    "aspect": "conjunction",
+    "angle": 3.92,
+    "orb": 3.92
+  },
+  {
+    "planet1": "Venus",
+    "planet2": "Saturn",
+    "aspect": "trine",
+    "angle": 115.82,
+    "orb": 4.18
+  },
+  {
+    "planet1": "ASC",
+    "planet2": "MC",
+    "aspect": "square",
+    "angle": 85.81,
+    "orb": 4.19
+  },
+  {
+    "planet1": "Node",
+    "planet2": "Chiron",
+    "aspect": "opposition",
+    "angle": 175.68,
+    "orb": 4.32
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mercury",
+    "aspect": "conjunction",
+    "angle": 5.0,
+    "orb": 5.0
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Moon",
+    "aspect": "square",
+    "angle": 97.64,
+    "orb": 7.64
+  },
+  {
+    "planet1": "Sun",
+    "planet2": "Mars",
+    "aspect": "conjunction",
+    "angle": 7.64,
+    "orb": 7.64
+  }
+]
+
+Please provide a comprehensive NATAL CHART analysis:
+1. **PERSONALITY TRAITS:** Analyze personality traits based on planetary positions and signs.
+2. **ASCENDANT (MANDATORY SECTION):** Analyze the Ascendant sign and degree in detail. Explain:
+   - The outer mask and first impression the person creates
+   - Physical appearance tendencies
+   - How the Ascendant contrasts or harmonizes with the Sun sign
+   - The person's initial reaction to the world and how they 'start' in life
+   - Example: 'Ascendant in Cancer 14°22' - The Protective Shell: Despite the fiery Sun in Aries, your outer presentation is soft, caring, and intuitive. People see you as someone they can trust and rely on.'
+3. Identify life themes and karmic patterns.
+4. Explain strengths and challenges from aspects.
+5. Describe house placements and their meanings.
+6. Focus on psychological patterns and inner motivations.
+7. Do NOT predict the future or mention transits.
+8. Focus on the person's inherent nature and potential.
+
+Моля отговори на български език.
+================================================================================
+

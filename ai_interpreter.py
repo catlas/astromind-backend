@@ -1061,6 +1061,13 @@ DYNAMIC_PROMPT_TEMPLATES = {
         2. Critical Dates (when to act or avoid decisions)
         3. Advice (specific actions to take)
         TONE: Strategic, practical, motivating.
+        
+        **ASPECT EXAMPLES FOR CAREER (Apply the aspect table strictly):**
+        - Jupiter Opposition Mars → Conflict between ambition and action, risk of overcommitment, impulsive career moves. NOT 'career boost'.
+        - Saturn Trine Sun → Steady progress, recognition for hard work, stable advancement. NOT 'limitations'.
+        - Uranus Square MC → Sudden career changes, instability, unexpected disruptions. NOT 'exciting opportunities'.
+        - Neptune Trine Venus → Creative projects flow easily, artistic recognition, harmonious work relationships. NOT 'confusion'.
+        - Pluto Opposition Saturn → Power struggles with authority, forced restructuring, career crisis. NOT 'transformation'.
     """,
     "love": """
         You are a Relationship Coach and Astrological Timing Specialist.
@@ -1081,6 +1088,14 @@ DYNAMIC_PROMPT_TEMPLATES = {
         2. Key Dates (best times for romance, talks, or intimacy)
         3. Warnings (periods to be cautious or patient)
         TONE: Romantic, insightful, sensitive.
+        
+        **ASPECT EXAMPLES FOR LOVE (Apply the aspect table strictly):**
+        - Venus Opposition Mars → Sexual tension, power struggles, attraction with friction, desire vs. action conflict. NOT 'passionate romance'.
+        - Jupiter Square Moon → Emotional extravagance, unrealistic expectations, overindulgence in feelings. NOT 'joyful expansion'.
+        - Saturn Trine Venus → Stable, committed love, mature relationships, lasting bonds. NOT 'coldness'.
+        - Uranus Opposition Venus → Sudden breakups, unexpected attractions, instability in relationships. NOT 'exciting new love'.
+        - Neptune Trine Moon → Deep emotional connection, spiritual intimacy, compassionate love. NOT 'illusion'.
+        - Pluto Square Venus → Obsession, jealousy, power dynamics, intense transformation through crisis. NOT 'deep passion'.
     """,
     "health": """
         You are an Expert Medical Astrologer.
@@ -1117,6 +1132,14 @@ DYNAMIC_PROMPT_TEMPLATES = {
         MODE: Time-Based Health Forecast.
         If the user asks a specific health question (e.g., "Will I get pregnant?" or "Will my surgery go well?"), prioritize that in the specific answer section.
         TONE: Caring, practical, preventive, empowering.
+        
+        **ASPECT EXAMPLES FOR HEALTH (Apply the aspect table strictly):**
+        - Jupiter Opposition Mars → Risk of overexertion, inflammation, fever, impulsive decisions. NOT 'vitality boost'.
+        - Saturn Trine Moon → Emotional stability supports immune system, steady recovery. NOT 'emotional coldness'.
+        - Uranus Square Sun → Sudden stress, nervous tension, irregular heart rhythm, accidents. NOT 'exciting breakthroughs'.
+        - Neptune Opposition Mercury → Mental fog, misdiagnosis, allergic reactions, lymphatic issues. NOT 'spiritual insights'.
+        - Pluto Trine Venus → Deep healing of hormonal balance, regeneration. NOT 'obsession'.
+        - Mars Square Saturn → Physical exhaustion, chronic pain flare-ups, inflammation meets restriction. NOT 'disciplined action'.
     """,
     "karmic": """
         You are an Expert in Karmic Astrology, Family Constellations, and Regression Therapy.
@@ -1151,6 +1174,13 @@ DYNAMIC_PROMPT_TEMPLATES = {
         
         MODE: Time-Based Karmic Forecast.
         TONE: Therapeutic, deep, empathetic, spiritual.
+        
+        **ASPECT EXAMPLES FOR KARMA (Apply the aspect table strictly):**
+        - Saturn Opposition Moon → Emotional crisis with mother figure, ancestral wounds surface, father vs. mother conflict. NOT 'maturity'.
+        - Pluto Trine Saturn → Deep healing of paternal lineage, transformation through discipline, karmic debts resolved. NOT 'control'.
+        - Neptune Square Moon → Confusion about maternal love, illusions about family, need to see mother clearly. NOT 'spiritual connection'.
+        - Uranus Opposition Saturn → Breaking free from father's authority, sudden karmic release, rebellion vs. tradition. NOT 'innovation'.
+        - Jupiter Trine Moon → Emotional abundance, healing of maternal wounds, expansion of inner child. NOT 'overindulgence'.
     """,
     "money": """
         You are a Financial Astrologer and Wealth Timing Specialist.
@@ -1182,6 +1212,14 @@ DYNAMIC_PROMPT_TEMPLATES = {
         2. Key Dates (important periods to note)
         3. Overall Advice (what to focus on or be cautious about)
         TONE: Balanced, insightful, helpful.
+        
+        **ASPECT EXAMPLES FOR GENERAL ANALYSIS (Apply the aspect table strictly):**
+        - Jupiter Opposition Mars → Tension between expansion and action, overextension, impulsive growth. NOT 'fortunate opportunities'.
+        - Saturn Trine Sun → Steady progress, recognition, stable development. NOT 'limitations'.
+        - Uranus Square Moon → Emotional instability, sudden changes, nervous tension. NOT 'exciting breakthroughs'.
+        - Neptune Trine Venus → Creative inspiration, spiritual love, artistic flow. NOT 'confusion'.
+        - Pluto Opposition Mercury → Mental crisis, obsessive thoughts, power struggles in communication. NOT 'deep insights'.
+        - Mars Square Saturn → Frustration, blocked action, chronic tension. NOT 'disciplined effort'.
     """
 }
 
@@ -1321,6 +1359,159 @@ class AIInterpreter:
             print(f"Грешка при изчисляване на health ruler: {e}")
             return (None, None)
     
+    def _get_type_specific_aspect_examples(self, report_type: str) -> str:
+        """Get type-specific aspect interpretation examples"""
+        
+        examples = {
+            "career": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR CAREER ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Jupiter Trine MC (Midheaven):**
+✅ CORRECT: "Професионален ръст, добри възможности за кариера, признание от началство."
+❌ WRONG: "Ограничения в кариерата" (trine is harmonious!)
+
+**Saturn Opposition Sun:**
+✅ CORRECT: "Напрежение с началство, забавяне в проекти, нужда от търпение."
+❌ WRONG: "Успех и подкрепа" (opposition is tense!)
+
+**Mars Square Mercury:**
+✅ CORRECT: "Конфликти в комуникацията, рискови решения, стрес в преговори."
+❌ WRONG: "Лесна комуникация" (square is challenging!)
+
+**Venus Conjunction MC:**
+✅ CORRECT: "Фокус върху кариера, възможност за публично признание."
+❌ WRONG: "Спокойствие в личния живот" (conjunction amplifies MC = career!)
+
+**Pluto Trine Saturn:**
+✅ CORRECT: "Дълбока трансформация в професионалната структура с подкрепа."
+❌ WRONG: "Хаос и разрушение" (trine is supportive!)
+
+**Neptune Square MC:**
+✅ CORRECT: "Объркване относно кариерна посока, неясни цели."
+❌ WRONG: "Ясна визия" (square creates confusion!)
+""",
+            "money": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR MONEY ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Jupiter Trine Venus:**
+✅ CORRECT: "Финансов растеж, подаръци, лесни приходи."
+❌ WRONG: "Загуба на пари" (trine is harmonious!)
+
+**Saturn Square 2nd House Ruler:**
+✅ CORRECT: "Финансови ограничения, забавени плащания, необходимост от спестяване."
+❌ WRONG: "Лесни приходи" (square is restrictive!)
+
+**Uranus Opposition Venus:**
+✅ CORRECT: "Нестабилност в приходите, неочаквани разходи."
+❌ WRONG: "Финансова стабилност" (opposition creates instability!)
+
+**Mars Conjunction 2nd House Cusp:**
+✅ CORRECT: "Активни действия за пари, импулсивни покупки."
+❌ WRONG: "Пасивност" (conjunction intensifies!)
+
+**Pluto Sextile Jupiter:**
+✅ CORRECT: "Възможност за трансформация на финанси, инвестиции."
+❌ WRONG: "Загуба на капитал" (sextile is opportune!)
+
+**Neptune Square 2nd House Ruler:**
+✅ CORRECT: "Финансова объркване, измами, неясни сделки."
+❌ WRONG: "Ясни финансови решения" (square confuses!)
+""",
+            "love": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR LOVE ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Venus Trine Mars:**
+✅ CORRECT: "Хармония между желания и действия, романтика."
+❌ WRONG: "Конфликт в отношенията" (trine is harmonious!)
+
+**Mars Opposition Venus:**
+✅ CORRECT: "Сексуално напрежение, конфликт между нужди и желания."
+❌ WRONG: "Романтична хармония" (opposition is tense!)
+
+**Neptune Square Venus:**
+✅ CORRECT: "Илюзии в любовта, неясни намерения, разочарование."
+❌ WRONG: "Ясност в чувствата" (square confuses!)
+
+**Saturn Trine Venus:**
+✅ CORRECT: "Стабилност в отношенията, дългосрочен ангажимент."
+❌ WRONG: "Раздяла" (trine stabilizes!)
+
+**Pluto Conjunction Venus:**
+✅ CORRECT: "Интензивна привлекателност, трансформация на чувствата."
+❌ WRONG: "Спокойна любов" (conjunction intensifies!)
+
+**Uranus Square 7th House Ruler:**
+✅ CORRECT: "Неочаквани промени в отношения, нестабилност."
+❌ WRONG: "Стабилност в брака" (square disrupts!)
+""",
+            "karmic": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR KARMIC ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Saturn Trine North Node:**
+✅ CORRECT: "Кармична подкрепа, уроци от миналото помагат."
+❌ WRONG: "Кармични блокове" (trine supports!)
+
+**Pluto Opposition South Node:**
+✅ CORRECT: "Напрежение с минали модели, нужда от освобождаване."
+❌ WRONG: "Лесна трансформация" (opposition is tense!)
+
+**Neptune Square 12th House Ruler:**
+✅ CORRECT: "Духовна объркване, неясни кармични теми."
+❌ WRONG: "Ясна духовна визия" (square confuses!)
+
+**Jupiter Conjunction North Node:**
+✅ CORRECT: "Кармично разширяване, духовен растеж."
+❌ WRONG: "Липса на посока" (conjunction amplifies growth!)
+
+**Saturn Square 8th House Ruler:**
+✅ CORRECT: "Трудности с наследство, блокове в трансформацията."
+❌ WRONG: "Лесна трансформация" (square blocks!)
+
+**Chiron Trine Moon:**
+✅ CORRECT: "Изцеление на емоционални рани, подкрепа."
+❌ WRONG: "Нови травми" (trine heals!)
+""",
+            "general": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR GENERAL ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Jupiter Trine Sun:**
+✅ CORRECT: "Оптимизъм, растеж, добри възможности в живота."
+❌ WRONG: "Песимизъм" (trine is positive!)
+
+**Saturn Opposition Moon:**
+✅ CORRECT: "Емоционално напрежение, нужда от отговорност."
+❌ WRONG: "Емоционална лекота" (opposition is tense!)
+
+**Uranus Square Ascendant:**
+✅ CORRECT: "Неочаквани промени в личността, нестабилност."
+❌ WRONG: "Стабилна идентичност" (square disrupts!)
+
+**Venus Conjunction Jupiter:**
+✅ CORRECT: "Изобилие, радост, социални успехи."
+❌ WRONG: "Ограничения" (conjunction amplifies!)
+
+**Mars Trine Pluto:**
+✅ CORRECT: "Силна воля, ефективни действия, лидерство."
+❌ WRONG: "Безсилие" (trine empowers!)
+
+**Neptune Opposition Mercury:**
+✅ CORRECT: "Объркване в мисленето, неясна комуникация."
+❌ WRONG: "Ясни мисли" (opposition confuses!)
+"""
+        }
+        
+        return examples.get(report_type, examples["general"])
+    
     def _build_dynamic_system_prompt(
         self, 
         report_type: str, 
@@ -1417,21 +1608,72 @@ class AIInterpreter:
                 f"For each month, focus specifically on how the astrological events relate to the report type ({report_type})."
             )
         
-        # Add common rules
+        # Add common rules including STRICT TITLE FORMAT
+        type_bg_map = {
+            "health": "ЗДРАВЕ",
+            "career": "КАРИЕРА", 
+            "love": "ЛЮБОВ",
+            "money": "ПАРИ И УСПЕХ",
+            "karmic": "КАРМА И РОД",
+            "general": "ОБЩ АНАЛИЗ"
+        }
+        
+        type_title = type_bg_map.get(report_type, report_type.upper())
+        
         common_rules = (
-            f"\n\nCRITICAL RULES:\n"
+            f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🚨 MANDATORY TITLE FORMAT (DO NOT DEVIATE!):\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"You MUST start EVERY monthly analysis with EXACTLY this format:\n\n"
+            f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**\n\n"
+            f"Examples:\n"
+            f"- **ЗДРАВЕ: АНАЛИЗ ЗА ЯНУАРИ 2026 Г. – КРАСИМИРА АНДОНОВА**\n"
+            f"- **КАРИЕРА: АНАЛИЗ ЗА ФЕВРУАРИ 2026 Г. – ЕВГЕНИ ПЕТРОВ**\n"
+            f"- **ЛЮБОВ: АНАЛИЗ ЗА МАРТ 2026 Г. – НАДЯ ИВАНОВА**\n\n"
+            f"❌ DO NOT USE:\n"
+            f"- \"МЕДИКО-АСТРОЛОГИЧЕСКИ ЗДРАВЕН ПРОГНОЗ\"\n"
+            f"- \"МЕДИЦИНСКА АСТРОЛОГИЧЕСКА АНАЛИЗА\"\n"
+            f"- \"Астрологически здравен прогноз\"\n"
+            f"- Or any other variations!\n\n"
+            f"✅ ONLY USE: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ]**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🚨 ASPECT INTERPRETATION - NON-NEGOTIABLE RULES:\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**FUNDAMENTAL PRINCIPLE:**\n"
+            f"The ASPECT TYPE determines the interpretation, NOT the planet's nature.\n"
+            f"Planetary symbolism NEVER overrides aspect type.\n\n"
+            f"**TRADITIONAL ASTROLOGICAL CLASSIFICATION:**\n"
+            f"Use traditional astrological principles: Hard aspects = challenging, Soft aspects = flowing.\n"
+            f"Do NOT apply modern 'positive reframing' or 'growth mindset' to inherently difficult aspects.\n\n"
+            f"| Aspect      | Meaning       | Interpretation                              | Override by planet? |\n"
+            f"|-------------|---------------|---------------------------------------------|---------------------|\n"
+            f"| Trine       | HARMONIOUS    | Easy, flowing, supportive, natural talents  | ❌ NEVER            |\n"
+            f"| Sextile     | OPPORTUNITY   | Mild support, potential for growth          | ❌ NEVER            |\n"
+            f"| Conjunction | INTENSE       | Blending, amplification, strong focus       | ❌ NEVER            |\n"
+            f"| Square      | CHALLENGING   | Friction, tension, hard work required       | ❌ NEVER            |\n"
+            f"| Opposition  | TENSE         | Imbalance, polarization, awareness via conflict | ❌ NEVER        |\n\n"
+            f"❌ FORBIDDEN INTERPRETATIONS (Common AI Mistakes):\n"
+            f"- 'Jupiter Opposition Mars' is NOT 'fortunate expansion' — it is TENSION between expansion and action, risk of overextension.\n"
+            f"- 'Saturn Trine Sun' is NOT 'limiting' — it is SUPPORTIVE structure for vitality, steady progress.\n"
+            f"- 'Pluto Square Moon' is NOT 'transformative growth' — it is CRISIS and emotional upheaval.\n"
+            f"- 'Venus Opposition Mars' is NOT 'passionate romance' — it is sexual tension with power struggles.\n"
+            f"- 'Neptune Trine Mercury' is NOT 'confusion' — it is enhanced intuition and creativity.\n\n"
+            f"✅ CORRECT INTERPRETATION PROCESS:\n"
+            f"1. Read the aspect type from JSON: 'aspect': 'Opposition'\n"
+            f"2. Apply the table meaning: Opposition = TENSE\n"
+            f"3. Interpret: 'Jupiter Opposition Mars = Tension between expansion and action, risk of overextension, impulsiveness, conflict between ambition and capacity.'\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"CRITICAL DATA RULES:\n"
             f"- You are an interpreter of RIGOROUS, PRE-CALCULATED ASTROLOGICAL EVENTS. Do NOT guess or invent aspects or events.\n"
             f"- The JSON 'timeline_events' already contains the EXACT aspect name, angle and orb (e.g. 'aspect': 'Trine', 'angle_deg': 120, 'orb': 0.2).\n"
-            f"- If an event says 'aspect': 'Trine', you MUST treat it as a harmonious/flowing aspect. Do NOT reinterpret it as tense or difficult.\n"
-            f"- If an event says 'aspect': 'Square' or 'Opposition', you MUST treat it as tense/challenging. Do NOT reinterpret it as easy or harmonious.\n"
-            f"- NEVER change the aspect classification. The Python backend is the ONLY SOURCE OF TRUTH for aspect types.\n"
             f"- Do NOT calculate new aspects from planet positions. ONLY interpret the aspects explicitly listed in the events.\n"
             f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context and how transits interact with existing natal patterns. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
             f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes.\n"
             f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
             f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
             f"- House placements for transit planets in monthly events are PRE-CALCULATED by the backend - use them directly, do NOT recalculate.\n"
-            f"- Focus on SPECIFIC dates within the month provided.\n"
+            f"- Focus on SPECIFIC dates within the month provided.\n\n"
         )
         
         # Add mandatory question answer section if user_question exists
@@ -1458,10 +1700,13 @@ class AIInterpreter:
                     f"3. Be direct and specific. Do NOT be vague.\n"
                 )
         
+        # Add type-specific aspect interpretation examples
+        type_specific_examples = self._get_type_specific_aspect_examples(report_type)
+        
         # Add strict Bulgarian language rules at the end
         language_rules = self._get_bulgarian_language_rules()
         
-        return f"{base_persona}{house_rulers_context}{partner_rulers_context}{context}{common_rules}{question_instruction}{language_rules}"
+        return f"{base_persona}{house_rulers_context}{partner_rulers_context}{context}{common_rules}{type_specific_examples}{question_instruction}{language_rules}"
     
     async def _process_monthly_chunk(
         self,
