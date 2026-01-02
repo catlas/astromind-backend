@@ -21,6 +21,7 @@ pydantic==2.11.10
 pydantic_core==2.33.2
 pyswisseph
 python-dateutil==2.9.0.post0
+python-docx==1.1.0
 python-dotenv==1.1.0
 pytz==2024.2
 requests==2.32.3
