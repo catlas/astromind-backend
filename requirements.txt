@@ -34,3 +34,8 @@ typing_extensions==4.12.2
 urllib3
 uvicorn
 fastapi
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+bcrypt<5.0.0
+python-jose[cryptography]

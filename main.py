@@ -3,12 +3,13 @@ FastAPI сървър за астрологично приложение
 Предоставя API endpoints за изчисляване и интерпретация на астрологични карти
 """
 
-from fastapi import FastAPI, HTTPException  # type: ignore
+from fastapi import FastAPI, HTTPException, Depends, status  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 from fastapi.responses import StreamingResponse, Response  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session  # type: ignore
 import json
 import asyncio
 import engine
@@ -16,12 +17,14 @@ from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
+from database import User, get_db
+from auth import hash_password, verify_password, create_access_token
 
 # Инициализация на FastAPI приложението
 app = FastAPI(
     title="Astrology API",
     description="API за изчисляване и интерпретация на астрологични карти",
-    version="1.0.0"
+    version="3.0.0"
 )
 
 # CORS Middleware - разрешава заявки от React frontend
@@ -223,10 +226,12 @@ async def root():
     """Root endpoint - информация за API"""
     return {
         "message": "Astrology API",
-        "version": "1.0.0",
+        "version": "3.0.0",
         "endpoints": {
             "POST /calculate": "Изчислява астрологична карта",
-            "POST /interpret": "Изчислява карта и получава AI интерпретация"
+            "POST /interpret": "Изчислява карта и получава AI интерпретация",
+            "POST /register": "Регистрация на нов потребител",
+            "POST /login": "Вход в системата - връща JWT token"
         }
     }
 
@@ -387,6 +392,25 @@ async def interpret_chart_stream(request: ChartRequest):
             start_month = f"{month_names.get(sorted_months[0][5:7], sorted_months[0][5:7])} {sorted_months[0][:4]}"
             end_month = f"{month_names.get(sorted_months[-1][5:7], sorted_months[-1][5:7])} {sorted_months[-1][:4]}"
             
+            # Calculate transit chart for the start date (target_date) for visualization
+            # This is needed especially when partner is enabled to show the transit chart
+            transit_chart_data = None
+            if start_date:
+                try:
+                    # Use target_date as transit date, or start_date if target_date not provided
+                    transit_date = start_date
+                    # Default to noon (12:00) for transit chart
+                    transit_time = "12:00:00"
+                    
+                    transit_chart_data = engine_instance.calculate_chart(
+                        date=transit_date,
+                        time=transit_time,
+                        lat=request.lat,
+                        lon=request.lon
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not calculate transit chart for start date: {e}")
+            
             start_event_data = {
                 'type': 'start',
                 'total_months': len(sorted_months),
@@ -394,6 +418,7 @@ async def interpret_chart_stream(request: ChartRequest):
                 'end_month': end_month,
                 'natal_chart': natal_chart_data,
                 'partner_chart': partner_chart_data,
+                'transit_chart': transit_chart_data,  # Add transit chart for start date
                 'natal_aspects': natal_aspects_data,
                 'partner_natal_aspects': partner_natal_aspects_data
             }
@@ -720,6 +745,51 @@ async def generate_docx(request: DOCXRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Грешка при генериране на DOCX: {str(e)}")
+
+
+# ============================================================================
+# АКАУНТНА СИСТЕМА - АВТЕНТИФИКАЦИЯ
+# ============================================================================
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    full_name: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+@app.post("/register")
+def register(user_data: UserRegister, db: Session = Depends(get_db)):
+    """Регистрация на нов потребител"""
+    # Проверка дали имейлът съществува
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Имейлът вече е регистриран")
+    
+    new_user = User(
+        email=user_data.email,
+        full_name=user_data.full_name,
+        hashed_password=hash_password(user_data.password)
+    )
+    db.add(new_user)
+    db.commit()
+    return {"message": "Успешна регистрация"}
+
+@app.post("/login")
+def login(user_data: UserLogin, db: Session = Depends(get_db)):
+    """Вход в системата - връща JWT token"""
+    user = db.query(User).filter(User.email == user_data.email).first()
+    if not user or not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Грешен имейл или парола")
+    
+    token = create_access_token(data={"sub": user.email})
+    return {
+        "access_token": token, 
+        "token_type": "bearer",
+        "user": {"full_name": user.full_name, "coins": user.coins}
+    }
 
 
 if __name__ == "__main__":

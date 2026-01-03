@@ -1620,22 +1620,39 @@ class AIInterpreter:
         
         type_title = type_bg_map.get(report_type, report_type.upper())
         
+        # Determine title format based on whether partner is present
+        if has_partner and partner_chart:
+            title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**"
+            title_examples = (
+                f"Examples:\n"
+                f"- **ЛЮБОВ: АНАЛИЗ ЗА ЯНУАРИ 2026 Г. – ЕВГЕНИ И ЦАРИНА**\n"
+                f"- **ЗДРАВЕ: АНАЛИЗ ЗА ФЕВРУАРИ 2026 Г. – КРАСИМИРА И ИВАН**\n"
+                f"- **КАРИЕРА: АНАЛИЗ ЗА МАРТ 2026 Г. – НАДЯ И ПЕТЪР**\n\n"
+            )
+            title_instruction = f"✅ FORMAT WITH PARTNER: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ] И [ИМЕ НА ПАРТНЬОРА]**"
+        else:
+            title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**"
+            title_examples = (
+                f"Examples:\n"
+                f"- **ЗДРАВЕ: АНАЛИЗ ЗА ЯНУАРИ 2026 Г. – КРАСИМИРА АНДОНОВА**\n"
+                f"- **КАРИЕРА: АНАЛИЗ ЗА ФЕВРУАРИ 2026 Г. – ЕВГЕНИ ПЕТРОВ**\n"
+                f"- **ЛЮБОВ: АНАЛИЗ ЗА МАРТ 2026 Г. – НАДЯ ИВАНОВА**\n\n"
+            )
+            title_instruction = f"✅ ONLY USE: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ]**"
+        
         common_rules = (
             f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🚨 MANDATORY TITLE FORMAT (DO NOT DEVIATE!):\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"You MUST start EVERY monthly analysis with EXACTLY this format:\n\n"
-            f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**\n\n"
-            f"Examples:\n"
-            f"- **ЗДРАВЕ: АНАЛИЗ ЗА ЯНУАРИ 2026 Г. – КРАСИМИРА АНДОНОВА**\n"
-            f"- **КАРИЕРА: АНАЛИЗ ЗА ФЕВРУАРИ 2026 Г. – ЕВГЕНИ ПЕТРОВ**\n"
-            f"- **ЛЮБОВ: АНАЛИЗ ЗА МАРТ 2026 Г. – НАДЯ ИВАНОВА**\n\n"
+            f"{title_format}\n\n"
+            f"{title_examples}"
             f"❌ DO NOT USE:\n"
             f"- \"МЕДИКО-АСТРОЛОГИЧЕСКИ ЗДРАВЕН ПРОГНОЗ\"\n"
             f"- \"МЕДИЦИНСКА АСТРОЛОГИЧЕСКА АНАЛИЗА\"\n"
             f"- \"Астрологически здравен прогноз\"\n"
             f"- Or any other variations!\n\n"
-            f"✅ ONLY USE: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ]**\n"
+            f"{title_instruction}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🚨 ASPECT INTERPRETATION - NON-NEGOTIABLE RULES:\n"
@@ -1664,12 +1681,22 @@ class AIInterpreter:
             f"2. Apply the table meaning: Opposition = TENSE\n"
             f"3. Interpret: 'Jupiter Opposition Mars = Tension between expansion and action, risk of overextension, impulsiveness, conflict between ambition and capacity.'\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**CRITICAL RULE: NEVER assume houses, aspects, or transit dates. Use EXCLUSIVELY the provided data.**\n"
+            f"If something is missing in the data, SAY: 'There is not enough information for this aspect.'\n"
+            f"Do NOT invent, do NOT interpolate, do NOT use general astrological knowledge.\n"
+            f"Do NOT calculate or guess house positions, aspects, or transit dates from planetary positions or signs.\n"
+            f"ONLY use the PRE-CALCULATED data provided in the JSON sections.\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"CRITICAL DATA RULES:\n"
             f"- You are an interpreter of RIGOROUS, PRE-CALCULATED ASTROLOGICAL EVENTS. Do NOT guess or invent aspects or events.\n"
             f"- The JSON 'timeline_events' already contains the EXACT aspect name, angle and orb (e.g. 'aspect': 'Trine', 'angle_deg': 120, 'orb': 0.2).\n"
             f"- Do NOT calculate new aspects from planet positions. ONLY interpret the aspects explicitly listed in the events.\n"
             f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context and how transits interact with existing natal patterns. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
             f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes.\n"
+            f"- **IMPORTANT: RE-INGRESS EVENTS ARE VALID**: If a planet enters a sign, becomes retrograde and returns to the previous sign, then becomes direct and enters the new sign again (re-ingress), this is a REAL and VALID astrological event. Both the first ingress and any re-ingress events are significant and should be mentioned. For example: Neptune entering Aries on March 28, 2025, then retrograde back to Pisces, then direct again entering Aries on January 27, 2026 - BOTH dates are valid ingress events.\n"
+            f"- **CRITICAL: LUNATION EVENTS (Full Moon, New Moon) DO NOT INCLUDE HOUSE INFORMATION**: Events with type 'LUNATION' (Full Moon, New Moon) or 'ECLIPSE' contain only the sign position (e.g., 'Full Moon in Cancer'), but do NOT include house placement data. DO NOT guess or calculate house placements for these events. You may mention the sign and its general meaning, but DO NOT claim which house the lunation activates (e.g., do NOT say 'activates 6th house' or 'activates 12th house') unless house information is explicitly provided in the event data.\n"
             f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
             f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
             f"- House placements for transit planets in monthly events are PRE-CALCULATED by the backend - use them directly, do NOT recalculate.\n"
@@ -1777,6 +1804,57 @@ class AIInterpreter:
                     print(f"Warning: Could not calculate user natal aspects for monthly chunk: {e}")
                 
                 user_prompt += f"--- {partner_display_name.upper()} NATAL CHART ---\n{partner_json}\n\n"
+                
+                # Calculate natal aspects for partner
+                try:
+                    partner_natal_aspects_monthly = calculate_natal_aspects(partner_chart, use_wider_orbs=False)
+                    partner_natal_aspects_monthly_json = json.dumps(partner_natal_aspects_monthly, indent=2, ensure_ascii=False)
+                    user_prompt += f"--- {partner_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
+                    user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
+                    user_prompt += f"{partner_natal_aspects_monthly_json}\n\n"
+                except Exception as e:
+                    print(f"Warning: Could not calculate partner natal aspects for monthly chunk: {e}")
+                
+                # Calculate synastry house overlays (Partner's planets in User's houses)
+                try:
+                    partner_overlays = self.engine.calculate_synastry_house_overlays(
+                        user_natal_chart=natal_chart,
+                        partner_planets=partner_chart.get("planets", {})
+                    )
+                    partner_overlays_json = json.dumps(partner_overlays, indent=2, ensure_ascii=False)
+                    user_prompt += f"--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---\n"
+                    user_prompt += "CRITICAL: These house placements are PRE-CALCULATED by the backend using Placidus house system. Use them directly - DO NOT recalculate.\n"
+                    user_prompt += "Each number represents which of User's houses the Partner's planet falls into.\n"
+                    user_prompt += f"{partner_overlays_json}\n\n"
+                except Exception as e:
+                    print(f"Warning: Could not calculate partner house overlays for monthly chunk: {e}")
+                
+                # Calculate reverse overlays (User's planets in Partner's houses) - for completeness
+                try:
+                    user_overlays = self.engine.calculate_synastry_house_overlays(
+                        user_natal_chart=partner_chart,
+                        partner_planets=natal_chart.get("planets", {})
+                    )
+                    user_overlays_json = json.dumps(user_overlays, indent=2, ensure_ascii=False)
+                    user_prompt += f"--- {user_display_name.upper()} PLANETS IN {partner_display_name.upper()}'S NATAL HOUSES (CALCULATED) ---\n"
+                    user_prompt += "CRITICAL: These house placements are PRE-CALCULATED by the backend using Placidus house system. Use them directly - DO NOT recalculate.\n"
+                    user_prompt += "Each number represents which of Partner's houses the User's planet falls into.\n"
+                    user_prompt += f"{user_overlays_json}\n\n"
+                except Exception as e:
+                    print(f"Warning: Could not calculate user house overlays for monthly chunk: {e}")
+                
+                # Calculate synastry aspects (mutual aspects between user and partner) - if available
+                try:
+                    from aspects_engine import calculate_synastry_aspects
+                    synastry_aspects_monthly = calculate_synastry_aspects(natal_chart, partner_chart, use_wider_orbs=False)
+                    synastry_aspects_monthly_json = json.dumps(synastry_aspects_monthly, indent=2, ensure_ascii=False)
+                    user_prompt += f"--- SYNASTRY ASPECTS (CALCULATED) ---\n"
+                    user_prompt += f"CRITICAL: These are mutual aspects between {user_display_name} and {partner_display_name}.\n"
+                    user_prompt += "Use them directly - DO NOT recalculate or assume aspects.\n"
+                    user_prompt += "Format: planet1 (User) ↔ planet2 (Partner)\n"
+                    user_prompt += f"{synastry_aspects_monthly_json}\n\n"
+                except Exception as e:
+                    print(f"Warning: Could not calculate synastry aspects for monthly chunk: {e}")
             else:
                 natal_json = json.dumps(natal_chart, indent=2, ensure_ascii=False)
                 user_prompt += f"--- NATAL CHART ---\n{natal_json}\n\n"
@@ -1796,7 +1874,10 @@ class AIInterpreter:
             if question:
                 user_prompt += f"User Question: {question}\n\n"
             
-            user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
+            if has_partner_flag:
+                user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes for BOTH {user_display_name} and {partner_display_name}. Analyze how the astrological events affect each person individually AND their relationship dynamics together."
+            else:
+                user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
             
             # Call Together.ai API using httpx
             headers = {
@@ -1979,6 +2060,14 @@ class AIInterpreter:
                 f"MODE: RELATIONSHIP TRANSIT FORECAST (Snapshot)\n"
                 f"You are an Expert Predictive Astrologer specializing in Relationship Timing.\n"
                 f"You have the Natal Charts of {user_display_name} and {partner_display_name}, and the TRANSIT CHART for the specific moment: {target_date}.\n\n"
+                f"🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"**CRITICAL RULE: NEVER assume houses, aspects, or transit dates. Use EXCLUSIVELY the provided data.**\n"
+                f"If something is missing in the data, SAY: 'There is not enough information for this aspect.'\n"
+                f"Do NOT invent, do NOT interpolate, do NOT use general astrological knowledge.\n"
+                f"Do NOT calculate or guess house positions, aspects, or transit dates from planetary positions or signs.\n"
+                f"ONLY use the PRE-CALCULATED data provided in the JSON sections.\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"YOUR TASK:\n\n"
                 f"1. **Analyze Current Transits to {user_display_name}:**\n"
                 f"   - Which User planets are being triggered right now?\n"
@@ -2107,6 +2196,14 @@ class AIInterpreter:
         
             # Add Synastry rules
             system_prompt += (
+                "🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "**CRITICAL RULE: NEVER assume houses, aspects, or transit dates. Use EXCLUSIVELY the provided data.**\n"
+                "If something is missing in the data, SAY: 'There is not enough information for this aspect.'\n"
+                "Do NOT invent, do NOT interpolate, do NOT use general astrological knowledge.\n"
+                "Do NOT calculate or guess house positions, aspects, or transit dates from planetary positions or signs.\n"
+                "ONLY use the PRE-CALCULATED data provided in the JSON sections.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 "SYNASTRY RULES:\n\n"
                 "1. SYNASTRY ASPECTS (PRE-CALCULATED):\n"
                 "   - The backend DOES provide aspect data between User and Partner charts in 'SYNASTRY ASPECTS (CALCULATED)' section.\n"
