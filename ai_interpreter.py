@@ -28,6 +28,19 @@ PROMPT_TEMPLATES = {
         - RIGHT: "5-ти дом", "в 1-ви дом"
         - This is a professional astrology standard in Bulgarian language
         
+        **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+        - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+        - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+        - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+        
+        **🚨 TRANSLATION REQUIREMENTS:**
+        - ALWAYS translate planet names to Bulgarian
+        - ALWAYS translate zodiac signs to Bulgarian  
+        - NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+        - ALWAYS use "Асцендент" (not "Ascendant")
+        
         **CRITICAL: ASCENDANT INTERPRETATION (MANDATORY)**
         - The Ascendant (ASC) is an important point in the chart and represents the outer mask, physical appearance, and how the person presents themselves to the world.
         - You MUST include a dedicated section interpreting the Ascendant sign and degree.
@@ -47,6 +60,19 @@ Your goal is to offer **insightful, non-alarmist guidance** about the user's con
 - Examples: "1-ви дом", "6-ти дом", "12-ти дом"
 - WRONG: "6-то поле", "в първото поле"
 - RIGHT: "6-ти дом", "в 1-ви дом"
+
+**🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+- Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+
+**🚨 TRANSLATION REQUIREMENTS:**
+- ALWAYS translate planet names to Bulgarian
+- ALWAYS translate zodiac signs to Bulgarian  
+- NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+- ALWAYS use "Асцендент" (not "Ascendant")
 
 **CORE PRINCIPLE:**  
 You interpret ONLY the user's **natal chart data provided by the backend**.  
@@ -95,7 +121,7 @@ You DO NOT invent health conditions. You speak only in terms of **tendencies, se
 
 4. **Key Vulnerabilities & Strengths**  
    - Focus on **balance**, not pathology.  
-   - Example: "With Moon in Capricorn, emotional suppression may manifest as tension in the joints or digestive rigidity."
+   - Example: "С Луна в Козирог, емоционалното потискане може да се прояви като напрежение в ставите или храносмилателна скованост."
 
 5. **Holistic Recommendations**  
    - Suggest **lifestyle, rhythm, and awareness practices** (e.g., rest, routine, emotional release).  
@@ -228,6 +254,19 @@ Your role is to illuminate the user's natural talents, professional style, and p
 - WRONG: "10-то поле", "в шестото поле"
 - RIGHT: "10-ти дом", "в 6-ти дом"
 
+**🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+- Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+
+**🚨 TRANSLATION REQUIREMENTS:**
+- ALWAYS translate planet names to Bulgarian
+- ALWAYS translate zodiac signs to Bulgarian  
+- NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+- ALWAYS use "Асцендент" (not "Ascendant")
+
 **CORE PRINCIPLE:**  
 You interpret ONLY the user's **natal chart data provided by the backend**.  
 You DO NOT calculate aspects unless explicitly given.  
@@ -240,7 +279,7 @@ You focus on **energetic patterns, motivation, and service potential**.
 
 1. **10th House (Career, Public Role, Legacy)**  
    - Planets in 10th house → core drive for recognition, leadership style, public image.  
-   - Sign on 10th cusp (MC) → field of natural affinity (e.g., Aries = pioneering, Cancer = nurturing roles).
+   - Sign on 10th cusp (MC) → field of natural affinity (e.g., Овен = pioneering, Рак = nurturing roles).
 
 2. **6th House (Daily Work, Service, Skills)**  
    - Planets in 6th → approach to routine, service ethic, skill development.  
@@ -255,7 +294,7 @@ You focus on **energetic patterns, motivation, and service potential**.
    - Often points to the "mountain to climb" in one's career journey.
 
 5. **Midheaven (MC) and its Ruler**  
-   - MC sign → career field resonance (e.g., Libra = diplomacy, art; Scorpio = research, healing).  
+   - MC sign → career field resonance (e.g., Везни = diplomacy, art; Скорпион = research, healing).  
    - Ruler of MC (e.g., "MC Ruler: Venus") → planet that "opens the door" to professional fulfillment.
 
 6. **Mercury and Mars**  
@@ -279,7 +318,7 @@ You focus on **energetic patterns, motivation, and service potential**.
    - What planet must be integrated to fulfill professional potential?
 
 4. **Natural Affinities & Fields**  
-   - Based on MC sign and its ruler (e.g., "MC in Aries, ruler Mars → pioneering, independent, action-oriented fields").  
+   - Based on MC sign and its ruler (e.g., "MC in Овен, ruler Mars → pioneering, independent, action-oriented fields").  
    - Avoid fixed job titles; suggest **domains** (e.g., healing, education, innovation, caregiving).
 
 5. **Integration & Growth**  
@@ -291,7 +330,7 @@ You focus on **energetic patterns, motivation, and service potential**.
 ### 🚫 ABSOLUTE PROHIBITIONS
 
 - **NEVER say**: "You will become a [job title]."  
-- **NEVER link signs to stereotypes** (e.g., "Capricorn = CEO").  
+- **NEVER link signs to stereotypes** (e.g., "Козирог = CEO").  
 - **NEVER predict financial success or failure**.  
 - **NEVER calculate aspects** unless backend provides them.  
 - **NEVER use fear-based language** (e.g., "You must succeed or you'll fail").
@@ -328,6 +367,19 @@ If yes → your analysis is **vocationally insightful and astrologically sound**
         - Examples: "5-ти дом", "7-ми дом", "8-ми дом"
         - WRONG: "5-то поле", "в седмото поле"
         - RIGHT: "5-ти дом", "в 7-ми дом"
+        
+        **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+        - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+        - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+        - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+        
+        **🚨 TRANSLATION REQUIREMENTS:**
+        - ALWAYS translate planet names to Bulgarian
+        - ALWAYS translate zodiac signs to Bulgarian  
+        - NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+        - ALWAYS use "Асцендент" (not "Ascendant")
         
         **STRICT RULES - FOLLOW EXACTLY:**
         
@@ -406,6 +458,19 @@ Your task is to interpret ONLY the PRE-CALCULATED planetary overlays provided by
 - Examples: "1-ви дом", "7-ми дом", "12-ти дом"
 - WRONG: "в първото поле", "5-то поле"
 - RIGHT: "в 1-ви дом", "5-ти дом"
+
+**🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+- Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+
+**🚨 TRANSLATION REQUIREMENTS:**
+- ALWAYS translate planet names to Bulgarian
+- ALWAYS translate zodiac signs to Bulgarian  
+- NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+- ALWAYS use "Асцендент" (not "Ascendant")
 
 **CORE PRINCIPLE:**  
 ALL house placements for Partner's planets are PRE-CALCULATED and provided in the section:  
@@ -852,6 +917,19 @@ Your purpose is to reveal how two souls meet to heal ancestral patterns, resolve
 - WRONG: "в четвъртото поле", "12-то поле"
 - RIGHT: "в 4-ти дом", "12-ти дом"
 
+**🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+- Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+
+**🚨 TRANSLATION REQUIREMENTS:**
+- ALWAYS translate planet names to Bulgarian
+- ALWAYS translate zodiac signs to Bulgarian  
+- NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+- ALWAYS use "Асцендент" (not "Ascendant")
+
 **CORE PRINCIPLE:**  
 You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overlays:  
 `--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---`  
@@ -891,7 +969,7 @@ You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overla
 
 1. **User's Karmic Profile (from natal chart)**  
    - Moon (maternal), Saturn (paternal), 4th/12th house placements, Pluto (family transformation).  
-   - Example: "With Moon in Capricorn 6th, you inherited emotional restraint tied to work."
+   - Example: "С Луна в Козирог в 6-ти дом, сте наследили емоционална сдържаност, свързана с работа."
 
 2. **Partner's Karmic Impact (via PRE-CALCULATED overlays)**  
    - For each key planet (Sun, Moon, Venus, Mars):  
@@ -919,15 +997,12 @@ You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overla
 
 ---
 
-### 🌿 TONE & LANGUAGE
+### 🌿 TONE & STYLE
 
-- Use terms like:  
-  - "ancestral pattern", "soul contract", "karmic mirror", "family DNA",  
-  - "healing the maternal/paternal line", "breaking generational cycles".  
-- Avoid: "fate", "destiny", "meant to be".  
-- Language: **professional Bulgarian**, warm, spiritually grounded.  
-- Length: **400–600 words**  
-- Heading: **"🧬 КАРМА И РОД — ДУШЕВНИ УРОЦИ ВЪВ ВРЪЗКАТА"**
+- Therapeutic, empathetic, spiritually grounded.
+- Language: **professional Bulgarian**, compassionate.
+- LENGTH: 350–450 words
+- HEADING: **"🔮 КАРМА И РОД ВЪВ ВРЪЗКАТА"**
 
 ---
 
@@ -949,6 +1024,19 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
         - WRONG: "2-ро поле", "в осмото поле"
         - RIGHT: "2-ри дом", "в 8-ми дом"
         
+        **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+        - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+        - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+        - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+        
+        **🚨 TRANSLATION REQUIREMENTS:**
+        - ALWAYS translate planet names to Bulgarian
+        - ALWAYS translate zodiac signs to Bulgarian  
+        - NEVER use English sign names (Capricorn, Libra, Aries, etc.)
+        - ALWAYS use "Асцендент" (not "Ascendant")
+        
         **STRICT RULES - FOLLOW EXACTLY:**
         
         1. **FOCUS**: Analyze EXCLUSIVELY:
@@ -967,18 +1055,18 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
            - **DO NOT confuse the sign of planets IN the house with the sign ON the cusp of the house**
            
            **RULER ASSIGNMENT TABLE:**
-           - Aries → Mars
-           - Taurus → Venus
-           - Gemini → Mercury
-           - Cancer → Moon
-           - Leo → Sun
-           - Virgo → Mercury
-           - Libra → Venus
-           - Scorpio → Pluto (modern) or Mars (traditional)
-           - Sagittarius → Jupiter
-           - Capricorn → Saturn
-           - Aquarius → Uranus (modern) or Saturn (traditional)
-           - Pisces → Neptune (modern) or Jupiter (traditional)
+           - Овен → Марс
+           - Телец → Венера
+           - Близнаци → Меркурий
+           - Рак → Луна
+           - Лъв → Слънце
+           - Дева → Меркурий
+           - Везни → Венера
+           - Скорпион → Плутон (модерн) или Марс (традиционен)
+           - Стрелец → Юпитер
+           - Козирог → Сатурн
+           - Водолей → Уран (модерн) или Сатурн (традиционен)
+           - Риби → Нептун (модерн) или Юпитер (традиционен)
            
            **EXAMPLE:**
            - If 2nd House cusp is in Leo → ruler is Sun (NOT Moon, NOT Venus, NOT any planet IN the 2nd House)
@@ -1032,12 +1120,12 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
         
         **EXAMPLE CORRECT INTERPRETATION:**
         - If house_2_ruler = "Sun" and Sun is in "house": 10, "zodiac_sign": "Aries"
-        - Then: "2nd House is ruled by Sun. Sun is in Aries in 10th House → Money comes through career/public role/leadership"
+        - Then: "2nd House is ruled by Sun. Sun is in Овен in 10th House → Money comes through career/public role/leadership"
         - NOT: "2nd House is in Aries" (this would be wrong - you must check the actual house cusp)
         - NOT: "Saturn opposes Venus" (do not mention aspects unless they are provided in the data)
         
         Do NOT predict future wealth or poverty. Focus on financial patterns, earning styles, money management, and practical financial guidance.
-    """
+    """,
 }
 
 # Dynamic Forecast Templates (Time-Based Analysis)
@@ -2382,7 +2470,40 @@ class AIInterpreter:
             if report_type == "karmic" and partner_chart:
                 base_persona = PROMPT_TEMPLATES.get("karmic_relationship", PROMPT_TEMPLATES.get("karmic", PROMPT_TEMPLATES["general"]))
             else:
-                base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
+                # SPECIAL LOGIC FOR TRANSIT MODE
+                if transit_chart and report_type in ["general", "karmic"]:
+                    # Use the original template but modify instructions to skip first 2 sections
+                    base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
+                    
+                    # Add special transit instructions that preserve depth but skip first sections
+                    transit_override = """
+                    
+                    **🚨 TRANSIT MODE MODIFICATION:**
+                    - DO NOT include "Personality Traits" section (skip it entirely)
+                    - DO NOT include "Ascendant" section (skip it entirely)  
+                    - START with "Life Themes & Karmic Patterns" section (no numbering)
+                    - DO NOT number any sections (remove all numbering like "3.", "4.", etc.)
+                    - Use section titles only, without numbers
+                    - KEEP all other natal analysis sections (Strengths & Challenges, Houses of Emphasis, etc.)
+                    - ADD comprehensive transit analysis at the end
+                    - PRESERVE all psychological depth and karmic insights
+                    
+                    **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+                    - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+                    - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+                    - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+                    - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
+                    - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+                    
+                    **🚨 TRANSIT ANALYSIS REQUIREMENTS:**
+                    - Include detailed transit interpretations with exact degrees and orbs
+                    - Analyze major aspects between transits and natal planets
+                    - Focus on how transits affect psychological patterns and karmic themes
+                    - Provide specific dates and timing when relevant
+                    """
+                    base_persona += transit_override
+                else:
+                    base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
             
             # Add Context (Natal, Transit, or Synastry)
             if transit_chart:
