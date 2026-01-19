@@ -590,17 +590,40 @@ async def interpret_chart(request: ChartRequest):
                 lat=transit_lat,
                 lon=transit_lon
             )
+            
+            # Форматиране на пълната дата и час за AI prompt (използваме datetime_local от изчислената карта)
+            # Това гарантира че AI вижда точната дата и час с правилния timezone
+            if transit_chart_data and transit_chart_data.get("datetime_local"):
+                # Използваме datetime_local за да покажем точната дата и час на транзита
+                formatted_transit_datetime = transit_chart_data["datetime_local"]
+            else:
+                # Fallback: комбинираме датата и часа
+                formatted_transit_datetime = f"{transit_date} {transit_time}"
         
         
         # Получаване на AI интерпретация
         question = request.question or ""
+        
+        # Определяне на правилната target_date за AI prompt
+        # Ако имаме транзитна карта, използваме datetime_local (което включва дата, час и timezone)
+        if transit_chart_data and transit_chart_data.get("datetime_local"):
+            target_date_for_ai = transit_chart_data["datetime_local"]
+        elif transit_date:
+            # Fallback: комбинираме датата и часа ако са отделни
+            if request.target_time:
+                target_date_for_ai = f"{transit_date} {request.target_time}"
+            else:
+                target_date_for_ai = transit_date
+        else:
+            target_date_for_ai = ""
+        
         interpretation = await ai_interpreter.interpret_chart(
             natal_chart=natal_chart_data,
             transit_chart=transit_chart_data,  # Може да е None ако не е заявен транзитен анализ
             partner_chart=partner_chart_data,
             partner_name=request.partner_name,
             question=question,
-            target_date=transit_date or "",  # Празен string ако няма транзитна дата
+            target_date=target_date_for_ai,  # Използваме пълната дата и час от транзитната карта
             language="bg",  # По подразбиране български
             report_type=request.report_type or "general",
             user_name=request.name,

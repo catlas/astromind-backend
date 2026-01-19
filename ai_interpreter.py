@@ -29,11 +29,11 @@ PROMPT_TEMPLATES = {
         - This is a professional astrology standard in Bulgarian language
         
         **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
         - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
         - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-        - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-        - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+        - WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
         
         **🚨 TRANSLATION REQUIREMENTS:**
         - ALWAYS translate planet names to Bulgarian
@@ -52,10 +52,12 @@ PROMPT_TEMPLATES = {
         - If the Ascendant is in a different element than the Sun, explain the internal-external contrast (e.g., Sun in Fire, Ascendant in Water = "Fiery soul with sensitive outer shell").
         
         **🚨 RESPONSE LENGTH LIMIT:**
-        - Keep your response under 2000 tokens total
+        - Keep your response under 4000 tokens total
         - Focus on the most important insights
         - Be concise but comprehensive
         - Prioritize clarity over length
+        - **CRITICAL: Reduce detailed explanations in paragraphs to fit within the token limit**
+        - **Keep explanations brief and focused on key insights only**
     """,
     "health": """
 You are an Expert in Medical Astrology and Holistic Well-being.  
@@ -68,11 +70,11 @@ Your goal is to offer **insightful, non-alarmist guidance** about the user's con
 - RIGHT: "6-ти дом", "в 1-ви дом"
 
 **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
 - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
 - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+- WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
 
 **🚨 TRANSLATION REQUIREMENTS:**
 - ALWAYS translate planet names to Bulgarian
@@ -267,11 +269,11 @@ Your role is to illuminate the user's natural talents, professional style, and p
 - RIGHT: "10-ти дом", "в 6-ти дом"
 
 **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
 - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
 - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+- WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
 
 **🚨 TRANSLATION REQUIREMENTS:**
 - ALWAYS translate planet names to Bulgarian
@@ -381,11 +383,11 @@ If yes → your analysis is **vocationally insightful and astrologically sound**
         - RIGHT: "5-ти дом", "в 7-ми дом"
         
         **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
         - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
         - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-        - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-        - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+        - WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
         
         **🚨 TRANSLATION REQUIREMENTS:**
         - ALWAYS translate planet names to Bulgarian
@@ -472,11 +474,11 @@ Your task is to interpret ONLY the PRE-CALCULATED planetary overlays provided by
 - RIGHT: "в 1-ви дом", "5-ти дом"
 
 **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
 - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
 - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+- WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
 
 **🚨 TRANSLATION REQUIREMENTS:**
 - ALWAYS translate planet names to Bulgarian
@@ -930,11 +932,11 @@ Your purpose is to reveal how two souls meet to heal ancestral patterns, resolve
 - RIGHT: "в 4-ти дом", "12-ти дом"
 
 **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+- Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
 - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
 - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-- WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-- RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+- WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+- RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
 
 **🚨 TRANSLATION REQUIREMENTS:**
 - ALWAYS translate planet names to Bulgarian
@@ -1037,11 +1039,11 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
         - RIGHT: "2-ри дом", "в 8-ми дом"
         
         **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
         - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
         - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-        - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-        - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+        - WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
         
         **🚨 TRANSLATION REQUIREMENTS:**
         - ALWAYS translate planet names to Bulgarian
@@ -2159,7 +2161,8 @@ class AIInterpreter:
             system_prompt = (
                 f"MODE: RELATIONSHIP TRANSIT FORECAST (Snapshot)\n"
                 f"You are an Expert Predictive Astrologer specializing in Relationship Timing.\n"
-                f"You have the Natal Charts of {user_display_name} and {partner_display_name}, and the TRANSIT CHART for the specific moment: {target_date}.\n\n"
+                f"You have the Natal Charts of {user_display_name} and {partner_display_name}, and the TRANSIT CHART for the SPECIFIC MOMENT: {target_date}.\n"
+                f"⚠️ ВАЖНО: Транзитната карта е изчислена ТОЧНО за дата и час: {target_date}. Използвай САМО тази дата в анализа!\n\n"
                 f"🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"**CRITICAL RULE: NEVER assume houses, aspects, or transit dates. Use EXCLUSIVELY the provided data.**\n"
@@ -2196,7 +2199,8 @@ class AIInterpreter:
                 f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
                 f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
                 f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
-                f"- Focus on the SPECIFIC DATE provided ({target_date}). This is a snapshot analysis, not a timeline.\n"
+                f"- Focus on the SPECIFIC DATE AND TIME provided ({target_date}). This is a snapshot analysis for this EXACT moment, not a timeline.\n"
+                f"- ⚠️ CRITICAL: The transit chart is calculated for {target_date} - use ONLY this date, do NOT use any other date (like today's date).\n"
                 f"- Do NOT perform general synastry analysis (inter-aspects between natal charts) unless relevant to understanding the transit interactions.\n"
             )
             
@@ -2315,7 +2319,7 @@ class AIInterpreter:
                 "2. HOUSE OVERLAYS (CRITICAL - MANDATORY - STRICTLY ENFORCED):\n"
                 "   ⚠️ The house placements are ALREADY CALCULATED in 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
                 "   ⚠️ You MUST look at that section and use the EXACT numbers provided there.\n"
-                "   ⚠️ Example: If the data shows {'Sun': 8, 'Moon': 1, 'Venus': 8, 'Mars': 12}, then:\n"
+                "   ⚠️ Example: If the data shows {\"Sun\": 8, \"Moon\": 1, \"Venus\": 8, \"Mars\": 12}, then:\n"
                 "      - Say EXACTLY: 'Partner's Sun is in User's 8th house' (NOT 9th, NOT 2nd, NOT any other number)\n"
                 "      - Say EXACTLY: 'Partner's Moon is in User's 1st house' (NOT 6th, NOT any other number)\n"
                 "      - Say EXACTLY: 'Partner's Venus is in User's 8th house' (NOT 9th, NOT any other number)\n"
@@ -2482,12 +2486,13 @@ class AIInterpreter:
             if report_type == "karmic" and partner_chart:
                 base_persona = PROMPT_TEMPLATES.get("karmic_relationship", PROMPT_TEMPLATES.get("karmic", PROMPT_TEMPLATES["general"]))
             else:
-                # SPECIAL LOGIC FOR TRANSIT MODE
-                if transit_chart and report_type in ["general", "karmic"]:
+                # SPECIAL LOGIC FOR TRANSIT MODE - applies to ALL report types when transit_chart is present
+                if transit_chart and report_type in ["general", "karmic", "health", "career", "money", "love"]:
                     # Use the original template but modify instructions to skip first 2 sections
                     base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
                     
                     # Add special transit instructions that preserve depth but skip ALL natal sections
+                    # Note: target_date will be inserted later via string formatting
                     transit_override = """
                     
                     **🚨 TRANSIT MODE MODIFICATION:**
@@ -2502,13 +2507,78 @@ class AIInterpreter:
                     - Use section titles only, without numbers
                     - ADD comprehensive transit analysis with exact degrees and orbs
                     - PRESERVE all psychological depth and karmic insights in transit context only
+                    - ALWAYS use the SPECIFIC target date and time provided (e.g., "{target_date}") in ALL sections of the analysis
+                    - NEVER use today's date or any other date - ONLY use the provided transit date
+                    - If the transit date is "20.01.2026 12:00", you MUST mention "20 януари 2026 г." NOT "19 януари 2026 г."
+                    
+                    **╔══════════════════════════════════════════════════════════════════════════════╗**
+                    **║  🚨 КРИТИЧНО ПРАВИЛО: ВАЛИДАЦИЯ НА ДОМОВЕТЕ ПРЕДИ ВСЯКО СПОМЕНВАНЕ! 🚨    ║**
+                    **╚══════════════════════════════════════════════════════════════════════════════╝**
+                    
+                    **📋 СТЪПКИ ЗА ВАЛИДАЦИЯ (ОБЯЗАТЕЛНО ПРЕДИ ВСЯКО СПОМЕНВАНЕ НА ДОМ):**
+                    1. ✅ Намери секцията '--- TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---' в prompt-а
+                    2. ✅ Отвори JSON обекта и намери планетата (напр. "Pluto", "Saturn", "Neptune")
+                    3. ✅ Прочети числото до планетата (напр. {"Pluto": 5} означава 5-ти дом)
+                    4. ✅ Използвай САМО това число - НЕ изчислявай от знаци или позиции
+                    5. ✅ Кажи точно: "Транзитният [Планета] е в [X]-ти дом" (където X = числото от JSON-а)
+                    
+                    **🚫 АБСОЛЮТНО ЗАБРАНЕНО:**
+                    - ❌ НИКОГА не казвай "Планетата е в X знак, затова е в Y дом"
+                    - ❌ НИКОГА не изчислявай домове от знаци (напр. "Плутон във Водолей → 7-ми дом")
+                    - ❌ НИКОГА не споменавай дом, който НЕ е в JSON секцията
+                    - ❌ НИКОГА не използвай логика като "е в близост до X cusp, значи е в Y дом"
+                    
+                    **✅ ПРИМЕРИ ЗА ПРАВИЛНО ИЗПОЛЗВАНЕ:**
+                    
+                    Пример 1:
+                    JSON: {"Pluto": 5, "Saturn": 10, "Neptune": 10}
+                    ❌ ГРЕШНО: "Плутон във Водолей е в 7-ми дом, защото Водолей е близо до 7-ми дом cusp"
+                    ✅ ПРАВИЛНО: "Плутон е в 5-ти дом" (използваш JSON: {"Pluto": 5})
+                    
+                    Пример 2:
+                    JSON: {"Saturn": 10, "Neptune": 10}
+                    ❌ ГРЕШНО: "Сатурн и Нептун в Риби са в 7-ми дом"
+                    ✅ ПРАВИЛНО: "Сатурн и Нептун са в 10-ти дом" (използваш JSON: {"Saturn": 10, "Neptune": 10})
+                    
+                    Пример 3:
+                    JSON: {"Mercury": 4, "Mars": 4}
+                    ❌ ГРЕШНО: "Меркурий в Козирог → 5-ти дом"
+                    ✅ ПРАВИЛНО: "Меркурий и Марс са в 4-ти дом" (използваш JSON: {"Mercury": 4, "Mars": 4})
+                    
+                    **🔥 ФИНАЛНО ПРЕДУПРЕЖДЕНИЕ:**
+                    Ако споменеш който и да е дом БЕЗ да го валидираш с JSON данните първо = КРИТИЧНА ГРЕШКА!
+                    Backend-ът изчислява домовете точно - твоята задача е само да използваш числата от JSON-а.
+                    
+                    **🚨 RESPONSE LENGTH LIMIT:**
+                    - Target: 2500-3000 tokens total (you have room to complete all sections)
+                    - ALWAYS complete ALL sections, especially "Възможности за действие" - do NOT cut off mid-sentence
+                    - Focus on the most important transits, but ensure each section is fully written
+                    - Be concise but comprehensive
+                    - If you're running out of tokens, prioritize completing "Възможности за действие" over extra details in earlier sections
+                    
+                    **🚨 TRANSIT ANALYSIS STRUCTURE (MUST COMPLETE ALL):**
+                    1. **Обзор на периода** (2-3 параграфа) - REQUIRED
+                       - ⚠️ ОБЯЗАТЕЛНО спомени точната дата: {target_date}
+                       - НЕ използвай днешната дата или друга дата
+                    2. **3-4 ключови транзита** (по 1 параграф всеки) - REQUIRED
+                       - За всеки транзит спомени датата: {target_date}
+                    3. **Практични съвети** (bullet points - минимум 4-5 съвета) - REQUIRED
+                    4. **Възможности за действие** (bullet points - минимум 4-5 действия, ЗАВЪРШИ до край!) - REQUIRED
+                    
+                    **⚠️ CRITICAL: Never cut off mid-sentence in "Възможности за действие" - always complete every bullet point fully.**
+                    **⚠️ CRITICAL DATE USAGE: ALWAYS use the exact date {target_date} provided - NEVER use today's date or any other date!**
+                    
+                    **🚨 ASPECT FILTERING:**
+                    - Include ONLY aspects with orb under 5°
+                    - Focus ONLY on: conjunction, opposition, trine, square
+                    - Maximum 8 aspects total
                     
                     **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-                    - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
+                    - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
                     - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
                     - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-                    - WRONG: "Capricorn", "Libra", "Aries", "5-то поле"
-                    - RIGHT: "Козирог", "Везни", "Овен", "5-ти дом"
+                    - WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+                    - RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
                     
                     **🚨 TRANSIT ANALYSIS REQUIREMENTS:**
                     - Include detailed transit interpretations with exact degrees and orbs
@@ -2516,13 +2586,19 @@ class AIInterpreter:
                     - Focus on how transits affect psychological patterns and karmic themes
                     - Provide specific dates and timing when relevant
                     """
+                    # Format transit_override with target_date if available
+                    # Use replace instead of format to avoid issues with special characters
+                    if target_date:
+                        transit_override = transit_override.replace("{target_date}", target_date)
+                    else:
+                        transit_override = transit_override.replace("{target_date}", "the provided date")
                     base_persona += transit_override
                 else:
                     base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
             
             # Add Context (Natal, Transit, or Synastry)
             if transit_chart:
-                context_instruction = "\nCONTEXT: FORECAST/TRANSIT MODE. Apply the persona above to the CURRENT TRANSITS. How do these transits affect the specific topic (Career/Love/Psyche/Money)?"
+                context_instruction = f"\nCONTEXT: FORECAST/TRANSIT MODE. Apply the persona above to the TRANSITS for the SPECIFIC DATE AND TIME: {target_date}. How do these transits affect the specific topic (Career/Love/Health/Money/Karmic)?\n⚠️ IMPORTANT: Use ONLY the date {target_date} - NEVER use today's date or any other date!"
             elif partner_chart:
                 context_instruction = "\nCONTEXT: SYNASTRY MODE. Apply the persona above to the RELATIONSHIP dynamics between User and Partner."
             else:
@@ -2559,7 +2635,7 @@ class AIInterpreter:
                     "2. HOUSE OVERLAYS (CRITICAL - MANDATORY - STRICTLY ENFORCED):\n"
                     "   ⚠️ The house placements are ALREADY CALCULATED in 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
                     "   ⚠️ You MUST look at that section and use the EXACT numbers provided there.\n"
-                    "   ⚠️ Example: If the data shows {'Sun': 8, 'Moon': 1, 'Venus': 8, 'Mars': 12}, then:\n"
+                    "   ⚠️ Example: If the data shows {\"Sun\": 8, \"Moon\": 1, \"Venus\": 8, \"Mars\": 12}, then:\n"
                     "      - Say EXACTLY: 'Partner's Sun is in User's 8th house' (NOT 9th, NOT 2nd, NOT any other number)\n"
                     "      - Say EXACTLY: 'Partner's Moon is in User's 1st house' (NOT 6th, NOT any other number)\n"
                     "      - Say EXACTLY: 'Partner's Venus is in User's 8th house' (NOT 9th, NOT any other number)\n"
@@ -2666,10 +2742,10 @@ class AIInterpreter:
                     user_prompt += "❌ NEVER calculate house positions manually - use ONLY the numbers below\n\n"
                     user_prompt += f"PRE-CALCULATED DATA (USE THESE NUMBERS EXCLUSIVELY):\n{synastry_overlays_json}\n\n"
                     user_prompt += "CORRECT USAGE EXAMPLES:\n"
-                    user_prompt += "✅ If JSON shows {'Sun': 8} → Say EXACTLY: 'Partner's Sun is in User's 8th house' (activates intimacy, transformation, shared resources)\n"
-                    user_prompt += "✅ If JSON shows {'Moon': 1} → Say EXACTLY: 'Partner's Moon is in User's 1st house' (emotional mirroring, identity connection)\n"
-                    user_prompt += "✅ If JSON shows {'Venus': 8} → Say EXACTLY: 'Partner's Venus is in User's 8th house' (deep intimacy, sexual attraction, psychological merging)\n"
-                    user_prompt += "✅ If JSON shows {'Mars': 12} → Say EXACTLY: 'Partner's Mars is in User's 12th house' (hidden energy, subconscious reactions, spiritual connection)\n\n"
+                    user_prompt += "✅ If JSON shows {\"Sun\": 8} → Say EXACTLY: 'Partner's Sun is in User's 8th house' (activates intimacy, transformation, shared resources)\n"
+                    user_prompt += "✅ If JSON shows {\"Moon\": 1} → Say EXACTLY: 'Partner's Moon is in User's 1st house' (emotional mirroring, identity connection)\n"
+                    user_prompt += "✅ If JSON shows {\"Venus\": 8} → Say EXACTLY: 'Partner's Venus is in User's 8th house' (deep intimacy, sexual attraction, psychological merging)\n"
+                    user_prompt += "✅ If JSON shows {\"Mars\": 12} → Say EXACTLY: 'Partner's Mars is in User's 12th house' (hidden energy, subconscious reactions, spiritual connection)\n\n"
                     user_prompt += "⚠️⚠️⚠️ REMINDER: Before mentioning ANY Partner planet's house placement, check this JSON first and use the EXACT number shown.\n"
                     user_prompt += "⚠️⚠️⚠️ If you mention a house number that doesn't match the JSON, your analysis is WRONG.\n\n"
                 except Exception as e:
@@ -2700,9 +2776,16 @@ class AIInterpreter:
                         natal_chart, transit_planets
                     )
                     transit_house_map_json = json.dumps(transit_house_map, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These house placements are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate.\n"
+                    user_prompt += f"\n{'='*80}\n"
+                    user_prompt += f"╔══════════════════════════════════════════════════════════════════════════════╗\n"
+                    user_prompt += f"║  🚨 ЕДИНСТВЕНИ ВАЛИДНИ ДОМОВИ ПОЗИЦИИ - ИЗПОЛЗВАЙ САМО ТЕЗИ ЧИСЛА! 🚨      ║\n"
+                    user_prompt += f"╚══════════════════════════════════════════════════════════════════════════════╝\n"
+                    user_prompt += f"--- TRANSIT PLANETS IN USER'S NATAL HOUSES (PRE-CALCULATED BY BACKEND) ---\n"
+                    user_prompt += "⚠️ КРИТИЧНО: Тези домови позиции са преизчислени от backend системата.\n"
+                    user_prompt += "⚠️ ОБЯЗАТЕЛНО: Използвай САМО числата от JSON-а - НЕ изчислявай от знаци или позиции!\n"
+                    user_prompt += "⚠️ ПРЕДИ ВСЯКО СПОМЕНВАНЕ: Валидирай с този JSON първо!\n\n"
                     user_prompt += f"{transit_house_map_json}\n\n"
+                    user_prompt += f"{'='*80}\n\n"
                 except Exception as e:
                     print(f"Warning: Could not calculate transit house mappings: {e}")
                 
@@ -2716,7 +2799,14 @@ class AIInterpreter:
                 }
                 transit_json = json.dumps(transit_planets_only, indent=2, ensure_ascii=False)
                 
-                user_prompt += f"--- TRANSIT PLANETARY POSITIONS (Date: {target_date}) ---\n"
+                # Използваме datetime_local от транзитната карта за точна дата и час
+                transit_datetime_display = transit_chart.get("datetime_local", target_date)
+                if not transit_datetime_display:
+                    transit_datetime_display = target_date
+                
+                user_prompt += f"--- TRANSIT PLANETARY POSITIONS (Date & Time: {transit_datetime_display}) ---\n"
+                user_prompt += f"⚠️ КРИТИЧНО: Транзитната карта е изчислена за ТОЧНО това време ({transit_datetime_display}).\n"
+                user_prompt += "⚠️ ОБЯЗАТЕЛНО: Използвай САМО тази дата и час в анализа - НЕ използвай други дати!\n"
                 user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
                 user_prompt += f"{transit_json}\n\n"
             
@@ -2740,17 +2830,17 @@ class AIInterpreter:
                 user_prompt += (
                     "\n*** ⚠️ CRITICAL INSTRUCTIONS FOR LOVE ANALYSIS (SYNASTRY MODE) - MANDATORY ***\n"
                     "1. **PARTNER HOUSE OVERLAYS ARE PRE-CALCULATED** - Look at 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)' section above.\n"
-                    "2. **USE EXACT NUMBERS FROM OVERLAY DATA** - If it shows {'Sun': 8}, say 'User's 8th house' (NOT 9th, NOT 2nd, NOT any other number).\n"
+                    "2. **USE EXACT NUMBERS FROM OVERLAY DATA** - If it shows {\"Sun\": 8}, say 'User's 8th house' (NOT 9th, NOT 2nd, NOT any other number).\n"
                     "3. **ALWAYS SAY 'User's [X]th house'** - Never say just '[X]th house' without 'User's' prefix to avoid confusion.\n"
                     "4. **FORBIDDEN EXAMPLES** - Never say:\n"
                     "   - 'Partner's Sun in 9th house' if overlay shows 8\n"
                     "   - 'Partner's Mars in 4th house' if overlay shows 12\n"
                     "   - 'Partner's Sun in 2nd house' (referring to Partner's own chart)\n"
                     "5. **CORRECT EXAMPLES** - Always say:\n"
-                    "   - 'Partner's Sun is in User's 8th house' (if overlay shows 'Sun': 8)\n"
-                    "   - 'Partner's Moon is in User's 1st house' (if overlay shows 'Moon': 1)\n"
-                    "   - 'Partner's Venus is in User's 8th house' (if overlay shows 'Venus': 8)\n"
-                    "   - 'Partner's Mars is in User's 12th house' (if overlay shows 'Mars': 12)\n"
+                    "   - 'Partner's Sun is in User's 8th house' (if overlay shows \"Sun\": 8)\n"
+                    "   - 'Partner's Moon is in User's 1st house' (if overlay shows \"Moon\": 1)\n"
+                    "   - 'Partner's Venus is in User's 8th house' (if overlay shows \"Venus\": 8)\n"
+                    "   - 'Partner's Mars is in User's 12th house' (if overlay shows \"Mars\": 12)\n"
                     "6. **HOUSE RULERS ARE ALREADY CALCULATED** - Use them from context (e.g., 'Love Ruler (7th House): Venus').\n"
                     "7. **DO NOT mention aspects** between planets unless they are explicitly provided in the chart data.\n\n"
                 )
@@ -2809,8 +2899,10 @@ class AIInterpreter:
                         f"2. RELATIONSHIP FORECAST (with Transits):\n"
                         f"   - Analyze transits to BOTH charts ({user_display_name} and {partner_display_name}).\n"
                         f"   - Will they stay together? Is there a crisis or opportunity?\n"
-                        f"   - Use the PRE-CALCULATED transit house mappings from 'TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                        f"   - Look for transiting planets activating relationship houses (7th house) or Venus/Mars.\n"
+                        f"   - **VALIDATE FIRST**: Check 'TRANSIT PLANETS IN USER'S NATAL HOUSES (PRE-CALCULATED BY BACKEND)' section before mentioning any house.\n"
+                        f"   - Use ONLY the numbers from JSON - NEVER calculate from signs.\n"
+                        f"   - Example: If JSON shows {{\"Venus\": 7}}, say 'Venus is in 7th house' (NOT 'Venus in Libra → 7th house').\n"
+                        f"   - Look for transiting planets activating relationship houses (7th house) ONLY if JSON shows it.\n"
                         f"   - Identify periods of harmony or tension.\n\n"
                         f"3. RELATIONSHIP AREAS:\n"
                         f"   - Emotional connection (Moon aspects, 4th house overlays)\n"
@@ -2823,15 +2915,22 @@ class AIInterpreter:
                     )
                 else:
                     user_prompt += (
-                        "Please provide a comprehensive FORECAST analysis:\n"
-                        "1. Compare each transit planet's position to the natal chart.\n"
-                        "2. Identify significant aspects between transit and natal planets.\n"
-                        "3. Use the PRE-CALCULATED transit house mappings from 'TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                        "   DO NOT recalculate house positions - use the provided numbers.\n"
-                        "4. Analyze potential for meeting a new partner (5th/7th house transits) if relevant.\n"
-                        "5. Explain what these transits mean for the person at this specific date.\n"
-                        "6. Be specific about dates, degrees, and aspects.\n"
-                        "7. Focus on practical implications and timing."
+                        f"Please provide a comprehensive FORECAST analysis:\n"
+                        f"1. Compare each transit planet's position to the natal chart.\n"
+                        f"2. Identify significant aspects between transit and natal planets.\n"
+                        f"3. **VALIDATE HOUSE PLACEMENTS FIRST**: Before mentioning any house, check the 'TRANSIT PLANETS IN USER'S NATAL HOUSES (PRE-CALCULATED BY BACKEND)' section.\n"
+                        f"   - Find the planet in the JSON (e.g., \"Pluto\": 5)\n"
+                        f"   - Use ONLY that number (e.g., 'Pluto is in 5th house')\n"
+                        f"   - NEVER calculate from signs or positions\n"
+                        f"   - NEVER say 'Pluto in Aquarius → 7th house' (WRONG!)\n"
+                        f"   - ALWAYS say 'Pluto is in 5th house' if JSON shows {{\"Pluto\": 5}} (CORRECT!)\n"
+                        f"4. Analyze potential for meeting a new partner (5th/7th house transits) if relevant.\n"
+                        f"   - But ONLY if the JSON shows planets in 5th or 7th house - DO NOT assume!\n"
+                        f"5. ⚠️ CRITICAL DATE USAGE: Explain what these transits mean for the person at the SPECIFIC DATE AND TIME: {target_date}\n"
+                        f"   - ALWAYS mention the exact date {target_date} in your analysis\n"
+                        f"   - NEVER use today's date or any other date - ONLY use {target_date}\n"
+                        f"6. Be specific about dates, degrees, and aspects.\n"
+                        f"7. Focus on practical implications and timing for {target_date}."
                     )
         
         # Добавяне на инструкция за езика
@@ -2874,7 +2973,7 @@ class AIInterpreter:
                     {"role": "user", "content": user_prompt}
                 ],
                 "temperature": 0.7,
-                "max_tokens": 2500  # Съвместимо с 2000 token limit в prompt
+                "max_tokens": 3500  # Увеличено за да се гарантира завършване на всички секции
             }
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
