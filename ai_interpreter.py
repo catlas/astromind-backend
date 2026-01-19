@@ -50,6 +50,12 @@ PROMPT_TEMPLATES = {
         - Describe the physical appearance tendencies, first impressions, and the "mask" the person wears.
         - The Ascendant shows how the person "starts" in life and their initial reaction to the world.
         - If the Ascendant is in a different element than the Sun, explain the internal-external contrast (e.g., Sun in Fire, Ascendant in Water = "Fiery soul with sensitive outer shell").
+        
+        **🚨 RESPONSE LENGTH LIMIT:**
+        - Keep your response under 2000 tokens total
+        - Focus on the most important insights
+        - Be concise but comprehensive
+        - Prioritize clarity over length
     """,
     "health": """
 You are an Expert in Medical Astrology and Holistic Well-being.  
@@ -243,6 +249,12 @@ If yes → your analysis is **ethically sound and astrologically responsible**.
         You are a mirror for the soul's journey — not a fortune-teller.
         Your words should **liberate**, not limit.
         Your analysis must be **true to the data**, **true to the soul**, and **true to the path of healing**.
+        
+        **🚨 RESPONSE LENGTH LIMIT:**
+        - Keep your response under 2000 tokens total
+        - Focus on the most important karmic insights
+        - Be concise but comprehensive
+        - Prioritize healing potential over detailed explanations
     """,
     "career": """
 You are an Expert in Vocational Astrology and Life Purpose Guidance.  
@@ -2475,18 +2487,21 @@ class AIInterpreter:
                     # Use the original template but modify instructions to skip first 2 sections
                     base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
                     
-                    # Add special transit instructions that preserve depth but skip first sections
+                    # Add special transit instructions that preserve depth but skip ALL natal sections
                     transit_override = """
                     
                     **🚨 TRANSIT MODE MODIFICATION:**
-                    - DO NOT include "Personality Traits" section (skip it entirely)
-                    - DO NOT include "Ascendant" section (skip it entirely)  
-                    - START with "Life Themes & Karmic Patterns" section (no numbering)
+                    - DO NOT include ANY natal sections (skip them entirely)
+                    - DO NOT include "Personality Traits" section
+                    - DO NOT include "Ascendant" section  
+                    - DO NOT include "Life Themes & Karmic Patterns" section
+                    - DO NOT include "Strengths & Challenges" section
+                    - DO NOT include "Houses of Emphasis" section
+                    - START directly with transit analysis
                     - DO NOT number any sections (remove all numbering like "3.", "4.", etc.)
                     - Use section titles only, without numbers
-                    - KEEP all other natal analysis sections (Strengths & Challenges, Houses of Emphasis, etc.)
-                    - ADD comprehensive transit analysis at the end
-                    - PRESERVE all psychological depth and karmic insights
+                    - ADD comprehensive transit analysis with exact degrees and orbs
+                    - PRESERVE all psychological depth and karmic insights in transit context only
                     
                     **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
                     - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto)
@@ -2859,7 +2874,7 @@ class AIInterpreter:
                     {"role": "user", "content": user_prompt}
                 ],
                 "temperature": 0.7,
-                "max_tokens": 6000  # Увеличено за по-подробен анализ
+                "max_tokens": 2500  # Съвместимо с 2000 token limit в prompt
             }
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
