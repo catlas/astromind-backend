@@ -6,6 +6,11 @@ __pycache__/
 venv/
 .venv/
 
+# Local environment variables (keep secrets out of Git)
+.env
+.env.*
+!.env.example
+
 # Tooling caches
 .mypy_cache/
 .pytest_cache/
