@@ -16,5 +16,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# Local artifacts
+*.log
+*.db
+
 # OS cruft
 .DS_Store
