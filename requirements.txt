@@ -1,0 +1,26 @@
+# Backend runtime dependencies
+fastapi
+uvicorn
+pydantic==2.11.10
+
+# Env / HTTP
+python-dotenv==1.1.0
+httpx==0.28.1
+requests==2.32.3
+
+# Astrology / timezone
+pyswisseph
+timezonefinder==8.1.0
+pytz
+# NumPy 2.x may not have compatible wheels for older macOS versions (e.g. macOS 11),
+# so we pin to a known-good wheel for Python 3.11.
+numpy==1.26.4
+
+# Reporting
+python-docx==1.1.0
+
+# Auth / DB
+sqlalchemy
+psycopg2-binary
+bcrypt<5.0.0
+python-jose[cryptography]
