@@ -1,9 +1,16 @@
-from passlib.context import CryptContext
-from jose import JWTError, jwt
+import os
 from datetime import datetime, timedelta
 
-# ТАЙНА: Смени това с произволни символи!
-SECRET_KEY = "astro_super_secret_key_123"
+from dotenv import load_dotenv
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+
+load_dotenv()
+
+# Използва SECRET_KEY от environment (Render/.env); задължителен за сигурност.
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("Missing required environment variable: SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 часа
 
@@ -20,4 +27,3 @@ def create_access_token(data: dict):
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
