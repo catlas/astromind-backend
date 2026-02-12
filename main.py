@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session  # type: ignore
 import json
 import asyncio
+import os
+from dotenv import load_dotenv
 import engine
 from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
@@ -20,6 +22,8 @@ from docx_generator import DOCXGenerator
 from database import User, get_db
 from auth import hash_password, verify_password, create_access_token
 
+load_dotenv()
+
 # Инициализация на FastAPI приложението
 app = FastAPI(
     title="Astrology API",
@@ -27,11 +31,17 @@ app = FastAPI(
     version="3.0.0"
 )
 
-# CORS Middleware - разрешава заявки от React frontend
+# CORS Middleware - чете allowlist от CORS_ORIGINS (comma-separated)
+cors_origins_raw = os.getenv("CORS_ORIGINS", "")
+cors_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+if not cors_origins:
+    cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+allow_all_origins = "*" in cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["*"] if allow_all_origins else cors_origins,
+    allow_credentials=not allow_all_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -818,4 +828,3 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
 if __name__ == "__main__":
     import uvicorn  # type: ignore
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
