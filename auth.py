@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
+from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
@@ -27,3 +28,13 @@ def create_access_token(data: dict):
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалиден или изтекъл токен"
+        ) from exc

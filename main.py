@@ -6,6 +6,7 @@ FastAPI сървър за астрологично приложение
 from fastapi import FastAPI, HTTPException, Depends, status  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 from fastapi.responses import StreamingResponse, Response  # type: ignore
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
@@ -20,7 +21,7 @@ from scanner import TransitScanner
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
 from database import User, get_db
-from auth import hash_password, verify_password, create_access_token
+from auth import hash_password, verify_password, create_access_token, decode_access_token
 
 load_dotenv()
 
@@ -48,6 +49,34 @@ app.add_middleware(
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
+auth_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(auth_scheme),
+    db: Session = Depends(get_db)
+) -> User:
+    if not credentials or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Липсва Bearer токен"
+        )
+
+    payload = decode_access_token(credentials.credentials)
+    email = payload.get("sub")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалиден токен payload"
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Потребителят не е намерен"
+        )
+    return user
 
 
 def _calculate_max_months_for_token_limit(has_partner: bool = False) -> int:
@@ -241,7 +270,8 @@ async def root():
             "POST /calculate": "Изчислява астрологична карта",
             "POST /interpret": "Изчислява карта и получава AI интерпретация",
             "POST /register": "Регистрация на нов потребител",
-            "POST /login": "Вход в системата - връща JWT token"
+            "POST /login": "Вход в системата - връща JWT token",
+            "GET /me": "Връща текущия потребител (Bearer token)"
         }
     }
 
@@ -822,6 +852,15 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         "access_token": token, 
         "token_type": "bearer",
         "user": {"full_name": user.full_name, "coins": user.coins}
+    }
+
+
+@app.get("/me")
+def me(current_user: User = Depends(get_current_user)):
+    return {
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "coins": current_user.coins
     }
 
 
