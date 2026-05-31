@@ -1988,7 +1988,7 @@ class AIInterpreter:
             }
             
             data = {
-                "model": "Qwen/Qwen3.5-397B-A17B",
+                "model": "Qwen/Qwen3.7-Max",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -2967,7 +2967,7 @@ class AIInterpreter:
             }
             
             data = {
-                "model": "Qwen/Qwen3.5-397B-A17B",
+                "model": "Qwen/Qwen3.7-Max",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
