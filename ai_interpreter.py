@@ -1336,19 +1336,130 @@ class AIInterpreter:
         Args:
             api_key: Together.ai API ключ (ако не е предоставен, чете от environment)
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        # --- Ollama Cloud (Primary Provider) ---
+        self.ollama_url = os.getenv("OLLAMA_BASE_URL", "").rstrip("/")
+        self.ollama_key = os.getenv("OLLAMA_API_KEY")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:cloud")
+        self.ollama_timeout = 120.0  # 120s timeout for Ollama Cloud
         
-        if not self.api_key:
+        # --- Together.ai (Fallback Provider) ---
+        self.together_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.together_url = os.getenv("TOGETHER_API_URL", "https://api.together.xyz/v1/chat/completions")
+        self.together_model = os.getenv("TOGETHER_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507-tput")
+        self.together_timeout = 120.0  # 120s timeout for chunked monthly requests
+        
+        # --- Shared config ---
+        self.timeout = self.together_timeout  # Default for backward compatibility
+        
+        if not self.together_key:
             raise ValueError(
                 "OPENAI_API_KEY не е намерен. Моля задайте го в .env файл или като environment променлива."
             )
         
-        # Initialize httpx async client for Together.ai API requests
-        self.api_url = "https://api.together.xyz/v1/chat/completions"
-        self.timeout = 120.0  # 120 seconds timeout for chunked monthly requests
+        # Warning if Ollama is not configured (will fallback to Together only)
+        if not self.ollama_key:
+            print("⚠️ OLLAMA_API_KEY не е намерен. Ще се използва само Together.ai (fallback).")
+        elif not self.ollama_url:
+            print("⚠️ OLLAMA_BASE_URL не е намерен. Ще се използва само Together.ai (fallback).")
         
         # Initialize engine for house ruler calculations
         self.engine = AstrologyEngine()
+    
+    async def _call_api(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int
+    ) -> str:
+        """
+        Универсален API caller с fallback логика.
+        
+        1. Опитва Ollama Cloud (primary provider)
+        2. Ако fail → опитва Together.ai (fallback)
+        
+        Args:
+            system_prompt: Системен prompt
+            user_prompt: Потребителски prompt
+            max_tokens: Максимален брой токени
+            
+        Returns:
+            Текстов отговор от AI
+            
+        Raises:
+            RuntimeError: ако и двата провайдъра fail
+        """
+        # --- OLLAMA CLOUD ATTEMPT (Primary) ---
+        if self.ollama_key and self.ollama_url:
+            try:
+                ollama_data = {
+                    "model": self.ollama_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": max_tokens
+                }
+                
+                async with httpx.AsyncClient(timeout=self.ollama_timeout) as client:
+                    ollama_response = await client.post(
+                        f"{self.ollama_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.ollama_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json=ollama_data
+                    )
+                    
+                    if ollama_response.status_code == 200:
+                        resp_json = ollama_response.json()
+                        content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
+                        if content and content.strip():
+                            return content.strip()
+                        print("⚠️ Ollama върна празен content. Fallback към Together...")
+                    else:
+                        print(f"⚠️ Ollama HTTP {ollama_response.status_code}. Fallback към Together...")
+                        
+            except Exception as e:
+                print(f"⚠️ Ollama грешка: {e}. Fallback към Together...")
+        
+        # --- TOGETHER.AI FALLBACK ---
+        try:
+            together_data = {
+                "model": self.together_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": max_tokens
+            }
+            
+            async with httpx.AsyncClient(timeout=self.together_timeout) as client:
+                together_response = await client.post(
+                    self.together_url,
+                    headers={
+                        "Authorization": f"Bearer {self.together_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json=together_data
+                )
+                
+                if together_response.status_code != 200:
+                    raise RuntimeError(
+                        f"Together.ai HTTP {together_response.status_code}: {together_response.text[:500]}"
+                    )
+                
+                resp_json = together_response.json()
+                content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
+                
+                if content and content.strip():
+                    return content.strip()
+                
+                raise RuntimeError("Together.ai върна празен отговор")
+                
+        except Exception as e:
+            raise RuntimeError(f"Грешка при комуникация с AI провайдърите: {e}")
     
     @staticmethod
     def _get_synastry_type_focus(report_type: str) -> str:
@@ -1981,32 +2092,18 @@ class AIInterpreter:
             else:
                 user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
             
-            # Call Together.ai API using httpx
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            data = {
-                "model": "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 6000  # Increased for more detailed monthly analysis
-            }
-            
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(self.api_url, headers=headers, json=data)
-                if response.status_code != 200:
-                    error_detail = response.text
-                    raise RuntimeError(f"API returned status {response.status_code}: {error_detail}")
-                response.raise_for_status()
-                response_data = response.json()
-                content = response_data["choices"][0]["message"]["content"]
-                return content.strip() if content else ""
-            
+            # Call AI API (Ollama primary → Together fallback)
+            try:
+                content = await self._call_api(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    max_tokens=6000
+                )
+                return content
+            except Exception as e:
+                error_msg = str(e)
+                return f"*Грешка при генериране на прогноза за {month}: {error_msg}*"
+        
         except Exception as e:
             error_msg = str(e)
             # Avoid exposing internal variable names in error messages
@@ -2960,35 +3057,16 @@ class AIInterpreter:
             print(f"⚠️ Warning: Could not log prompt to output.log: {e}")
         
         try:
-            # Call Together.ai API using httpx
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            data = {
-                "model": "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 3500  # Увеличено за да се гарантира завършване на всички секции
-            }
-            
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(self.api_url, headers=headers, json=data)
-                if response.status_code != 200:
-                    error_detail = response.text
-                    raise RuntimeError(f"API returned status {response.status_code}: {error_detail}")
-                response.raise_for_status()
-                response_data = response.json()
-                content = response_data["choices"][0]["message"]["content"]
-                interpretation = content.strip() if content else ""
-                return interpretation
+            # Call AI API (Ollama primary → Together fallback)
+            interpretation = await self._call_api(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=3500
+            )
+            return interpretation
             
         except Exception as e:
-            raise RuntimeError(f"Грешка при комуникация с Together.ai API: {e}")
+            raise RuntimeError(f"Грешка при комуникация с AI API: {e}")
 
 
 # Глобална инстанция за удобство (опционално)
