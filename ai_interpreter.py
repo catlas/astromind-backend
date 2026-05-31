@@ -1988,7 +1988,7 @@ class AIInterpreter:
             }
             
             data = {
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model": "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -2967,7 +2967,7 @@ class AIInterpreter:
             }
             
             data = {
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model": "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
