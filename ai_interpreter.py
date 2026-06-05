@@ -5,6 +5,7 @@ AI Интерпретатор за астрологични карти
 
 import os
 import json
+import asyncio
 from typing import Dict, Optional, List, Tuple
 from collections import defaultdict
 import httpx
@@ -1390,40 +1391,55 @@ class AIInterpreter:
         """
         # --- OLLAMA CLOUD ATTEMPT (Primary) ---
         if self.ollama_key and self.ollama_url:
-            try:
-                ollama_data = {
-                    "model": self.ollama_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": max_tokens
-                }
-                
-                async with httpx.AsyncClient(timeout=self.ollama_timeout) as client:
-                    ollama_response = await client.post(
-                        f"{self.ollama_url}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {self.ollama_key}",
-                            "Content-Type": "application/json"
-                        },
-                        json=ollama_data
-                    )
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                try:
+                    print(f"🔄 Ollama опит {attempt}/{max_retries}...")
+                    ollama_data = {
+                        "model": self.ollama_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.7,
+                        "max_tokens": max_tokens
+                    }
                     
-                    if ollama_response.status_code == 200:
-                        resp_json = ollama_response.json()
-                        content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
-                        if content and content.strip():
-                            return content.strip()
-                        print("⚠️ Ollama върна празен content. Fallback към Together...")
-                    else:
-                        print(f"⚠️ Ollama HTTP {ollama_response.status_code}. Fallback към Together...")
+                    async with httpx.AsyncClient(timeout=self.ollama_timeout) as client:
+                        ollama_response = await client.post(
+                            f"{self.ollama_url}/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {self.ollama_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json=ollama_data
+                        )
                         
-            except Exception as e:
-                print(f"⚠️ Ollama грешка: {type(e).__name__}: {e}. Fallback към Together...")
-                import traceback
-                traceback.print_exc()
+                        if ollama_response.status_code == 200:
+                            resp_json = ollama_response.json()
+                            content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
+                            if content and content.strip():
+                                print(f"✅ Ollama успешно отговори (опит {attempt})")
+                                return content.strip()
+                            print("⚠️ Ollama върна празен content. Fallback към Together...")
+                            break  # Празен отговор - не retry, веднага fallback
+                        else:
+                            print(f"⚠️ Ollama HTTP {ollama_response.status_code} (опит {attempt})")
+                            if attempt < max_retries:
+                                print(f"⏳ Изчакване 5 секунди преди следващия опит...")
+                                await asyncio.sleep(5)
+                            else:
+                                print("⚠️ Всички опити изчерпани. Fallback към Together...")
+                                
+                except Exception as e:
+                    print(f"⚠️ Ollama грешка (опит {attempt}): {type(e).__name__}: {e}")
+                    if attempt < max_retries:
+                        print(f"⏳ Изчакване 5 секунди преди следващия опит...")
+                        await asyncio.sleep(5)
+                    else:
+                        print("⚠️ Всички опити изчерпани. Fallback към Together...")
+                        import traceback
+                        traceback.print_exc()
         
         # --- TOGETHER.AI FALLBACK ---
         try:
