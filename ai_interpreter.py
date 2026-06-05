@@ -3063,7 +3063,7 @@ class AIInterpreter:
             interpretation = await self._call_api(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=3500
+                max_tokens=6000
             )
             return interpretation
             
