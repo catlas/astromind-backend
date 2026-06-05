@@ -1421,7 +1421,9 @@ class AIInterpreter:
                         print(f"⚠️ Ollama HTTP {ollama_response.status_code}. Fallback към Together...")
                         
             except Exception as e:
-                print(f"⚠️ Ollama грешка: {e}. Fallback към Together...")
+                print(f"⚠️ Ollama грешка: {type(e).__name__}: {e}. Fallback към Together...")
+                import traceback
+                traceback.print_exc()
         
         # --- TOGETHER.AI FALLBACK ---
         try:
