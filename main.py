@@ -3,13 +3,14 @@ FastAPI сървър за астрологично приложение
 Предоставя API endpoints за изчисляване и интерпретация на астрологични карти
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status  # type: ignore
+from fastapi import FastAPI, HTTPException, Depends, Request, status  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 from fastapi.responses import StreamingResponse, Response  # type: ignore
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
+from sqlalchemy import func  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 import json
 import asyncio
@@ -23,7 +24,11 @@ from scanner import TransitScanner
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
 from database import User, get_db
-from auth import hash_password, verify_password, create_access_token, decode_access_token
+from auth import (
+    hash_password, verify_password, create_access_token, decode_access_token,
+    normalize_email, validate_email, validate_password,
+)
+from rate_limit import client_ip, enforce
 
 load_dotenv()
 
@@ -93,6 +98,29 @@ def get_current_user(
             detail="Потребителят не е намерен"
         )
     return user
+
+
+# Лимити на заявките. Стойностите могат да се сменят през environment в Render.
+AI_LIMIT_PER_HOUR = int(os.getenv("AI_RATE_LIMIT_PER_HOUR", "20"))
+AI_LIMIT_PER_DAY = int(os.getenv("AI_RATE_LIMIT_PER_DAY", "60"))
+DOCX_LIMIT_PER_HOUR = int(os.getenv("DOCX_RATE_LIMIT_PER_HOUR", "30"))
+CALCULATE_LIMIT_PER_MINUTE = int(os.getenv("CALCULATE_RATE_LIMIT_PER_MINUTE", "60"))
+LOGIN_LIMIT_PER_15_MIN = int(os.getenv("LOGIN_RATE_LIMIT_PER_15_MIN", "10"))
+REGISTER_LIMIT_PER_HOUR = int(os.getenv("REGISTER_RATE_LIMIT_PER_HOUR", "5"))
+
+
+def require_ai_quota(current_user: User = Depends(get_current_user)) -> User:
+    """Изисква вход и ограничава AI анализите на потребител."""
+    message = "Достигнахте лимита за AI анализи."
+    enforce(f"ai-hour:{current_user.id}", AI_LIMIT_PER_HOUR, 3600, message)
+    enforce(f"ai-day:{current_user.id}", AI_LIMIT_PER_DAY, 86400, message)
+    return current_user
+
+
+def require_docx_quota(current_user: User = Depends(get_current_user)) -> User:
+    """Изисква вход и ограничава генерирането на DOCX файлове."""
+    enforce(f"docx:{current_user.id}", DOCX_LIMIT_PER_HOUR, 3600, "Достигнахте лимита за DOCX файлове.")
+    return current_user
 
 
 def _calculate_max_months_for_token_limit(has_partner: bool = False) -> int:
@@ -299,7 +327,7 @@ async def health_check():
 
 
 @app.post("/calculate", response_model=ChartResponse)
-async def calculate_chart(request: ChartRequest):
+async def calculate_chart(request: ChartRequest, http_request: Request):
     """
     Изчислява астрологична карта без AI интерпретация.
     
@@ -311,6 +339,7 @@ async def calculate_chart(request: ChartRequest):
     - UTC datetime
     - Локация
     """
+    enforce(f"calc:{client_ip(http_request)}", CALCULATE_LIMIT_PER_MINUTE, 60, "Твърде много заявки.")
     try:
         # Изчисляване на картата
         chart_data = engine.calculate_chart(
@@ -339,7 +368,7 @@ async def calculate_chart(request: ChartRequest):
 
 
 @app.post("/interpret-stream")
-async def interpret_chart_stream(request: ChartRequest):
+async def interpret_chart_stream(request: ChartRequest, current_user: User = Depends(require_ai_quota)):
     """
     Streaming endpoint за динамична прогноза (месец по месец).
     Използва Server-Sent Events (SSE) за да изпраща резултатите в реално време.
@@ -526,7 +555,7 @@ async def interpret_chart_stream(request: ChartRequest):
 
 
 @app.post("/interpret", response_model=InterpretationResponse)
-async def interpret_chart(request: ChartRequest):
+async def interpret_chart(request: ChartRequest, current_user: User = Depends(require_ai_quota)):
     """
     Изчислява натална и транзитна карта и получава AI интерпретация.
     
@@ -774,7 +803,7 @@ class DOCXRequest(BaseModel):
 
 
 @app.post("/generate-docx")
-async def generate_docx(request: DOCXRequest):
+async def generate_docx(request: DOCXRequest, current_user: User = Depends(require_docx_quota)):
     """
     Generate DOCX report for periods > 6 months
     """
@@ -828,16 +857,26 @@ class UserLogin(BaseModel):
     password: str
 
 @app.post("/register")
-def register(user_data: UserRegister, db: Session = Depends(get_db)):
+def register(user_data: UserRegister, http_request: Request, db: Session = Depends(get_db)):
     """Регистрация на нов потребител"""
-    # Проверка дали имейлът съществува
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    enforce(f"register:{client_ip(http_request)}", REGISTER_LIMIT_PER_HOUR, 3600, "Твърде много регистрации от този адрес.")
+
+    email = normalize_email(user_data.email)
+    full_name = (user_data.full_name or "").strip()
+    error = validate_email(email) or validate_password(user_data.password, email)
+    if not error and not (1 <= len(full_name) <= 100):
+        error = "Въведете име до 100 символа"
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+    # Проверка дали имейлът съществува, без значение от главни и малки букви
+    existing_user = db.query(User).filter(func.lower(func.trim(User.email)) == email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Имейлът вече е регистриран")
     
     new_user = User(
-        email=user_data.email,
-        full_name=user_data.full_name,
+        email=email,
+        full_name=full_name,
         hashed_password=hash_password(user_data.password)
     )
     db.add(new_user)
@@ -845,9 +884,20 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
     return {"message": "Успешна регистрация"}
 
 @app.post("/login")
-def login(user_data: UserLogin, db: Session = Depends(get_db)):
+def login(user_data: UserLogin, http_request: Request, db: Session = Depends(get_db)):
     """Вход в системата - връща JWT token"""
-    user = db.query(User).filter(User.email == user_data.email).first()
+    email = normalize_email(user_data.email)
+    ip = client_ip(http_request)
+    message = "Твърде много опити за вход."
+    enforce(f"login:{ip}:{email}", LOGIN_LIMIT_PER_15_MIN, 900, message)
+    enforce(f"login-ip:{ip}", LOGIN_LIMIT_PER_15_MIN * 3, 900, message)
+
+    # Първо точно съвпадение (стари акаунти може да са записани с главни букви),
+    # после без значение от главни и малки букви, само ако има един такъв акаунт.
+    user = db.query(User).filter(User.email == user_data.email.strip()).first()
+    if not user:
+        matches = db.query(User).filter(func.lower(func.trim(User.email)) == email).limit(2).all()
+        user = matches[0] if len(matches) == 1 else None
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Грешен имейл или парола")
     
