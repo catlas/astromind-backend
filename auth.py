@@ -32,14 +32,47 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def create_user_token(user) -> str:
+    """Токен за вход. Спира да важи при смяна на паролата (token_version)."""
+    return create_access_token({"sub": user.email, "uid": user.id, "tv": user.token_version or 0})
+
+
 def decode_access_token(token: str) -> dict:
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Невалиден или изтекъл токен"
         ) from exc
+    # Токените за нулиране на парола и потвърждение на имейл не са токени за вход
+    if payload.get("typ"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Невалиден токен")
+    return payload
+
+
+PURPOSE_TTL_MINUTES = {
+    "reset": 60,              # нулиране на парола: 1 час
+    "verify": 60 * 24 * 3,    # потвърждение на имейл: 3 дни
+}
+
+
+def create_purpose_token(purpose: str, user) -> str:
+    """Еднократен токен за линк в имейл. Обвързан е с имейла и версията на паролата."""
+    expire = datetime.utcnow() + timedelta(minutes=PURPOSE_TTL_MINUTES[purpose])
+    payload = {"typ": purpose, "uid": user.id, "email": user.email, "tv": user.token_version or 0, "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_purpose_token(token: str, purpose: str) -> dict:
+    """Връща payload или хвърля 400, ако токенът е невалиден, изтекъл или за друга цел."""
+    try:
+        payload = jwt.decode(token or "", SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail="Линкът е невалиден или е изтекъл") from exc
+    if payload.get("typ") != purpose:
+        raise HTTPException(status_code=400, detail="Линкът е невалиден или е изтекъл")
+    return payload
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")

@@ -6,7 +6,6 @@ FastAPI сървър за астрологично приложение
 from fastapi import FastAPI, HTTPException, Depends, Request, status  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 from fastapi.responses import StreamingResponse, Response  # type: ignore
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
@@ -23,14 +22,21 @@ from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
-from database import User, get_db
+from database import SessionLocal, User, get_db
+from db_migrate import run_migrations
+from deps import get_current_user
+import account_api
+import data_api
 from auth import (
-    hash_password, verify_password, create_access_token, decode_access_token,
+    hash_password, verify_password, create_user_token,
     normalize_email, validate_email, validate_password,
 )
 from rate_limit import client_ip, enforce
 
 load_dotenv()
+
+# Схемата на базата се обновява с Alembic преди приемане на заявки
+run_migrations()
 
 # Инициализация на FastAPI приложението
 app = FastAPI(
@@ -54,6 +60,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(account_api.router)
+app.include_router(data_api.router)
+
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
 
@@ -68,36 +77,6 @@ def _internal_error(context: str, exc: Exception, user_message: str) -> HTTPExce
     print(f"❌ [{error_id}] {context}: {type(exc).__name__}: {exc}")
     traceback.print_exc()
     return HTTPException(status_code=500, detail=f"{user_message} (код: {error_id})")
-
-
-auth_scheme = HTTPBearer(auto_error=False)
-
-
-def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(auth_scheme),
-    db: Session = Depends(get_db)
-) -> User:
-    if not credentials or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Липсва Bearer токен"
-        )
-
-    payload = decode_access_token(credentials.credentials)
-    email = payload.get("sub")
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Невалиден токен payload"
-        )
-
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Потребителят не е намерен"
-        )
-    return user
 
 
 # Лимити на заявките. Стойностите могат да се сменят през environment в Render.
@@ -302,6 +281,7 @@ class InterpretationResponse(BaseModel):
     interpretation: str
     natal_aspects: Optional[List[Dict]] = None
     partner_natal_aspects: Optional[List[Dict]] = None
+    report_id: Optional[int] = None
 
 
 @app.get("/")
@@ -365,6 +345,13 @@ async def calculate_chart(request: ChartRequest, http_request: Request):
         raise HTTPException(status_code=400, detail=f"Невалидни входни данни: {str(e)}")
     except Exception as e:
         raise _internal_error("/calculate", e, "Не успяхме да изчислим картата. Опитайте отново след малко.")
+
+
+def _report_params(request: "ChartRequest") -> dict:
+    """Параметрите на анализа, без свободния текст на въпроса."""
+    keys = ("name", "date", "time", "lat", "lon", "report_type", "is_dynamic", "end_date",
+            "target_date", "target_time", "partner_name", "partner_date", "partner_time")
+    return {k: getattr(request, k, None) for k in keys if getattr(request, k, None) not in (None, "")}
 
 
 @app.post("/interpret-stream")
@@ -506,6 +493,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             yield f"data: {json.dumps(start_event_data, ensure_ascii=False)}\n\n"
             
             # Process each month
+            month_sections = []
             for idx, month in enumerate(sorted_months):
                 monthly_events = events_by_month[month]
                 month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
@@ -527,14 +515,37 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                     has_partner=bool(partner_chart_data)
                 )
                 
+                month_sections.append(f"<h2>{month_display}</h2>\n{monthly_text}")
+
                 # Send month_complete event
                 yield f"data: {json.dumps({'type': 'month_complete', 'month': month_display, 'text': monthly_text, 'index': idx, 'total': len(sorted_months)}, ensure_ascii=False)}\n\n"
                 
                 # Small delay to prevent overwhelming the client
                 await asyncio.sleep(0.1)
             
+            # Запазване в историята (собствена сесия: генераторът живее след края на зависимостите)
+            report_id = None
+            db = SessionLocal()
+            try:
+                report = data_api.save_report(
+                    db, db.get(User, current_user.id),
+                    content="\n\n".join(month_sections),
+                    report_type=request.report_type or "general",
+                    profile_name=request.name,
+                    label=data_api.report_label(request.report_type or "general", request.partner_name,
+                                                is_dynamic=True, question=request.question),
+                    params={**_report_params(request), "months": len(sorted_months)},
+                )
+                db.commit()
+                report_id = report.id
+            except Exception as e:
+                # Прогнозата вече е при потребителя; само записът в историята не успя
+                _internal_error("/interpret-stream save_report", e, "")
+            finally:
+                db.close()
+
             # Send completion event
-            yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'report_id': report_id}, ensure_ascii=False)}\n\n"
             
         except ValueError as e:
             error_message = f"Невалидни входни данни: {str(e)}"
@@ -555,7 +566,8 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
 
 
 @app.post("/interpret", response_model=InterpretationResponse)
-async def interpret_chart(request: ChartRequest, current_user: User = Depends(require_ai_quota)):
+async def interpret_chart(request: ChartRequest, current_user: User = Depends(require_ai_quota),
+                          db: Session = Depends(get_db)):
     """
     Изчислява натална и транзитна карта и получава AI интерпретация.
     
@@ -777,9 +789,20 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                 location=partner_chart_data["location"]
             )
         
-        # Логване на целия response_data преди създаване на InterpretationResponse
-        response_obj = InterpretationResponse(**response_data)
-        return response_obj
+        # Запазване в историята на потребителя
+        report = data_api.save_report(
+            db, current_user,
+            content=interpretation,
+            report_type=request.report_type or "general",
+            profile_name=request.name,
+            label=data_api.report_label(request.report_type or "general", request.partner_name,
+                                        question=request.question),
+            params=_report_params(request),
+        )
+        db.commit()
+        response_data["report_id"] = report.id
+
+        return InterpretationResponse(**response_data)
         
     except HTTPException:
         # Умишлени грешки (напр. липсващ end_date) минават непроменени
@@ -857,7 +880,7 @@ class UserLogin(BaseModel):
     password: str
 
 @app.post("/register")
-def register(user_data: UserRegister, http_request: Request, db: Session = Depends(get_db)):
+async def register(user_data: UserRegister, http_request: Request, db: Session = Depends(get_db)):
     """Регистрация на нов потребител"""
     enforce(f"register:{client_ip(http_request)}", REGISTER_LIMIT_PER_HOUR, 3600, "Твърде много регистрации от този адрес.")
 
@@ -881,6 +904,9 @@ def register(user_data: UserRegister, http_request: Request, db: Session = Depen
     )
     db.add(new_user)
     db.commit()
+    db.refresh(new_user)
+    await account_api.send_verification(new_user)
+    account_api._track(db, "register", new_user.id)
     return {"message": "Успешна регистрация"}
 
 @app.post("/login")
@@ -892,29 +918,14 @@ def login(user_data: UserLogin, http_request: Request, db: Session = Depends(get
     enforce(f"login:{ip}:{email}", LOGIN_LIMIT_PER_15_MIN, 900, message)
     enforce(f"login-ip:{ip}", LOGIN_LIMIT_PER_15_MIN * 3, 900, message)
 
-    # Първо точно съвпадение (стари акаунти може да са записани с главни букви),
-    # после без значение от главни и малки букви, само ако има един такъв акаунт.
-    user = db.query(User).filter(User.email == user_data.email.strip()).first()
-    if not user:
-        matches = db.query(User).filter(func.lower(func.trim(User.email)) == email).limit(2).all()
-        user = matches[0] if len(matches) == 1 else None
+    user = account_api.find_user_by_email(db, user_data.email)
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Грешен имейл или парола")
     
-    token = create_access_token(data={"sub": user.email})
     return {
-        "access_token": token, 
+        "access_token": create_user_token(user),
         "token_type": "bearer",
-        "user": {"full_name": user.full_name, "coins": user.coins}
-    }
-
-
-@app.get("/me")
-def me(current_user: User = Depends(get_current_user)):
-    return {
-        "email": current_user.email,
-        "full_name": current_user.full_name,
-        "coins": current_user.coins
+        "user": account_api.user_payload(user),
     }
 
 

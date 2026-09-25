@@ -1,7 +1,11 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+
+from sqlalchemy import (
+    create_engine, Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,7 +30,10 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Модел за потребител
+# Схемата на базата се управлява с Alembic миграции (виж migrations/ и db_migrate.py).
+# Моделите тук трябва да съвпадат с последната миграция.
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -34,10 +41,62 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String)
-    coins = Column(Integer, default=10) # Начален бонус
+    coins = Column(Integer, default=10)  # Начален бонус
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="0")
+    # Увеличава се при смяна на парола, за да спрат да важат старите токени
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-# Създава таблиците автоматично при старт
-Base.metadata.create_all(bind=engine)
+    profiles = relationship("Profile", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
+    reports = relationship("Report", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
+
+
+class Profile(Base):
+    """Астрологичен профил (аз, партньор, близък) на потребител."""
+    __tablename__ = "profiles"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_profiles_user_name"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    relation = Column(String(20), nullable=False, default="self")
+    gender = Column(String(20), nullable=True)
+    birth_date = Column(String(10), nullable=False)
+    birth_time = Column(String(8), nullable=True)
+    unknown_time = Column(Boolean, nullable=False, default=False)
+    birth_place = Column(String(200), nullable=True)
+    lat = Column(Float, nullable=True)
+    lon = Column(Float, nullable=True)
+    is_primary = Column(Boolean, nullable=False, default=False)
+    # Настройки на формата за анализ (транзит, партньор), пазени заедно с профила
+    settings = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="profiles")
+
+
+class Report(Base):
+    """Генериран AI анализ, запазен за историята на потребителя."""
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    profile_name = Column(String(100), nullable=True)
+    report_type = Column(String(30), nullable=False, default="general")
+    label = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    coins = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="completed")
+    params = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="reports")
+
+
+# Модели с колона user_id: трият се и се експортират заедно с акаунта
+USER_OWNED_MODELS = ["Profile", "Report"]
+
 
 def get_db():
     db = SessionLocal()

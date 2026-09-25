@@ -4,36 +4,22 @@
 
 Пускане: python -m unittest discover -s tests
 """
-import os
-import sys
-import tempfile
 import unittest
 
-_db_dir = tempfile.mkdtemp()
-os.environ["DATABASE_URL"] = f"sqlite:///{_db_dir}/test.db"
-os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("OPENAI_API_KEY", "test-dummy")  # AI моделът не се вика в тези тестове
-os.environ["AI_RATE_LIMIT_PER_HOUR"] = "2"
-os.environ["LOGIN_RATE_LIMIT_PER_15_MIN"] = "3"
-os.environ["REGISTER_RATE_LIMIT_PER_HOUR"] = "50"
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+import testenv  # noqa: F401  (трябва да е преди main)
 from fastapi.testclient import TestClient  # noqa: E402
 
 import main  # noqa: E402
 from auth import validate_password  # noqa: E402
-from database import Base, SessionLocal, User, engine as db_engine  # noqa: E402
+from database import SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 
-CHART = {"date": "1990-05-15", "time": "14:30", "lat": 42.6977, "lon": 23.3219}
-PASSWORD = "Zvezdi2026x"
+from testenv import CHART, PASSWORD  # noqa: E402
 
 
 class SecurityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        Base.metadata.create_all(bind=db_engine)
         cls.client = TestClient(main.app)
 
     def setUp(self):
