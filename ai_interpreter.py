@@ -1402,9 +1402,12 @@ class AIInterpreter:
                             {"role": "user", "content": user_prompt}
                         ],
                         "temperature": 0.7,
-                        "max_tokens": max_tokens
+                        "max_tokens": max_tokens,
+                        # Мислещите модели (напр. deepseek-v4.1-flash) иначе пишат в
+                        # message.reasoning и оставят content празен / изчерпват max_tokens.
+                        "reasoning_effort": "none"
                     }
-                    
+
                     async with httpx.AsyncClient(timeout=self.ollama_timeout) as client:
                         ollama_response = await client.post(
                             f"{self.ollama_url}/chat/completions",
@@ -1421,7 +1424,13 @@ class AIInterpreter:
                             if content and content.strip():
                                 print(f"✅ Ollama успешно отговори (опит {attempt})")
                                 return content.strip()
-                            print("⚠️ Ollama върна празен content. Fallback към Together...")
+                            choice = resp_json.get("choices", [{}])[0]
+                            print(
+                                f"⚠️ Ollama върна празен content (model={self.ollama_model}, "
+                                f"finish_reason={choice.get('finish_reason')}, "
+                                f"has_reasoning={bool(choice.get('message', {}).get('reasoning'))}, "
+                                f"usage={resp_json.get('usage')}). Fallback към Together..."
+                            )
                             break  # Празен отговор - не retry, веднага fallback
                         else:
                             print(f"⚠️ Ollama HTTP {ollama_response.status_code} (опит {attempt})")
