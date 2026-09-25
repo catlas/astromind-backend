@@ -1342,6 +1342,9 @@ class AIInterpreter:
         self.ollama_key = os.getenv("OLLAMA_API_KEY")
         self.ollama_model = os.getenv("OLLAMA_MODEL", "deepseek-v4.1-flash:cloud")
         self.ollama_timeout = 300.0  # 300s timeout for Ollama Cloud (5 min)
+        # Таван на изходните токени. Кирилицата е скъпа на токени — при 6000
+        # дългите български анализи се отрязваха по средата на думата.
+        self.max_output_tokens = int(os.getenv("AI_MAX_OUTPUT_TOKENS", "12000"))
         
         # --- Together.ai (Fallback Provider) ---
         self.together_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -1422,7 +1425,10 @@ class AIInterpreter:
                             resp_json = ollama_response.json()
                             content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
                             if content and content.strip():
-                                print(f"✅ Ollama успешно отговори (опит {attempt})")
+                                finish_reason = resp_json.get("choices", [{}])[0].get("finish_reason")
+                                print(f"✅ Ollama успешно отговори (опит {attempt}, finish_reason={finish_reason}, usage={resp_json.get('usage')})")
+                                if finish_reason == "length":
+                                    print(f"⚠️ Отговорът е отрязан от max_tokens={max_tokens} — вдигнете AI_MAX_OUTPUT_TOKENS.")
                                 return content.strip()
                             choice = resp_json.get("choices", [{}])[0]
                             print(
@@ -2124,7 +2130,7 @@ class AIInterpreter:
                 content = await self._call_api(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
-                    max_tokens=6000
+                    max_tokens=self.max_output_tokens
                 )
                 return content
             except Exception as e:
@@ -3088,7 +3094,7 @@ class AIInterpreter:
             interpretation = await self._call_api(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=6000
+                max_tokens=self.max_output_tokens
             )
             return interpretation
             
