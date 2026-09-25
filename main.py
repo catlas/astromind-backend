@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session  # type: ignore
 import json
 import asyncio
 import os
+import traceback
+import uuid
 from dotenv import load_dotenv
 import engine
 from ai_interpreter import AIInterpreter, get_interpreter
@@ -49,6 +51,20 @@ app.add_middleware(
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
+
+
+def _internal_error(context: str, exc: Exception, user_message: str) -> HTTPException:
+    """
+    Логва пълната грешка само на сървъра и връща общо съобщение към клиента.
+    Кодът в съобщението позволява грешката да се намери в логовете на Render.
+    Извиква се от except блок, за да може traceback-ът да бъде отпечатан.
+    """
+    error_id = uuid.uuid4().hex[:8]
+    print(f"❌ [{error_id}] {context}: {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+    return HTTPException(status_code=500, detail=f"{user_message} (код: {error_id})")
+
+
 auth_scheme = HTTPBearer(auto_error=False)
 
 
@@ -318,13 +334,8 @@ async def calculate_chart(request: ChartRequest):
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Невалидни входни данни: {str(e)}")
-    except FileNotFoundError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Ефемеридите не са намерени. Моля изпълнете scripts/download_ephe.py: {str(e)}"
-        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Грешка при изчисляване на картата: {str(e)}")
+        raise _internal_error("/calculate", e, "Не успяхме да изчислим картата. Опитайте отново след малко.")
 
 
 @app.post("/interpret-stream")
@@ -496,9 +507,12 @@ async def interpret_chart_stream(request: ChartRequest):
             # Send completion event
             yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
             
-        except Exception as e:
-            error_message = f"Грешка при генериране на прогноза: {str(e)}"
+        except ValueError as e:
+            error_message = f"Невалидни входни данни: {str(e)}"
             yield f"data: {json.dumps({'type': 'error', 'message': error_message}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            err = _internal_error("/interpret-stream", e, "Не успяхме да генерираме прогнозата. Опитайте отново след малко.")
+            yield f"data: {json.dumps({'type': 'error', 'message': err.detail}, ensure_ascii=False)}\n\n"
     
     return StreamingResponse(
         generate_monthly_stream(),
@@ -738,23 +752,13 @@ async def interpret_chart(request: ChartRequest):
         response_obj = InterpretationResponse(**response_data)
         return response_obj
         
+    except HTTPException:
+        # Умишлени грешки (напр. липсващ end_date) минават непроменени
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Невалидни входни данни: {str(e)}")
-    except FileNotFoundError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Ефемеридите не са намерени. Моля изпълнете scripts/download_ephe.py: {str(e)}"
-        )
-    except RuntimeError as e:
-        # Грешки от AI интерпретатора
-        if "OpenAI" in str(e):
-            raise HTTPException(
-                status_code=500,
-                detail=f"Грешка при комуникация с OpenAI API. Проверете OPENAI_API_KEY: {str(e)}"
-            )
-        raise HTTPException(status_code=500, detail=f"Грешка при обработка: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Неочаквана грешка: {str(e)}")
+        raise _internal_error("/interpret", e, "Не успяхме да генерираме анализа. Опитайте отново след малко.")
 
 
 class DOCXRequest(BaseModel):
@@ -807,7 +811,7 @@ async def generate_docx(request: DOCXRequest):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Грешка при генериране на DOCX: {str(e)}")
+        raise _internal_error("/generate-docx", e, "Не успяхме да създадем DOCX файла. Опитайте отново след малко.")
 
 
 # ============================================================================

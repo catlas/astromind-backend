@@ -1,6 +1,9 @@
 # Backend runtime dependencies
-fastapi
-uvicorn
+# Всички версии са заключени на тези от последния успешен билд на Render
+# (Python 3.13). Незаключен пакет вече събори продукцията веднъж
+# (SQLAlchemy 2.1 смени драйвера за Postgres). Обновявайте съзнателно.
+fastapi==0.141.1
+uvicorn==0.54.0
 pydantic==2.11.10
 
 # Env / HTTP
@@ -9,9 +12,9 @@ httpx==0.28.1
 requests==2.32.3
 
 # Astrology / timezone
-pyswisseph
+pyswisseph==2.10.3.2
 timezonefinder==8.1.0
-pytz
+pytz==2026.4
 # NumPy 2.x may not have compatible wheels for older macOS versions (e.g. macOS 11),
 # so we pin to a known-good wheel for Python 3.11.
 numpy==1.26.4
@@ -20,8 +23,8 @@ numpy==1.26.4
 python-docx==1.1.0
 
 # Auth / DB
-sqlalchemy>=2.0,<2.1
-psycopg2-binary
-passlib[bcrypt]
-bcrypt<5.0.0
-python-jose[cryptography]
+sqlalchemy==2.0.54
+psycopg2-binary==2.9.13
+passlib[bcrypt]==1.7.4
+bcrypt==4.3.0
+python-jose[cryptography]==3.5.0

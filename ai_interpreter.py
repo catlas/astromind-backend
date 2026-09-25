@@ -1349,7 +1349,7 @@ class AIInterpreter:
         # --- Together.ai (Fallback Provider) ---
         self.together_key = api_key or os.getenv("OPENAI_API_KEY")
         self.together_url = os.getenv("TOGETHER_API_URL", "https://api.together.xyz/v1/chat/completions")
-        self.together_model = os.getenv("TOGETHER_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507-tput")
+        self.together_model = os.getenv("TOGETHER_MODEL", "deepseek-ai/DeepSeek-V4.1-Flash")
         self.together_timeout = 120.0  # 120s timeout for chunked monthly requests
         
         # --- Shared config ---
@@ -3069,25 +3069,27 @@ class AIInterpreter:
         elif language == "en":
             user_prompt += "\n\nPlease respond in English."
         
-        # Логване на prompt-а към AI
-        try:
-            import os
-            from datetime import datetime
-            # Определяне на пътя към output.log в backend директорията
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            log_path = os.path.join(script_dir, "output.log")
-            with open(log_path, "a", encoding="utf-8") as f:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                f.write(f"\n{'='*80}\n")
-                f.write(f"[{timestamp}] STEP 5: PROMPT TO AI\n")
-                f.write(f"{'='*80}\n")
-                f.write(f"\n--- SYSTEM PROMPT (first 1000 chars) ---\n")
-                f.write(system_prompt[:1000] + "...\n" if len(system_prompt) > 1000 else system_prompt)
-                f.write(f"\n\n--- USER PROMPT ---\n")
-                f.write(user_prompt)
-                f.write(f"\n{'='*80}\n\n")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not log prompt to output.log: {e}")
+        # Логване на prompt-а към AI — само при изрично LOG_PROMPTS=1 (локален дебъг).
+        # Prompt-ът съдържа рождени данни, данни за партньор и свободния въпрос,
+        # затова по подразбиране (и в продукция) не се записва.
+        if os.getenv("LOG_PROMPTS") == "1":
+            try:
+                from datetime import datetime
+                # Определяне на пътя към output.log в backend директорията
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                log_path = os.path.join(script_dir, "output.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    f.write(f"\n{'='*80}\n")
+                    f.write(f"[{timestamp}] STEP 5: PROMPT TO AI\n")
+                    f.write(f"{'='*80}\n")
+                    f.write(f"\n--- SYSTEM PROMPT (first 1000 chars) ---\n")
+                    f.write(system_prompt[:1000] + "...\n" if len(system_prompt) > 1000 else system_prompt)
+                    f.write(f"\n\n--- USER PROMPT ---\n")
+                    f.write(user_prompt)
+                    f.write(f"\n{'='*80}\n\n")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not log prompt to output.log: {e}")
         
         try:
             # Call AI API (Ollama primary → Together fallback)

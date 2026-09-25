@@ -441,7 +441,9 @@ class TransitScanner:
     
     def _find_house_for_position(self, longitude: float, natal_chart: Dict) -> str:
         """Намира в кой натален дом попада позицията"""
-        houses = natal_chart.get("angles", {}).get("houses", {})
+        # engine.calculate_chart връща куспидите на горно ниво (chart["houses"]),
+        # не в chart["angles"] — по-рано тук всичко излизаше "Unknown".
+        houses = natal_chart.get("houses") or natal_chart.get("angles", {}).get("houses", {})
         
         if not houses:
             return "Unknown"
