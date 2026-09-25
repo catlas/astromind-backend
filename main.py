@@ -26,6 +26,8 @@ from database import SessionLocal, User, get_db
 from db_migrate import run_migrations
 from deps import get_current_user
 import account_api
+import billing
+import billing_api
 import data_api
 from auth import (
     hash_password, verify_password, create_user_token,
@@ -62,6 +64,7 @@ app.add_middleware(
 
 app.include_router(account_api.router)
 app.include_router(data_api.router)
+app.include_router(billing_api.router)
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
@@ -282,6 +285,8 @@ class InterpretationResponse(BaseModel):
     natal_aspects: Optional[List[Dict]] = None
     partner_natal_aspects: Optional[List[Dict]] = None
     report_id: Optional[int] = None
+    coins_charged: int = 0
+    balance: Optional[int] = None
 
 
 @app.get("/")
@@ -447,6 +452,13 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             if not sorted_months:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Няма събития за анализиране в избрания период'}, ensure_ascii=False)}\n\n"
                 return
+
+            cost = billing.forecast_cost(len(sorted_months), bool(partner_chart_data))
+            try:
+                billing.require_balance(current_user, cost)
+            except HTTPException as e:
+                yield f"data: {json.dumps({'type': 'error', 'code': 402, 'message': e.detail}, ensure_ascii=False)}\n\n"
+                return
             
             # Month names in Bulgarian
             month_names = {
@@ -525,6 +537,8 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             
             # Запазване в историята (собствена сесия: генераторът живее след края на зависимостите)
             report_id = None
+            coins_charged = 0
+            balance = None
             db = SessionLocal()
             try:
                 report = data_api.save_report(
@@ -536,8 +550,11 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                                                 is_dynamic=True, question=request.question),
                     params={**_report_params(request), "months": len(sorted_months)},
                 )
+                coins_charged = billing.charge_for_report(db, db.get(User, current_user.id), report, cost,
+                                                          description=report.label)
                 db.commit()
                 report_id = report.id
+                balance = db.get(User, current_user.id).coins or 0
             except Exception as e:
                 # Прогнозата вече е при потребителя; само записът в историята не успя
                 _internal_error("/interpret-stream save_report", e, "")
@@ -545,7 +562,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 db.close()
 
             # Send completion event
-            yield f"data: {json.dumps({'type': 'complete', 'report_id': report_id}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'report_id': report_id, 'coins_charged': coins_charged, 'balance': balance}, ensure_ascii=False)}\n\n"
             
         except ValueError as e:
             error_message = f"Невалидни входни данни: {str(e)}"
@@ -582,6 +599,10 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
     - Транзитна карта (ако е изчислена)
     - AI интерпретация като текст
     """
+    has_partner = bool(request.partner_date and request.partner_time and request.partner_lat is not None and request.partner_lon is not None)
+    cost = billing.analysis_cost(has_partner)
+    billing.require_balance(current_user, cost)
+
     try:
         natal_chart_data = engine.calculate_chart(
             date=request.date,
@@ -799,8 +820,11 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                                         question=request.question),
             params=_report_params(request),
         )
+        response_data["coins_charged"] = billing.charge_for_report(
+            db, current_user, report, cost, description=report.label)
         db.commit()
         response_data["report_id"] = report.id
+        response_data["balance"] = current_user.coins or 0
 
         return InterpretationResponse(**response_data)
         
@@ -900,9 +924,15 @@ async def register(user_data: UserRegister, http_request: Request, db: Session =
     new_user = User(
         email=email,
         full_name=full_name,
-        hashed_password=hash_password(user_data.password)
+        hashed_password=hash_password(user_data.password),
+        coins=0,
     )
     db.add(new_user)
+    db.flush()
+    bonus = billing.costs()["signup_bonus"]
+    if bonus > 0:
+        billing.apply_transaction(db, new_user.id, bonus, "signup_bonus", ref=f"signup:{new_user.id}",
+                                  description="Бонус при регистрация")
     db.commit()
     db.refresh(new_user)
     await account_api.send_verification(new_user)

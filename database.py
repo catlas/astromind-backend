@@ -94,8 +94,45 @@ class Report(Base):
     user = relationship("User", back_populates="reports")
 
 
+class CoinTransaction(Base):
+    """
+    Регистър на монетите. Всяка промяна на users.coins има ред тук;
+    сумата на delta винаги е равна на баланса. ref е уникален, за да не
+    се запише едно и също събитие (напр. повторен webhook) два пъти.
+    """
+    __tablename__ = "coin_transactions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    delta = Column(Integer, nullable=False)
+    balance_after = Column(Integer, nullable=False)
+    reason = Column(String(30), nullable=False)
+    ref = Column(String(120), nullable=True, unique=True)
+    description = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class Purchase(Base):
+    """Покупка на монети през Stripe Checkout."""
+    __tablename__ = "purchases"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    package_id = Column(String(40), nullable=False)
+    coins = Column(Integer, nullable=False)
+    amount_cents = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False, default="eur")
+    status = Column(String(20), nullable=False, default="pending")  # pending, paid, refunded, expired
+    stripe_session_id = Column(String(255), nullable=True, unique=True)
+    stripe_payment_intent = Column(String(255), nullable=True, index=True)
+    receipt_url = Column(String(500), nullable=True)
+    refunded_cents = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    paid_at = Column(DateTime, nullable=True)
+
+
 # Модели с колона user_id: трият се и се експортират заедно с акаунта
-USER_OWNED_MODELS = ["Profile", "Report"]
+USER_OWNED_MODELS = ["Profile", "Report", "CoinTransaction", "Purchase"]
 
 
 def get_db():
