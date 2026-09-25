@@ -8,9 +8,14 @@ load_dotenv()
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Корекция за Render/Heroku специфични линкове
-if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Корекция за Render/Heroku специфични линкове + изричен драйвер psycopg2.
+# SQLAlchemy 2.1 смени драйвера по подразбиране за "postgresql://" на psycopg (v3),
+# а ние инсталираме psycopg2-binary — затова драйверът се задава изрично.
+if SQLALCHEMY_DATABASE_URL:
+    for prefix in ("postgres://", "postgresql://"):
+        if SQLALCHEMY_DATABASE_URL.startswith(prefix):
+            SQLALCHEMY_DATABASE_URL = "postgresql+psycopg2://" + SQLALCHEMY_DATABASE_URL[len(prefix):]
+            break
 
 # Ако няма DATABASE_URL, използваме SQLite за локално тестване
 if not SQLALCHEMY_DATABASE_URL:

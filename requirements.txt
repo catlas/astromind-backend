@@ -20,7 +20,7 @@ numpy==1.26.4
 python-docx==1.1.0
 
 # Auth / DB
-sqlalchemy
+sqlalchemy>=2.0,<2.1
 psycopg2-binary
 passlib[bcrypt]
 bcrypt<5.0.0
