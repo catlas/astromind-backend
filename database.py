@@ -47,6 +47,8 @@ class User(Base):
     token_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)
     onboarding_completed = Column(Boolean, nullable=False, default=False, server_default="0")
+    # Потребителят решава дали бележките му се подават на AI
+    memory_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
 
     profiles = relationship("Profile", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
     reports = relationship("Report", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
@@ -143,8 +145,24 @@ class Event(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class MemoryNote(Base):
+    """
+    Бележка, която потребителят иска AI да знае (напр. „работя като учител“).
+    Пише се само от потребителя, винаги е видима и може да се изтрие.
+    profile_name = None означава, че важи за всички анализи.
+    """
+    __tablename__ = "memory_notes"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    profile_name = Column(String(100), nullable=True)
+    text = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # Модели с колона user_id: трият се и се експортират заедно с акаунта
-USER_OWNED_MODELS = ["Profile", "Report", "CoinTransaction", "Purchase", "Event"]
+USER_OWNED_MODELS = ["Profile", "Report", "CoinTransaction", "Purchase", "Event", "MemoryNote"]
 
 
 def get_db():

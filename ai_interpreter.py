@@ -4,6 +4,7 @@ AI Интерпретатор за астрологични карти
 """
 
 from safety import SAFETY_RULES
+import memory
 import os
 import json
 import asyncio
@@ -1395,6 +1396,10 @@ class AIInterpreter:
         """
         # Правилата за безопасност важат за всеки анализ, независимо от режима
         system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
+        # Бележките от контролираната памет на потребителя (ако ги има и са включени)
+        user_context = memory.current_context.get()
+        if user_context:
+            user_prompt = f"{user_prompt}\n\n{user_context}"
 
         # --- OLLAMA CLOUD ATTEMPT (Primary) ---
         if self.ollama_key and self.ollama_url:

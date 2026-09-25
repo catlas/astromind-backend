@@ -32,6 +32,8 @@ import data_api
 import events
 import events_api
 import onboarding_api
+import memory
+import memory_api
 import safety
 from auth import (
     hash_password, verify_password, create_user_token,
@@ -71,6 +73,7 @@ app.include_router(data_api.router)
 app.include_router(billing_api.router)
 app.include_router(events_api.router)
 app.include_router(onboarding_api.router)
+app.include_router(memory_api.router)
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
@@ -520,6 +523,12 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             
             yield f"data: {json.dumps(start_event_data, ensure_ascii=False)}\n\n"
             
+            mem_db = SessionLocal()
+            try:
+                memory_used = memory.activate(mem_db, mem_db.get(User, current_user.id), request.name)
+            finally:
+                mem_db.close()
+
             # Process each month
             month_sections = []
             flagged = []
@@ -567,7 +576,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                     profile_name=request.name,
                     label=data_api.report_label(request.report_type or "general", request.partner_name,
                                                 is_dynamic=True, question=request.question),
-                    params={**_report_params(request), "months": len(sorted_months)},
+                    params={**_report_params(request), "months": len(sorted_months), "memory_used": memory_used},
                 )
                 coins_charged = billing.charge_for_report(db, db.get(User, current_user.id), report, cost,
                                                           description=report.label)
@@ -765,6 +774,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
             interpretation = safety.CRISIS_MESSAGE_HTML
             events.track(db, "crisis_detected", current_user.id)
         else:
+            memory_used = memory.activate(db, current_user, request.name)
             interpretation = await ai_interpreter.interpret_chart(
                 natal_chart=natal_chart_data,
                 transit_chart=transit_chart_data,  # Може да е None ако не е заявен транзитен анализ
@@ -858,7 +868,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
             profile_name=request.name,
             label=data_api.report_label(request.report_type or "general", request.partner_name,
                                         question=request.question),
-            params=_report_params(request),
+            params={**_report_params(request), "memory_used": memory_used},
         )
         response_data["coins_charged"] = billing.charge_for_report(
             db, current_user, report, cost, description=report.label)
