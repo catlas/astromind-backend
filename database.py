@@ -131,8 +131,19 @@ class Purchase(Base):
     paid_at = Column(DateTime, nullable=True)
 
 
+class Event(Base):
+    """Събитие за аналитиката на фунията. Без свободен текст и лични данни."""
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String(50), nullable=False, index=True)
+    props = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 # Модели с колона user_id: трият се и се експортират заедно с акаунта
-USER_OWNED_MODELS = ["Profile", "Report", "CoinTransaction", "Purchase"]
+USER_OWNED_MODELS = ["Profile", "Report", "CoinTransaction", "Purchase", "Event"]
 
 
 def get_db():

@@ -30,7 +30,13 @@ def user_payload(user: User) -> dict:
         "coins": user.coins or 0,
         "email_verified": bool(user.email_verified),
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "is_admin": _is_admin(user),
     }
+
+
+def _is_admin(user: User) -> bool:
+    from events_api import is_admin
+    return is_admin(user)
 
 
 def find_user_by_email(db: Session, raw_email: str) -> Optional[User]:

@@ -3,6 +3,7 @@ AI Интерпретатор за астрологични карти
 Използва Together.ai API за анализ и интерпретация
 """
 
+from safety import SAFETY_RULES
 import os
 import json
 import asyncio
@@ -1392,6 +1393,9 @@ class AIInterpreter:
         Raises:
             RuntimeError: ако и двата провайдъра fail
         """
+        # Правилата за безопасност важат за всеки анализ, независимо от режима
+        system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
+
         # --- OLLAMA CLOUD ATTEMPT (Primary) ---
         if self.ollama_key and self.ollama_url:
             max_retries = 3

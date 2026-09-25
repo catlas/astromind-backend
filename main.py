@@ -29,6 +29,9 @@ import account_api
 import billing
 import billing_api
 import data_api
+import events
+import events_api
+import safety
 from auth import (
     hash_password, verify_password, create_user_token,
     normalize_email, validate_email, validate_password,
@@ -65,6 +68,7 @@ app.add_middleware(
 app.include_router(account_api.router)
 app.include_router(data_api.router)
 app.include_router(billing_api.router)
+app.include_router(events_api.router)
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
@@ -287,6 +291,7 @@ class InterpretationResponse(BaseModel):
     report_id: Optional[int] = None
     coins_charged: int = 0
     balance: Optional[int] = None
+    crisis: bool = False
 
 
 @app.get("/")
@@ -378,6 +383,15 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             
             if not request.end_date:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'end_date е задължително за динамична прогноза'}, ensure_ascii=False)}\n\n"
+                return
+
+            if safety.detect_crisis(request.question):
+                track_db = SessionLocal()
+                try:
+                    events.track(track_db, "crisis_detected", current_user.id)
+                finally:
+                    track_db.close()
+                yield f"data: {json.dumps({'type': 'crisis', 'html': safety.CRISIS_MESSAGE_HTML}, ensure_ascii=False)}\n\n"
                 return
             
             # Initialize engine
@@ -506,6 +520,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             
             # Process each month
             month_sections = []
+            flagged = []
             for idx, month in enumerate(sorted_months):
                 monthly_events = events_by_month[month]
                 month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
@@ -527,6 +542,8 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                     has_partner=bool(partner_chart_data)
                 )
                 
+                monthly_text, month_flags = safety.check_output(monthly_text, request.report_type or "general")
+                flagged.extend(month_flags)
                 month_sections.append(f"<h2>{month_display}</h2>\n{monthly_text}")
 
                 # Send month_complete event
@@ -555,6 +572,12 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 db.commit()
                 report_id = report.id
                 balance = db.get(User, current_user.id).coins or 0
+                is_first = db.query(data_api.Report.id).filter(data_api.Report.user_id == current_user.id).count() == 1
+                events.track(db, "analysis_completed", current_user.id,
+                             {"type": report.report_type, "dynamic": True, "first": is_first,
+                              "months": len(sorted_months), "coins": coins_charged})
+                if flagged:
+                    events.track(db, "ai_output_flagged", current_user.id, {"flags": ",".join(sorted(set(flagged)))})
             except Exception as e:
                 # Прогнозата вече е при потребителя; само записът в историята не успя
                 _internal_error("/interpret-stream save_report", e, "")
@@ -601,7 +624,8 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
     """
     has_partner = bool(request.partner_date and request.partner_time and request.partner_lat is not None and request.partner_lon is not None)
     cost = billing.analysis_cost(has_partner)
-    billing.require_balance(current_user, cost)
+    if not safety.detect_crisis(request.question):
+        billing.require_balance(current_user, cost)
 
     try:
         natal_chart_data = engine.calculate_chart(
@@ -733,18 +757,27 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
         else:
             target_date_for_ai = ""
         
-        interpretation = await ai_interpreter.interpret_chart(
-            natal_chart=natal_chart_data,
-            transit_chart=transit_chart_data,  # Може да е None ако не е заявен транзитен анализ
-            partner_chart=partner_chart_data,
-            partner_name=request.partner_name,
-            question=question,
-            target_date=target_date_for_ai,  # Използваме пълната дата и час от транзитната карта
-            language="bg",  # По подразбиране български
-            report_type=request.report_type or "general",
-            user_name=request.name,
-            timeline_events=timeline_events  # Timeline events за Dynamic Forecast Mode
-        )
+        crisis = safety.detect_crisis(question, request.question)
+        if crisis:
+            # Не викаме AI и не таксуваме; показваме подкрепящо съобщение
+            interpretation = safety.CRISIS_MESSAGE_HTML
+            events.track(db, "crisis_detected", current_user.id)
+        else:
+            interpretation = await ai_interpreter.interpret_chart(
+                natal_chart=natal_chart_data,
+                transit_chart=transit_chart_data,  # Може да е None ако не е заявен транзитен анализ
+                partner_chart=partner_chart_data,
+                partner_name=request.partner_name,
+                question=question,
+                target_date=target_date_for_ai,  # Използваме пълната дата и час от транзитната карта
+                language="bg",  # По подразбиране български
+                report_type=request.report_type or "general",
+                user_name=request.name,
+                timeline_events=timeline_events  # Timeline events за Dynamic Forecast Mode
+            )
+            interpretation, flags = safety.check_output(interpretation, request.report_type or "general")
+            if flags:
+                events.track(db, "ai_output_flagged", current_user.id, {"flags": ",".join(flags)})
         
         # Изчисляване на натални аспекти
         natal_aspects_data = None
@@ -810,7 +843,12 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                 location=partner_chart_data["location"]
             )
         
+        if crisis:
+            response_data["crisis"] = True
+            return InterpretationResponse(**response_data)
+
         # Запазване в историята на потребителя
+        is_first = not db.query(data_api.Report.id).filter(data_api.Report.user_id == current_user.id).first()
         report = data_api.save_report(
             db, current_user,
             content=interpretation,
@@ -825,6 +863,9 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
         db.commit()
         response_data["report_id"] = report.id
         response_data["balance"] = current_user.coins or 0
+        events.track(db, "analysis_completed", current_user.id,
+                     {"type": report.report_type, "dynamic": False, "first": is_first,
+                      "coins": response_data["coins_charged"]})
 
         return InterpretationResponse(**response_data)
         
@@ -952,6 +993,7 @@ def login(user_data: UserLogin, http_request: Request, db: Session = Depends(get
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Грешен имейл или парола")
     
+    events.track(db, "login", user.id)
     return {
         "access_token": create_user_token(user),
         "token_type": "bearer",
