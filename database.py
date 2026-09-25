@@ -46,6 +46,7 @@ class User(Base):
     # Увеличава се при смяна на парола, за да спрат да важат старите токени
     token_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)
+    onboarding_completed = Column(Boolean, nullable=False, default=False, server_default="0")
 
     profiles = relationship("Profile", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
     reports = relationship("Report", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)

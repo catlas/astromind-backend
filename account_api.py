@@ -31,6 +31,7 @@ def user_payload(user: User) -> dict:
         "email_verified": bool(user.email_verified),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "is_admin": _is_admin(user),
+        "onboarding_completed": bool(user.onboarding_completed),
     }
 
 

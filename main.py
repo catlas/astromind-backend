@@ -31,6 +31,7 @@ import billing_api
 import data_api
 import events
 import events_api
+import onboarding_api
 import safety
 from auth import (
     hash_password, verify_password, create_user_token,
@@ -69,6 +70,7 @@ app.include_router(account_api.router)
 app.include_router(data_api.router)
 app.include_router(billing_api.router)
 app.include_router(events_api.router)
+app.include_router(onboarding_api.router)
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
