@@ -1340,7 +1340,7 @@ class AIInterpreter:
         # --- Ollama Cloud (Primary Provider) ---
         self.ollama_url = os.getenv("OLLAMA_BASE_URL", "").rstrip("/")
         self.ollama_key = os.getenv("OLLAMA_API_KEY")
-        self.ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:cloud")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "deepseek-v4.1-flash:cloud")
         self.ollama_timeout = 300.0  # 300s timeout for Ollama Cloud (5 min)
         
         # --- Together.ai (Fallback Provider) ---
