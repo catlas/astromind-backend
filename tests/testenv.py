@@ -24,7 +24,7 @@ CHART = {"date": "1990-05-15", "time": "14:30", "lat": 42.6977, "lon": 23.3219}
 
 
 def register_and_login(client, email, password=PASSWORD, name="Тест"):
-    r = client.post("/register", json={"email": email, "password": password, "full_name": name})
+    r = client.post("/register", json={"email": email, "password": password, "full_name": name, "accept_terms": True})
     assert r.status_code == 200, r.text
     r = client.post("/login", json={"email": email, "password": password})
     assert r.status_code == 200, r.text

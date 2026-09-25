@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 import billing
 import mailer
 from database import CoinTransaction, Purchase, User, get_db
-from deps import get_current_user
+from deps import get_current_user, get_optional_user
 from rate_limit import enforce
 
 router = APIRouter(prefix="/billing")
@@ -45,12 +45,14 @@ def _track(db, name, user_id=None, props=None):
 # ---------------------------------------------------------------------------
 
 @router.get("/config")
-def billing_config():
+def billing_config(user: Optional[User] = Depends(get_optional_user)):
+    user_id = user.id if user else None
     return {
         "payments_enabled": billing.payments_enabled(),
         "coins_enforced": billing.coins_enforced(),
         "currency": "eur",
-        "packages": billing.packages(),
+        "packages": billing.packages_for(user_id),
+        "pricing_variant": billing.pricing_variant(user_id),
         "costs": billing.costs(),
     }
 
@@ -95,7 +97,7 @@ async def create_checkout(data: CheckoutIn, current_user: User = Depends(get_cur
         raise HTTPException(status_code=503, detail="Плащанията все още не са активирани.")
     if not data.accept_immediate_delivery:
         raise HTTPException(status_code=400, detail="Моля, потвърдете условията за дигитално съдържание.")
-    package = billing.find_package(data.package_id)
+    package = billing.find_package(data.package_id, current_user.id)
     if not package:
         raise HTTPException(status_code=400, detail="Непознат пакет")
     enforce(f"checkout:{current_user.id}", 10, 3600, "Твърде много опити за плащане.")
@@ -125,7 +127,8 @@ async def create_checkout(data: CheckoutIn, current_user: User = Depends(get_cur
     session = await _stripe_post("/checkout/sessions", form, idempotency_key=f"purchase-{purchase.id}")
     purchase.stripe_session_id = session.get("id")
     db.commit()
-    _track(db, "checkout_started", current_user.id, {"package": package["id"]})
+    _track(db, "checkout_started", current_user.id,
+           {"package": package["id"], "variant": billing.pricing_variant(current_user.id)})
     return {"url": session.get("url"), "purchase_id": purchase.id}
 
 

@@ -951,6 +951,7 @@ class UserRegister(BaseModel):
     email: str
     password: str
     full_name: str
+    accept_terms: bool = False
 
 class UserLogin(BaseModel):
     email: str
@@ -966,6 +967,8 @@ async def register(user_data: UserRegister, http_request: Request, db: Session =
     error = validate_email(email) or validate_password(user_data.password, email)
     if not error and not (1 <= len(full_name) <= 100):
         error = "Въведете име до 100 символа"
+    if not error and not user_data.accept_terms:
+        error = "Моля, приемете Общите условия и Политиката за поверителност"
     if error:
         raise HTTPException(status_code=400, detail=error)
 
@@ -979,6 +982,8 @@ async def register(user_data: UserRegister, http_request: Request, db: Session =
         full_name=full_name,
         hashed_password=hash_password(user_data.password),
         coins=0,
+        terms_version=account_api.TERMS_VERSION,
+        terms_accepted_at=datetime.utcnow(),
     )
     db.add(new_user)
     db.flush()

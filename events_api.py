@@ -35,7 +35,11 @@ def client_event(data: EventIn, current_user: User = Depends(get_current_user), 
     if data.name not in events.CLIENT_EVENTS:
         raise HTTPException(status_code=400, detail="Непознато събитие")
     enforce(f"events:{current_user.id}", 120, 3600, "Твърде много събития.")
-    events.track(db, data.name, current_user.id, data.props)
+    props = dict(data.props or {})
+    if data.name == "pricing_viewed":
+        import billing
+        props["variant"] = billing.pricing_variant(current_user.id)
+    events.track(db, data.name, current_user.id, props)
     return {"ok": True}
 
 

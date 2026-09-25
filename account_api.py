@@ -21,6 +21,10 @@ from rate_limit import client_ip, enforce
 
 router = APIRouter()
 
+# Сменя се при всяка съществена промяна на Общите условия или Политиката за поверителност.
+# Потребителите с по-стара версия ще бъдат помолени да приемат новата.
+TERMS_VERSION = "2026-09-25"
+
 
 def user_payload(user: User) -> dict:
     return {
@@ -33,6 +37,7 @@ def user_payload(user: User) -> dict:
         "is_admin": _is_admin(user),
         "onboarding_completed": bool(user.onboarding_completed),
         "memory_enabled": bool(user.memory_enabled),
+        "terms_accepted": user.terms_version == TERMS_VERSION,
     }
 
 
@@ -157,6 +162,14 @@ def export_me(current_user: User = Depends(get_current_user), db: Session = Depe
     for model in _user_owned_models():
         data[model.__tablename__] = [row(o) for o in db.query(model).filter(model.user_id == current_user.id).all()]
     return data
+
+
+@router.post("/accept-terms")
+def accept_terms(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.terms_version = TERMS_VERSION
+    current_user.terms_accepted_at = datetime.utcnow()
+    db.commit()
+    return user_payload(current_user)
 
 
 # ---------------------------------------------------------------------------

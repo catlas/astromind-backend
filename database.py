@@ -49,6 +49,9 @@ class User(Base):
     onboarding_completed = Column(Boolean, nullable=False, default=False, server_default="0")
     # Потребителят решава дали бележките му се подават на AI
     memory_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Коя версия на Общите условия и Политиката за поверителност е приета и кога
+    terms_version = Column(String(20), nullable=True)
+    terms_accepted_at = Column(DateTime, nullable=True)
 
     profiles = relationship("Profile", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
     reports = relationship("Report", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)

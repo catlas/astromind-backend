@@ -45,3 +45,16 @@ def get_current_user(
             detail="Сесията е изтекла. Моля, влезте отново."
         )
     return user
+
+
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(auth_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Текущият потребител, ако има валиден токен; иначе None (без грешка)."""
+    if not credentials:
+        return None
+    try:
+        return get_current_user(credentials, db)
+    except HTTPException:
+        return None

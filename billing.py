@@ -47,8 +47,34 @@ def packages() -> list:
     return DEFAULT_PACKAGES
 
 
-def find_package(package_id: str) -> Optional[dict]:
-    return next((p for p in packages() if p["id"] == package_id), None)
+def pricing_variant(user_id: Optional[int]) -> Optional[str]:
+    """
+    Ценови тест: PRICING_EXPERIMENT='{"A": [...пакети...], "B": [...]}'.
+    Всеки потребител винаги получава един и същ вариант (по id).
+    """
+    raw = os.getenv("PRICING_EXPERIMENT")
+    if not raw or user_id is None:
+        return None
+    try:
+        variants = json.loads(raw)
+    except ValueError:
+        print("⚠️ PRICING_EXPERIMENT не е валиден JSON")
+        return None
+    names = sorted(k for k, v in variants.items() if isinstance(v, list) and v)
+    return names[user_id % len(names)] if names else None
+
+
+def packages_for(user_id: Optional[int]) -> list:
+    variant = pricing_variant(user_id)
+    if variant:
+        items = json.loads(os.environ["PRICING_EXPERIMENT"])[variant]
+        if all({"id", "coins", "amount_cents"} <= set(i) for i in items):
+            return items
+    return packages()
+
+
+def find_package(package_id: str, user_id: Optional[int] = None) -> Optional[dict]:
+    return next((p for p in packages_for(user_id) if p["id"] == package_id), None)
 
 
 def costs() -> dict:

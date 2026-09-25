@@ -26,7 +26,7 @@ class SecurityTest(unittest.TestCase):
         limiter.reset()
 
     def register(self, email, password=PASSWORD, name="Тест"):
-        return self.client.post("/register", json={"email": email, "password": password, "full_name": name})
+        return self.client.post("/register", json={"email": email, "password": password, "full_name": name, "accept_terms": True})
 
     def token_for(self, email):
         self.assertEqual(self.register(email).status_code, 200)
