@@ -31,6 +31,7 @@ import billing_api
 import data_api
 import events
 import events_api
+import geocode_api
 import onboarding_api
 import memory
 import memory_api
@@ -72,6 +73,7 @@ app.include_router(account_api.router)
 app.include_router(data_api.router)
 app.include_router(billing_api.router)
 app.include_router(events_api.router)
+app.include_router(geocode_api.router)
 app.include_router(onboarding_api.router)
 app.include_router(memory_api.router)
 

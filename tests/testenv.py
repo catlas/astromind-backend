@@ -14,6 +14,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-dummy")  # AI моделът не 
 os.environ["AI_RATE_LIMIT_PER_HOUR"] = "2"
 os.environ["LOGIN_RATE_LIMIT_PER_15_MIN"] = "3"
 os.environ["REGISTER_RATE_LIMIT_PER_HOUR"] = "1000"
+os.environ["GEOCODE_RATE_LIMIT_PER_HOUR"] = "4"
 for key in ("RESEND_API_KEY", "SMTP_HOST", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):
     os.environ.pop(key, None)
 

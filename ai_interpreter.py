@@ -1375,7 +1375,12 @@ class AIInterpreter:
         self,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int
+        max_tokens: int,
+        *,
+        temperature: float = 0.7,
+        max_retries: int = 3,
+        timeout: Optional[float] = None,
+        add_context: bool = True,
     ) -> str:
         """
         Универсален API caller с fallback логика.
@@ -1387,6 +1392,12 @@ class AIInterpreter:
             system_prompt: Системен prompt
             user_prompt: Потребителски prompt
             max_tokens: Максимален брой токени
+            temperature: Температура на модела (по подразбиране 0.7)
+            max_retries: Опити към Ollama преди fallback към Together (по подразбиране 3)
+            timeout: Таймаут в секунди за заявка; None = стойностите по подразбиране на провайдърите
+            add_context: Добавя правилата за безопасност и паметта на потребителя.
+                Изключва се само за кратки технически заявки (напр. търсене на координати),
+                които не генерират астрологичен текст.
             
         Returns:
             Текстов отговор от AI
@@ -1394,16 +1405,16 @@ class AIInterpreter:
         Raises:
             RuntimeError: ако и двата провайдъра fail
         """
-        # Правилата за безопасност важат за всеки анализ, независимо от режима
-        system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
-        # Бележките от контролираната памет на потребителя (ако ги има и са включени)
-        user_context = memory.current_context.get()
-        if user_context:
-            user_prompt = f"{user_prompt}\n\n{user_context}"
+        if add_context:
+            # Правилата за безопасност важат за всеки анализ, независимо от режима
+            system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
+            # Бележките от контролираната памет на потребителя (ако ги има и са включени)
+            user_context = memory.current_context.get()
+            if user_context:
+                user_prompt = f"{user_prompt}\n\n{user_context}"
 
         # --- OLLAMA CLOUD ATTEMPT (Primary) ---
         if self.ollama_key and self.ollama_url:
-            max_retries = 3
             for attempt in range(1, max_retries + 1):
                 try:
                     print(f"🔄 Ollama опит {attempt}/{max_retries}...")
@@ -1413,14 +1424,14 @@ class AIInterpreter:
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
                         ],
-                        "temperature": 0.7,
+                        "temperature": temperature,
                         "max_tokens": max_tokens,
                         # Мислещите модели (напр. deepseek-v4.1-flash) иначе пишат в
                         # message.reasoning и оставят content празен / изчерпват max_tokens.
                         "reasoning_effort": "none"
                     }
 
-                    async with httpx.AsyncClient(timeout=self.ollama_timeout) as client:
+                    async with httpx.AsyncClient(timeout=timeout or self.ollama_timeout) as client:
                         ollama_response = await client.post(
                             f"{self.ollama_url}/chat/completions",
                             headers={
@@ -1473,11 +1484,11 @@ class AIInterpreter:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": 0.7,
+                "temperature": temperature,
                 "max_tokens": max_tokens
             }
             
-            async with httpx.AsyncClient(timeout=self.together_timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout or self.together_timeout) as client:
                 together_response = await client.post(
                     self.together_url,
                     headers={
