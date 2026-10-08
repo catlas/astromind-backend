@@ -3,7 +3,7 @@ FastAPI сървър за астрологично приложение
 Предоставя API endpoints за изчисляване и интерпретация на астрологични карти
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Request, status  # type: ignore
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Depends, Request, status  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 from fastapi.responses import StreamingResponse, Response  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
@@ -32,6 +32,7 @@ import data_api
 import events
 import events_api
 import geocode_api
+import mailer
 import onboarding_api
 import memory
 import memory_api
@@ -76,6 +77,9 @@ app.include_router(events_api.router)
 app.include_router(geocode_api.router)
 app.include_router(onboarding_api.router)
 app.include_router(memory_api.router)
+
+# Записва в лога дали имейлите са настроени и дали пощенският сървър е достъпен
+mailer.log_status_in_background()
 
 # Инициализация на AI интерпретатора
 ai_interpreter = get_interpreter()
@@ -960,7 +964,8 @@ class UserLogin(BaseModel):
     password: str
 
 @app.post("/register")
-async def register(user_data: UserRegister, http_request: Request, db: Session = Depends(get_db)):
+async def register(user_data: UserRegister, http_request: Request, background_tasks: BackgroundTasks,
+                   db: Session = Depends(get_db)):
     """Регистрация на нов потребител"""
     enforce(f"register:{client_ip(http_request)}", REGISTER_LIMIT_PER_HOUR, 3600, "Твърде много регистрации от този адрес.")
 
@@ -995,7 +1000,7 @@ async def register(user_data: UserRegister, http_request: Request, db: Session =
                                   description="Бонус при регистрация")
     db.commit()
     db.refresh(new_user)
-    await account_api.send_verification(new_user)
+    account_api.queue_verification(background_tasks, new_user)
     account_api._track(db, "register", new_user.id)
     return {"message": "Успешна регистрация"}
 

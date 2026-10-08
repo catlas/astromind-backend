@@ -15,7 +15,8 @@ os.environ["AI_RATE_LIMIT_PER_HOUR"] = "2"
 os.environ["LOGIN_RATE_LIMIT_PER_15_MIN"] = "3"
 os.environ["REGISTER_RATE_LIMIT_PER_HOUR"] = "1000"
 os.environ["GEOCODE_RATE_LIMIT_PER_HOUR"] = "4"
-for key in ("RESEND_API_KEY", "SMTP_HOST", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):
+for key in ("RESEND_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURITY",
+            "SMTP_VERIFY_TLS", "SMTP_TIMEOUT", "MAIL_FROM", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):
     os.environ.pop(key, None)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

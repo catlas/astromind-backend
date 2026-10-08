@@ -5,7 +5,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -62,8 +62,13 @@ def email_taken(db: Session, email: str, exclude_user_id: Optional[int] = None) 
     return db.query(q.exists()).scalar()
 
 
-async def send_verification(user: User):
-    await mailer.send_verification_email(user.email, create_purpose_token("verify", user))
+def queue_verification(background: BackgroundTasks, user: User):
+    """
+    Писмото за потвърждение се изпраща след отговора към потребителя: бавен или
+    недостъпен пощенски сървър не бива да забавя регистрацията. Токенът се създава
+    веднага, докато данните на потребителя са заредени.
+    """
+    background.add_task(mailer.send_verification_email, user.email, create_purpose_token("verify", user))
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +91,8 @@ def me(current_user: User = Depends(get_current_user)):
 
 
 @router.patch("/me")
-async def update_me(data: UpdateMe, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def update_me(data: UpdateMe, background_tasks: BackgroundTasks,
+                    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if data.full_name is not None:
         full_name = data.full_name.strip()
         if not (1 <= len(full_name) <= 100):
@@ -108,7 +114,7 @@ async def update_me(data: UpdateMe, current_user: User = Depends(get_current_use
     db.commit()
     db.refresh(current_user)
     if email_changed:
-        await send_verification(current_user)
+        queue_verification(background_tasks, current_user)
     # Токенът съдържа имейла, затова връщаме нов
     return {**user_payload(current_user), "access_token": create_user_token(current_user)}
 
@@ -197,9 +203,14 @@ def verify_email(data: TokenIn, db: Session = Depends(get_db)):
 async def resend_verification(current_user: User = Depends(get_current_user)):
     if current_user.email_verified:
         return {"message": "Имейлът вече е потвърден", "sent": False}
+    if not mailer.is_configured():
+        raise HTTPException(status_code=503, detail="Изпращането на имейли още не е активирано. Опитайте по-късно.")
     enforce(f"resend-verify:{current_user.id}", 3, 3600, "Вече изпратихме няколко писма.")
-    await send_verification(current_user)
-    return {"message": "Изпратихме ново писмо за потвърждение", "sent": mailer.is_configured()}
+    # Тук чакаме резултата, за да не твърдим, че писмото е изпратено, когато не е
+    sent = await mailer.send_verification_email(current_user.email, create_purpose_token("verify", current_user))
+    if not sent:
+        raise HTTPException(status_code=502, detail="Не успяхме да изпратим писмото. Опитайте отново след малко.")
+    return {"message": "Изпратихме ново писмо за потвърждение", "sent": True}
 
 
 # ---------------------------------------------------------------------------
@@ -216,13 +227,15 @@ class ResetPassword(BaseModel):
 
 
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPassword, request: Request, db: Session = Depends(get_db)):
+async def forgot_password(data: ForgotPassword, request: Request, background_tasks: BackgroundTasks,
+                          db: Session = Depends(get_db)):
     email = normalize_email(data.email)
     enforce(f"forgot:{client_ip(request)}", 5, 3600, "Твърде много заявки.")
     enforce(f"forgot-email:{email}", 3, 3600, "Твърде много заявки за този имейл.")
     user = find_user_by_email(db, data.email)
     if user:
-        await mailer.send_password_reset_email(user.email, create_purpose_token("reset", user))
+        # Във фонов режим: отговорът е еднакво бърз и за регистриран, и за нерегистриран имейл
+        background_tasks.add_task(mailer.send_password_reset_email, user.email, create_purpose_token("reset", user))
     # Един и същ отговор, за да не се разкрива дали имейлът е регистриран
     return {"message": "Ако имейлът е регистриран, ще получите писмо с линк за нова парола."}
 
