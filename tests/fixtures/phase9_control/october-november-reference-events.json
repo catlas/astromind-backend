@@ -1,0 +1,122 @@
+[
+  {
+    "event": "Venus retrograde",
+    "utc": "2026-10-03T07:15:51.306153+00:00",
+    "sofia": "2026-10-03T10:15:51.306153+03:00",
+    "vienna": "2026-10-03T09:15:51.306153+02:00",
+    "position": "Скорпион 8°29′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "New Moon",
+    "utc": "2026-10-10T15:50:06.848145+00:00",
+    "sofia": "2026-10-10T18:50:06.848145+03:00",
+    "vienna": "2026-10-10T17:50:06.848145+02:00",
+    "position": "Везни 17°22′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Jupiter square natal Saturn",
+    "utc": "2026-10-12T20:20:16.941833+00:00",
+    "sofia": "2026-10-12T23:20:16.941833+03:00",
+    "vienna": "2026-10-12T22:20:16.941833+02:00",
+    "position": "Лъв 21°36′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Pluto direct",
+    "utc": "2026-10-16T02:40:15.783692+00:00",
+    "sofia": "2026-10-16T05:40:15.783692+03:00",
+    "vienna": "2026-10-16T04:40:15.783692+02:00",
+    "position": "Водолей 3°04′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Sun Scorpio",
+    "utc": "2026-10-23T09:37:56.641846+00:00",
+    "sofia": "2026-10-23T12:37:56.641846+03:00",
+    "vienna": "2026-10-23T11:37:56.641846+02:00",
+    "position": "Скорпион 0°00′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Mercury retrograde",
+    "utc": "2026-10-24T07:12:48.054200+00:00",
+    "sofia": "2026-10-24T10:12:48.054200+03:00",
+    "vienna": "2026-10-24T09:12:48.054200+02:00",
+    "position": "Скорпион 20°59′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Full Moon",
+    "utc": "2026-10-26T04:11:48.068849+00:00",
+    "sofia": "2026-10-26T06:11:48.068849+02:00",
+    "vienna": "2026-10-26T05:11:48.068849+01:00",
+    "position": "Телец 2°46′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Mars conjunct natal Mercury",
+    "utc": "2026-10-28T08:22:34.792784+00:00",
+    "sofia": "2026-10-28T10:22:34.792784+02:00",
+    "vienna": "2026-10-28T09:22:34.792784+01:00",
+    "position": "Лъв 16°46′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Mars square natal Saturn",
+    "utc": "2026-11-07T01:11:43.990173+00:00",
+    "sofia": "2026-11-07T03:11:43.990173+02:00",
+    "vienna": "2026-11-07T02:11:43.990173+01:00",
+    "position": "Лъв 21°36′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "New Moon",
+    "utc": "2026-11-09T07:02:08.402710+00:00",
+    "sofia": "2026-11-09T09:02:08.402710+02:00",
+    "vienna": "2026-11-09T08:02:08.402710+01:00",
+    "position": "Скорпион 16°53′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Mercury direct",
+    "utc": "2026-11-13T15:53:56.901856+00:00",
+    "sofia": "2026-11-13T17:53:56.901856+02:00",
+    "vienna": "2026-11-13T16:53:56.901856+01:00",
+    "position": "Скорпион 5°02′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Venus direct",
+    "utc": "2026-11-14T00:27:30.915528+00:00",
+    "sofia": "2026-11-14T02:27:30.915528+02:00",
+    "vienna": "2026-11-14T01:27:30.915528+01:00",
+    "position": "Везни 22°52′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Sun Sagittarius",
+    "utc": "2026-11-22T07:23:22.267456+00:00",
+    "sofia": "2026-11-22T09:23:22.267456+02:00",
+    "vienna": "2026-11-22T08:23:22.267456+01:00",
+    "position": "Стрелец 0°00′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Full Moon",
+    "utc": "2026-11-24T14:53:37.098999+00:00",
+    "sofia": "2026-11-24T16:53:37.098999+02:00",
+    "vienna": "2026-11-24T15:53:37.098999+01:00",
+    "position": "Близнаци 2°20′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  },
+  {
+    "event": "Mars Virgo",
+    "utc": "2026-11-25T23:37:04.703980+00:00",
+    "sofia": "2026-11-26T01:37:04.703980+02:00",
+    "vienna": "2026-11-26T00:37:04.703980+01:00",
+    "position": "Дева 0°00′",
+    "basis": "independent Moshier via Swiss Ephemeris"
+  }
+]

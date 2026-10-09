@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from sqlalchemy import func  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 import json
-import asyncio
 import os
 import traceback
 import uuid
@@ -20,7 +19,7 @@ from dotenv import load_dotenv
 import engine
 from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
-import factpack
+import period_report
 from limits import forecast_period_error
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
@@ -120,73 +119,6 @@ def require_docx_quota(current_user: User = Depends(get_current_user)) -> User:
     """Изисква вход и ограничава генерирането на DOCX файлове."""
     enforce(f"docx:{current_user.id}", DOCX_LIMIT_PER_HOUR, 3600, "Достигнахте лимита за DOCX файлове.")
     return current_user
-
-
-def _filter_and_limit_events(events: List[Dict], max_events: int = 400) -> List[Dict]:
-    """
-    Филтрира и ограничава timeline events за да намали размера на заявката към AI.
-    
-    Приоритет:
-    1. Eclipses (най-важни)
-    2. Retrogrades (Stationary Retrograde/Direct)
-    3. Lunations (New Moon/Full Moon)
-    4. Major Transits (Jupiter, Saturn, Uranus, Neptune, Pluto към важни планети)
-    5. Minor Transits (Mars към важни планети)
-    
-    Args:
-        events: Пълен списък от събития
-        max_events: Максимален брой събития (по подразбиране 120)
-    
-    Returns:
-        Филтриран и ограничен списък от събития
-    """
-    if len(events) <= max_events:
-        return events
-    
-    # Приоритети: по-висок номер = по-висок приоритет
-    priority_map = {
-        "ECLIPSE": 5,
-        "RETROGRADE": 4,
-        "LUNATION": 3,
-        "TRANSIT": 1
-    }
-    
-    # Важни планети за транзити (по-висок приоритет)
-    important_natal_planets = {"Sun", "Moon", "Mercury", "Venus", "Mars", "Ascendant", "MC"}
-    important_transit_planets = {"Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"}
-    
-    def get_event_priority(event: Dict) -> int:
-        """Връща приоритет на събитие (по-висок = по-важно)"""
-        event_type = event.get("type", "")
-        base_priority = priority_map.get(event_type, 0)
-        
-        # Ако е транзит, проверяваме важността на планетите
-        if event_type == "TRANSIT":
-            natal_planet = event.get("natal_planet", "")
-            transit_planet = event.get("planet", "")
-            
-            # Major Transits (Jupiter/Saturn/Uranus/Neptune/Pluto към важни планети)
-            if transit_planet in important_transit_planets and natal_planet in important_natal_planets:
-                return base_priority + 2
-            # Mars към важни планети
-            elif transit_planet == "Mars" and natal_planet in important_natal_planets:
-                return base_priority + 1
-            # Други транзити
-            else:
-                return base_priority
-        
-        return base_priority
-    
-    # Сортиране по приоритет (най-висок първо), след това по дата
-    sorted_events = sorted(events, key=lambda x: (-get_event_priority(x), x.get("date", "")))
-    
-    # Вземане на най-важните събития
-    filtered_events = sorted_events[:max_events]
-    
-    # Сортиране отново по дата за финален списък
-    filtered_events.sort(key=lambda x: x.get("date", ""))
-    
-    return filtered_events
 
 
 # Pydantic модели за заявки
@@ -433,20 +365,15 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 except Exception as e:
                     print(f"Warning: Could not calculate partner natal aspects for streaming: {e}")
             
-            # Scan period for timeline events
-            # For dynamic forecast, use target_date as start (or current date if not provided)
-            # NEVER use birth date (request.date) as start_date for forecast!
+            # Календарът на периода (Фаза 9): точните моменти се изчисляват веднъж за целия период.
+            # За начало на прогнозата се ползва target_date (или днешната дата), НИКОГА датата на раждане.
             if request.target_date:
                 start_date = request.target_date
             else:
-                # Default to current date if no target_date provided
-                from datetime import datetime
                 start_date = datetime.now().strftime("%Y-%m-%d")
-            
             end_date = request.end_date
-            
-            scanner = TransitScanner()
-            all_events = scanner.scan_period(
+
+            calendar = TransitScanner(engine_instance=engine_instance).build_calendar(
                 natal_chart=natal_chart_data,
                 start_date=start_date,
                 end_date=end_date,
@@ -454,18 +381,8 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 lon=request.lon,
                 partner_chart=partner_chart_data
             )
-            
-            timeline_events = _filter_and_limit_events(all_events)
-            
-            # Group events by month
-            from collections import defaultdict
-            events_by_month = defaultdict(list)
-            for event in timeline_events:
-                month_key = event['date'][:7]  # "YYYY-MM"
-                events_by_month[month_key].append(event)
-            
-            sorted_months = sorted(events_by_month.keys())
-            
+            sorted_months = calendar.months_with_events()
+
             if not sorted_months:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Няма събития за анализиране в избрания период'}, ensure_ascii=False)}\n\n"
                 return
@@ -476,18 +393,11 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             except HTTPException as e:
                 yield f"data: {json.dumps({'type': 'error', 'code': 402, 'message': e.detail}, ensure_ascii=False)}\n\n"
                 return
-            
-            # Month names in Bulgarian
-            month_names = {
-                "01": "Януари", "02": "Февруари", "03": "Март", "04": "Април",
-                "05": "Май", "06": "Юни", "07": "Юли", "08": "Август",
-                "09": "Септември", "10": "Октомври", "11": "Ноември", "12": "Декември"
-            }
-            
+
             # Send initial metadata with natal chart data
-            start_month = f"{month_names.get(sorted_months[0][5:7], sorted_months[0][5:7])} {sorted_months[0][:4]}"
-            end_month = f"{month_names.get(sorted_months[-1][5:7], sorted_months[-1][5:7])} {sorted_months[-1][:4]}"
-            
+            start_month = period_report.month_title(sorted_months[0])
+            end_month = period_report.month_title(sorted_months[-1])
+
             # Calculate transit chart for the start date (target_date) for visualization
             # This is needed especially when partner is enabled to show the transit chart
             transit_chart_data = None
@@ -497,7 +407,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                     transit_date = start_date
                     # Default to noon (12:00) for transit chart
                     transit_time = "12:00:00"
-                    
+
                     transit_chart_data = engine_instance.calculate_chart(
                         date=transit_date,
                         time=transit_time,
@@ -506,7 +416,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                     )
                 except Exception as e:
                     print(f"Warning: Could not calculate transit chart for start date: {e}")
-            
+
             start_event_data = {
                 'type': 'start',
                 'total_months': len(sorted_months),
@@ -518,9 +428,9 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 'natal_aspects': natal_aspects_data,
                 'partner_natal_aspects': partner_natal_aspects_data
             }
-            
+
             yield f"data: {json.dumps(start_event_data, ensure_ascii=False)}\n\n"
-            
+
             mem_db = SessionLocal()
             try:
                 memory_used = memory.activate(
@@ -529,42 +439,37 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             finally:
                 mem_db.close()
 
-            # Process each month
-            month_sections = []
-            flagged = []
-            for idx, month in enumerate(sorted_months):
-                monthly_events = events_by_month[month]
-                month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
-                
-                # Send month_start event
-                yield f"data: {json.dumps({'type': 'month_start', 'month': month_display, 'index': idx, 'total': len(sorted_months)}, ensure_ascii=False)}\n\n"
-                
-                # Process month with AI interpreter using callback
-                monthly_text = await ai_interpreter._process_monthly_chunk(
-                    month=month,
-                    monthly_events=monthly_events,
-                    report_type=request.report_type or "general",
-                    language="bg",
+            # Месеците и общият преглед. Провал (след един повторен опит) = без запис и без такса.
+            final = None
+            try:
+                async for step in period_report.run_period_report(
+                    ai_interpreter,
+                    calendar=calendar,
                     natal_chart=natal_chart_data,
                     partner_chart=partner_chart_data,
-                    user_display_name=factpack.display_name(request.name, factpack.FIRST_PERSON_DEFAULT),
-                    partner_display_name=factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT),
+                    report_type=request.report_type or "general",
+                    user_name=request.name,
+                    partner_name=request.partner_name if partner_chart_data else None,
                     question=request.question or "",
-                    has_partner=bool(partner_chart_data),
                     gender=request.gender,
                     partner_gender=request.partner_gender,
-                )
-                
-                monthly_text, month_flags = safety.check_output(monthly_text, request.report_type or "general")
-                flagged.extend(month_flags)
-                month_sections.append(f"<h2>{month_display}</h2>\n{monthly_text}")
+                ):
+                    if step["type"] == "finished":
+                        final = step
+                        continue
+                    yield f"data: {json.dumps(step, ensure_ascii=False)}\n\n"
+            except period_report.ForecastGenerationError as failure:
+                print(f"⚠️ /interpret-stream: прогнозата не завърши ({failure})")
+                fail_db = SessionLocal()
+                try:
+                    events.track(fail_db, "analysis_failed", current_user.id,
+                                 {"type": request.report_type or "general", "dynamic": True, "stage": failure.stage})
+                finally:
+                    fail_db.close()
+                yield f"data: {json.dumps({'type': 'error', 'code': 502, 'message': period_report.USER_MESSAGE}, ensure_ascii=False)}\n\n"
+                return
+            flagged = final["flags"]
 
-                # Send month_complete event
-                yield f"data: {json.dumps({'type': 'month_complete', 'month': month_display, 'text': monthly_text, 'index': idx, 'total': len(sorted_months)}, ensure_ascii=False)}\n\n"
-                
-                # Small delay to prevent overwhelming the client
-                await asyncio.sleep(0.1)
-            
             # Запазване в историята (собствена сесия: генераторът живее след края на зависимостите)
             report_id = None
             coins_charged = 0
@@ -573,7 +478,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             try:
                 report = data_api.save_report(
                     db, db.get(User, current_user.id),
-                    content="\n\n".join(month_sections),
+                    content=period_report.saved_content(final["overview"], final["month_texts"]),
                     report_type=request.report_type or "general",
                     profile_name=request.name,
                     label=data_api.report_label(request.report_type or "general", request.partner_name,
@@ -672,8 +577,8 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                 lon=request.partner_lon
             )
         
-        # Dynamic Forecast Mode (Timeline Scanner)
-        timeline_events = None
+        # Dynamic Forecast Mode (точен календар)
+        timeline_calendar = None
         if request.is_dynamic:
             if not request.end_date:
                 raise HTTPException(
@@ -709,19 +614,15 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                     lon=request.partner_lon
                 )
             
-            # Инициализация на scanner
-            scanner = TransitScanner()
-            all_events = scanner.scan_period(
+            # Точният календар на периода (Фаза 9); месеците и общият преглед се правят в ai_interpreter
+            timeline_calendar = TransitScanner().build_calendar(
                 natal_chart=natal_chart_data,
                 start_date=start_date,
                 end_date=end_date,
                 lat=request.lat,
                 lon=request.lon,
-                partner_chart=partner_chart_data_for_timeline  # Предаваме partner chart за Relationship Forecast Mode
+                partner_chart=partner_chart_data_for_timeline
             )
-            
-            # Филтриране и ограничаване на събитията за да намалим токените
-            timeline_events = _filter_and_limit_events(all_events)
         
         # Условна логика за транзитна карта (само ако НЕ е Dynamic Mode)
         transit_chart_data = None
@@ -794,7 +695,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                 language="bg",  # По подразбиране български
                 report_type=request.report_type or "general",
                 user_name=request.name,
-                timeline_events=timeline_events,  # Timeline events за Dynamic Forecast Mode
+                calendar=timeline_calendar,  # Календарът на периода (Dynamic Forecast Mode)
                 gender=request.gender,
                 partner_gender=request.partner_gender,
             )
@@ -895,6 +796,11 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
     except HTTPException:
         # Умишлени грешки (напр. липсващ end_date) минават непроменени
         raise
+    except period_report.ForecastGenerationError as failure:
+        print(f"⚠️ /interpret: прогнозата не завърши ({failure})")
+        events.track(db, "analysis_failed", current_user.id,
+                     {"type": request.report_type or "general", "dynamic": True, "stage": failure.stage})
+        raise HTTPException(status_code=502, detail=period_report.USER_MESSAGE)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Невалидни входни данни: {str(e)}")
     except Exception as e:

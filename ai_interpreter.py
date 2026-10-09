@@ -8,12 +8,13 @@ import memory
 import os
 import asyncio
 from typing import Dict, Optional, List, Tuple
-from collections import defaultdict
 import httpx
 from dotenv import load_dotenv
 from engine import AstrologyEngine
 from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB, calculate_natal_aspects
 import factpack
+import period_report
+from scanner import PeriodCalendar
 
 # Зареждане на environment променливи
 load_dotenv()
@@ -1707,7 +1708,7 @@ class AIInterpreter:
             "   - EVERY mention of astrological houses MUST use \"дом\"\n\n"
             "5. **Tone:** Professional, empathetic, and grammatically correct in Bulgarian.\n\n"
             "6. **TERM \"Съвпад\":** it means ONLY a conjunction (0°). Never write \"съвпад\" for a trine, square, sextile or opposition, "
-            "and never use it to say that an aspect is exact; give the orb or say \"почти точен\" instead.\n\n"
+            "and never use it to say that an aspect is exact. Say \"точен\" only when the data gives an exact moment; otherwise give the orb from the data or say \"почти точен\".\n\n"
             "7. **NO PERCENTAGES:** never give percentages or numeric probabilities for life events or decisions; use plain words "
             "(for example благоприятен, смесен, затруднен период).\n\n"
             "8. **NO INTERNAL LABELS:** never print instruction labels, field names or section markers "
@@ -2066,16 +2067,21 @@ class AIInterpreter:
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"CRITICAL DATA RULES:\n"
             f"- You are an interpreter of RIGOROUS, PRE-CALCULATED ASTROLOGICAL EVENTS. Do NOT guess or invent aspects or events.\n"
-            f"- The JSON 'timeline_events' already contains the EXACT aspect name, angle and orb (fields 'aspect', 'angle_deg' and 'orb').\n"
+            f"- The JSON 'timeline_events' is an EXACT calendar computed by the backend. Point events (INGRESS, RETROGRADE, LUNATION, ECLIPSE) have one 'when': local time in the stated zone, daylight saving included. Aspect rows (type TRANSIT) are ONE row per aspect, not one per day; each has the aspect name and 'angle_deg'.\n"
+            f"- For an aspect row: 'exact' lists the exact moments inside the period (a slow planet that turns retrograde can reach the aspect more than once; 'motion' says whether it moves direct or retrograde); 'exact_this_month' are the exact moments in the month you analyse; 'active_from' and 'active_to' are the dates between which the aspect is within orb (it is strongest near the exact moment); 'state_in_month' is exact_in_month, approaching (exact later), separating (exact earlier) or active (no exact moment in the period).\n"
+            f"- When 'exact' is empty the aspect does NOT become exact in this period: describe it only as active or approaching, using 'active_from', 'active_to' and 'closest_in_period' (the smallest orb inside the period; 'when' is given only when it is a turning point of the planet, and 'at' says that it is the start or the end of the period, which is not an event). If 'turns_back' is true the planet changes direction before reaching the exact aspect, so it never becomes exact in this approach. NEVER write that such an aspect is exact.\n"
+            f"- 'exact_outside_period' are exact moments before or after the period: mention them only as context, never as events of this month.\n"
+            f"- Use dates and times exactly as given in 'when' and 'exact' (local time, one zone for the whole report). Never shift a date, never convert to UTC, never invent a time. Write dates in Bulgarian, for example \"21 ноември, 16:27\".\n"
+            f"- Events dated before REPORT DATE are already in the past; later ones are upcoming. Never describe a future event as if it had already happened.\n"
             f"- Do NOT calculate new aspects from planet positions. ONLY interpret the aspects explicitly listed in the events.\n"
             f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context and how transits interact with existing natal patterns. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
-            f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes.\n"
+            f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes. The Moon's passages through the signs are not part of the calendar.\n"
             f"- **IMPORTANT: RE-INGRESS EVENTS ARE VALID**: If a planet enters a sign, becomes retrograde and returns to the previous sign, then becomes direct and enters the new sign again (re-ingress), this is a REAL and VALID astrological event. Both the first ingress and any re-ingress events are significant and should be mentioned. Mention each such ingress only with the dates that are listed in the events.\n"
             f"- **CRITICAL: LUNATION EVENTS (Full Moon, New Moon) DO NOT INCLUDE HOUSE INFORMATION**: Events with type 'LUNATION' (Full Moon, New Moon) or 'ECLIPSE' contain only the sign position of the lunation, but do NOT include house placement data. DO NOT guess or calculate house placements for these events. You may mention the sign and its general meaning, but DO NOT claim which house the lunation activates unless house information is explicitly provided in the event data.\n"
             f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
             f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
-            f"- House facts in monthly events are PRE-CALCULATED and are TWO DIFFERENT things: 'transit_planet_natal_house' is the house of the target person's NATAL chart where the transiting planet is now; 'natal_planet_natal_house' is the natal house of the natal planet that is aspected. Never swap them and never invent a house.\n"
-            f"- Focus on SPECIFIC dates within the month provided.\n\n"
+            f"- House facts in monthly events are PRE-CALCULATED and are TWO DIFFERENT things: 'transit_planet_natal_house' is the house of the target person's NATAL chart in which the transiting planet stands at the exact aspect; 'natal_planet_natal_house' is the natal house of the natal planet that is aspected. Never swap them and never invent a house.\n"
+            f"- Focus on the events of the month provided. The other months are analysed separately and summed up in an overview.\n\n"
         )
         
         # Add mandatory question answer section if user_question exists
@@ -2170,90 +2176,204 @@ class AIInterpreter:
         has_partner: bool,
         gender: Optional[str] = None,
         partner_gender: Optional[str] = None,
+        zone: str = "UTC",
+        report_date: str = "",
+        period: Optional[Tuple[str, str]] = None,
     ) -> str:
         """
-        Process a single month's events and generate AI interpretation.
+        Месечният анализ на един месец от календара.
 
-        Returns:
-            Monthly forecast text or error message
+        При грешка хвърля изключение. Преди Фаза 9 грешката се връщаше като текст "*Грешка при генериране...*",
+        който влизаше в отчета, а отчетът се записваше и таксуваше. Сега period_report решава за повторен опит
+        и за неуспешен отчет (без запис и без такса).
         """
         # Ensure has_partner is properly set (defensive check)
         has_partner_flag = bool(has_partner and partner_chart is not None)
 
-        try:
-            # Calculate house rulers for the natal chart
-            houses = natal_chart.get("houses", {})
-            house_rulers = self.engine.get_house_rulers(houses) if houses else {}
+        # Calculate house rulers for the natal chart
+        houses = natal_chart.get("houses", {})
+        house_rulers = self.engine.get_house_rulers(houses) if houses else {}
 
-            # Calculate house rulers for partner chart if present
-            partner_house_rulers = None
-            if partner_chart:
-                partner_houses = partner_chart.get("houses", {})
-                partner_house_rulers = self.engine.get_house_rulers(partner_houses) if partner_houses else {}
+        # Calculate house rulers for partner chart if present
+        partner_house_rulers = None
+        if partner_chart:
+            partner_houses = partner_chart.get("houses", {})
+            partner_house_rulers = self.engine.get_house_rulers(partner_houses) if partner_houses else {}
 
-            # Build system prompt
-            system_prompt = self._build_dynamic_system_prompt(
-                report_type=report_type,
-                language=language,
-                natal_chart=natal_chart,
-                partner_chart=partner_chart,
-                user_display_name=user_display_name,
-                partner_display_name=partner_display_name,
-                has_partner=has_partner_flag,
-                user_question=question,
-                house_rulers=house_rulers,
-                partner_house_rulers=partner_house_rulers
-            )
+        # Build system prompt
+        system_prompt = self._build_dynamic_system_prompt(
+            report_type=report_type,
+            language=language,
+            natal_chart=natal_chart,
+            partner_chart=partner_chart,
+            user_display_name=user_display_name,
+            partner_display_name=partner_display_name,
+            has_partner=has_partner_flag,
+            user_question=question,
+            house_rulers=house_rulers,
+            partner_house_rulers=partner_house_rulers
+        )
 
-            user_prompt = f"PERIOD: {month}\n"
-            user_prompt += f"FOCUS: {report_type.upper()}\n\n"
-            user_prompt += factpack.identity_section(
-                user_display_name, gender,
-                partner_display_name if has_partner_flag else None, partner_gender)
+        user_prompt = f"PERIOD: {month}\n"
+        user_prompt += f"FOCUS: {report_type.upper()}\n"
+        if report_date:
+            user_prompt += f"REPORT DATE: {report_date} ({zone})\n"
+        if period:
+            user_prompt += f"WHOLE REPORT PERIOD: {period[0]} to {period[1]} ({zone})\n"
+        user_prompt += "\n"
+        user_prompt += factpack.identity_section(
+            user_display_name, gender,
+            partner_display_name if has_partner_flag else None, partner_gender)
 
-            user_prompt += self._natal_block(user_display_name, natal_chart)
-            if has_partner_flag:
-                user_prompt += self._natal_block(partner_display_name, partner_chart)
-                user_prompt += self._overlay_blocks(natal_chart, partner_chart, user_display_name, partner_display_name)
-                user_prompt += factpack.section(
-                    "SYNASTRY ASPECTS (CALCULATED)",
-                    f"Mutual aspects between {user_display_name} and {partner_display_name}; every entry names the owner of "
-                    f"each planet. Use them directly - do not recalculate or assume aspects.",
-                    factpack.synastry_aspects(natal_chart, partner_chart, user_display_name, partner_display_name))
-
-            who = f"target 'User' = {user_display_name}"
-            if has_partner_flag:
-                who += f"; target 'Partner' = {partner_display_name}"
+        user_prompt += self._natal_block(user_display_name, natal_chart)
+        if has_partner_flag:
+            user_prompt += self._natal_block(partner_display_name, partner_chart)
+            user_prompt += self._overlay_blocks(natal_chart, partner_chart, user_display_name, partner_display_name)
             user_prompt += factpack.section(
-                f"TIMELINE EVENTS FOR {month}",
-                f"{who}. For TRANSIT events: 'transit_planet_natal_house' is the house of that person's NATAL chart where the "
-                f"transiting planet is now; 'natal_planet_natal_house' is the natal house of the aspected natal planet.",
-                monthly_events)
+                "SYNASTRY ASPECTS (CALCULATED)",
+                f"Mutual aspects between {user_display_name} and {partner_display_name}; every entry names the owner of "
+                f"each planet. Use them directly - do not recalculate or assume aspects.",
+                factpack.synastry_aspects(natal_chart, partner_chart, user_display_name, partner_display_name))
 
-            if question:
-                user_prompt += f"User Question: {question}\n\n"
+        who = f"target 'User' = {user_display_name}"
+        if has_partner_flag:
+            who += f"; target 'Partner' = {partner_display_name}"
+        user_prompt += factpack.section(
+            f"TIMELINE EVENTS FOR {month}",
+            f"{who}. All times are local time in {zone} (daylight saving included). Point events have one 'when'. "
+            f"Aspect rows (TRANSIT) are one row per aspect, with 'exact' moments and an 'active_from'/'active_to' window. "
+            f"For TRANSIT events: 'transit_planet_natal_house' is the house of that person's NATAL chart in which the "
+            f"transiting planet stands at the exact aspect; 'natal_planet_natal_house' is the natal house of the aspected "
+            f"natal planet.",
+            monthly_events)
 
-            if has_partner_flag:
-                user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes for BOTH {user_display_name} and {partner_display_name}. Analyze how the astrological events affect each person individually AND their relationship dynamics together."
-            else:
-                user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
+        if question:
+            user_prompt += f"User Question: {question}\n\n"
 
-            # Call AI API (Ollama primary → Together fallback)
-            try:
-                content = await self._call_api(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    max_tokens=self.max_output_tokens
-                )
-                return content
-            except Exception as e:
-                error_msg = str(e)
-                return f"*Грешка при генериране на прогноза за {month}: {error_msg}*"
+        if has_partner_flag:
+            user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes for BOTH {user_display_name} and {partner_display_name}. Analyze how the astrological events affect each person individually AND their relationship dynamics together."
+        else:
+            user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
 
-        except Exception as e:
-            error_msg = str(e)
-            # Avoid exposing internal variable names in error messages
-            return f"*Грешка при генериране на прогноза за {month}: {error_msg}*"
+        # Call AI API (Ollama primary → Together fallback)
+        return await self._call_api(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=self.max_output_tokens
+        )
+
+    async def compose_period_overview(
+        self,
+        *,
+        calendar_rows: List[Dict],
+        month_texts: List[Tuple[str, str]],
+        report_type: str,
+        user_display_name: str,
+        partner_display_name: str,
+        has_partner: bool,
+        question: str,
+        gender: Optional[str],
+        partner_gender: Optional[str],
+        zone: str,
+        report_date: str,
+        period: Tuple[str, str],
+    ) -> str:
+        """
+        Общ преглед на периода (Фаза 9): една AI заявка след месеците. Получава цялия календар и вече написаните
+        месеци и връща един съгласуван текст: най-важното, силните моменти, моментите за внимание и план по дати.
+        Не получава натални карти: фактите са в календара, а обосновката е в месечните текстове.
+        """
+        theme = THEME_FOCUS.get(report_type, THEME_FOCUS["general"])
+        people = "two people" if has_partner else "one person"
+        pair_line = (" For two people say what each of them should do and what they should do together."
+                     if has_partner else "")
+        words = 450 if has_partner else 350
+        system_prompt = (
+            "MODE: PERIOD OVERVIEW\n"
+            "You are an expert astrologer who writes the OVERALL SUMMARY of a multi-month forecast. The monthly "
+            "analyses are already written (section MONTHLY ANALYSES). Combine them, together with the exact PERIOD "
+            f"CALENDAR, into ONE consistent picture of the whole period for {people}.\n"
+            f"REPORT THEME: {theme} Keep the whole overview on this theme and on the user's question.\n\n"
+            "DATA RULES:\n"
+            "- Facts come ONLY from the section 'PERIOD CALENDAR (CALCULATED)': dates, times, aspects, signs and natal "
+            "houses exactly as given. Never invent, shift or round a date or a time. Never describe an aspect as exact "
+            "unless its 'exact' list contains that moment.\n"
+            f"- All times are local time in {zone}, daylight saving included. Write dates in Bulgarian, for example "
+            "\"21 ноември, 16:27\".\n"
+            "- 'exact' are the exact moments inside the period; 'active_from' and 'active_to' are the dates between "
+            "which the aspect is within orb; 'closest_in_period' (smallest orb inside the period) and 'turns_back' appear when the "
+            "aspect never becomes exact; 'exact_outside_period' may be mentioned only as context.\n"
+            "- Events dated before REPORT DATE are already in the past; later ones are upcoming. Never describe a "
+            "future event as if it had already happened.\n"
+            "- Do not introduce any event or aspect that is in neither the calendar nor the monthly analyses.\n"
+            "- The monthly analyses may be imperfect. Where one of them contradicts the calendar, follow the calendar. "
+            "Where the months seem to disagree with each other, resolve it with the calendar and say in one sentence "
+            "why the windows differ.\n"
+            "- Do not repeat the monthly analyses: summarize and connect them.\n\n"
+            "STRUCTURE (Bulgarian bold headings, no numbering, no instruction labels in the output):\n"
+            "**Накратко**: 2-3 sentences with the answer to the user's question (if there is one) and the general tone "
+            "of the period.\n"
+            "**Най-силни моменти**: 3-5 bullets: the date (and the time when it matters), what happens and why it "
+            "matters.\n"
+            "**Моменти за повече внимание**: 2-4 bullets.\n"
+            f"**Съгласуван план**: 4-6 short bullets in chronological order.{pair_line}\n"
+            f"LENGTH: at most about {words} words. Finish every sentence.\n"
+        )
+        system_prompt += self._get_bulgarian_language_rules()
+
+        user_prompt = f"REPORT DATE: {report_date} ({zone})\n"
+        user_prompt += f"PERIOD: {period[0]} to {period[1]} ({zone})\n"
+        user_prompt += f"FOCUS: {report_type.upper()}\n\n"
+        user_prompt += factpack.identity_section(
+            user_display_name, gender, partner_display_name if has_partner else None, partner_gender)
+        who = f"target 'User' = {user_display_name}"
+        if has_partner:
+            who += f"; target 'Partner' = {partner_display_name}"
+        user_prompt += factpack.section(
+            "PERIOD CALENDAR (CALCULATED)",
+            f"{who}. All times are local time in {zone}. Point events have one 'when'. Aspect rows (TRANSIT) are one "
+            f"row per aspect with 'exact' moments and an 'active_from'/'active_to' window; 'transit_planet_natal_house' "
+            f"is the house of that person's NATAL chart in which the transiting planet stands at the exact aspect.",
+            calendar_rows)
+        user_prompt += "--- MONTHLY ANALYSES (already written; for consistency only, do not repeat them) ---\n"
+        for title, text in month_texts:
+            user_prompt += f"### {title}\n{text}\n\n"
+        if question:
+            user_prompt += f"User Question: {question}\n\n"
+        user_prompt += "Write the overview in Bulgarian."
+
+        return await self._call_api(system_prompt=system_prompt, user_prompt=user_prompt, max_tokens=4000)
+
+    async def _interpret_period(
+        self,
+        *,
+        calendar: PeriodCalendar,
+        natal_chart: Dict,
+        partner_chart: Optional[Dict],
+        question: str,
+        report_type: str,
+        user_name: Optional[str],
+        partner_name: Optional[str],
+        language: str,
+        gender: Optional[str],
+        partner_gender: Optional[str],
+    ) -> str:
+        """Целият отчет за период като един текст: общ преглед и месеци. Хвърля ForecastGenerationError."""
+        if not calendar.months_with_events():
+            return "Няма събития за анализиране в избрания период."
+        final: Optional[Dict] = None
+        async for event in period_report.run_period_report(
+                self, calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart,
+                report_type=report_type, user_name=user_name, partner_name=partner_name, question=question,
+                gender=gender, partner_gender=partner_gender, language=language):
+            if event["type"] == "finished":
+                final = event
+        if final is None:
+            raise period_report.ForecastGenerationError("period")
+        return period_report.markdown_report(
+            final["overview"], final["month_texts"], has_partner=partner_chart is not None, question=question,
+            user_display=factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT),
+            partner_display=factpack.display_name(partner_name, factpack.SECOND_PERSON_DEFAULT))
 
     async def interpret_chart(
         self,
@@ -2266,7 +2386,7 @@ class AIInterpreter:
         language: str = "bg",
         report_type: str = "general",
         user_name: Optional[str] = None,
-        timeline_events: Optional[List[Dict]] = None,
+        calendar: Optional[PeriodCalendar] = None,
         gender: Optional[str] = None,
         partner_gender: Optional[str] = None,
     ) -> str:
@@ -2281,6 +2401,7 @@ class AIInterpreter:
             question: Конкретен въпрос от потребителя (опционално)
             target_date: Дата на транзитната карта
             language: Език за отговора (по подразбиране "bg" за български)
+            calendar: Точният календар на периода (scanner.PeriodCalendar): месеци и общ преглед (Фаза 9)
             gender / partner_gender: Известен пол (male/female); иначе езикът е неутрален
 
         Returns:
@@ -2292,120 +2413,14 @@ class AIInterpreter:
         uname = user_display_name.upper()
         pname = partner_display_name.upper()
 
-        # PRIORITY 1: DYNAMIC RELATIONSHIP FORECAST (timeline_events AND partner_chart) - Monthly Chunking
-        if timeline_events and partner_chart:
-            # Group events by month
-            events_by_month = defaultdict(list)
-            for event in timeline_events:
-                month_key = event['date'][:7]  # "YYYY-MM"
-                events_by_month[month_key].append(event)
+        # DYNAMIC FORECAST (Фаза 9): точен календар, месец по месец и общ преглед на периода
+        if calendar is not None:
+            return await self._interpret_period(
+                calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart, question=question,
+                report_type=report_type, user_name=user_name, partner_name=partner_name, language=language,
+                gender=gender, partner_gender=partner_gender)
 
-            # Sort months
-            sorted_months = sorted(events_by_month.keys())
-
-            if not sorted_months:
-                return "Няма събития за анализиране в избрания период."
-
-            # Build header
-            start_date_str = sorted_months[0]
-            end_date_str = sorted_months[-1]
-
-            # Format month names for display (Bulgarian)
-            month_names = {
-                "01": "Януари", "02": "Февруари", "03": "Март", "04": "Април",
-                "05": "Май", "06": "Юни", "07": "Юли", "08": "Август",
-                "09": "Септември", "10": "Октомври", "11": "Ноември", "12": "Декември"
-            }
-
-            full_report = f"# Прогноза за Връзка ({month_names.get(start_date_str[5:7], start_date_str[5:7])} {start_date_str[:4]} - {month_names.get(end_date_str[5:7], end_date_str[5:7])} {end_date_str[:4]})\n\n"
-
-            if question:
-                full_report += f"**Въпрос:** {question}\n\n"
-
-            full_report += f"**Анализ за {user_display_name} и {partner_display_name}**\n\n---\n\n"
-
-            # Process each month
-            for idx, month in enumerate(sorted_months):
-                monthly_events = events_by_month[month]
-
-                monthly_text = await self._process_monthly_chunk(
-                    month=month,
-                    monthly_events=monthly_events,
-                    report_type=report_type,
-                    language=language,
-                    natal_chart=natal_chart,
-                    partner_chart=partner_chart,
-                    user_display_name=user_display_name,
-                    partner_display_name=partner_display_name,
-                    question=question,  # Include question in ALL chunks so each month answers it
-                    has_partner=True,
-                    gender=gender,
-                    partner_gender=partner_gender,
-                )
-
-                # Format month for display
-                month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
-                full_report += f"\n\n## Прогноза за {month_display}\n\n{monthly_text}\n\n---\n"
-
-            return full_report
-
-        elif timeline_events:
-            # PRIORITY 2: DYNAMIC PERSONAL FORECAST MODE (Monthly Chunking)
-            # Group events by month
-            events_by_month = defaultdict(list)
-            for event in timeline_events:
-                month_key = event['date'][:7]  # "YYYY-MM"
-                events_by_month[month_key].append(event)
-
-            # Sort months
-            sorted_months = sorted(events_by_month.keys())
-
-            if not sorted_months:
-                return "Няма събития за анализиране в избрания период."
-
-            # Build header
-            start_date_str = sorted_months[0]
-            end_date_str = sorted_months[-1]
-
-            # Format month names for display (Bulgarian)
-            month_names = {
-                "01": "Януари", "02": "Февруари", "03": "Март", "04": "Април",
-                "05": "Май", "06": "Юни", "07": "Юли", "08": "Август",
-                "09": "Септември", "10": "Октомври", "11": "Ноември", "12": "Декември"
-            }
-
-            full_report = f"# Астрологична Прогноза ({month_names.get(start_date_str[5:7], start_date_str[5:7])} {start_date_str[:4]} - {month_names.get(end_date_str[5:7], end_date_str[5:7])} {end_date_str[:4]})\n\n"
-
-            if question:
-                full_report += f"**Въпрос:** {question}\n\n"
-
-            full_report += "---\n\n"
-
-            # Process each month
-            for idx, month in enumerate(sorted_months):
-                monthly_events = events_by_month[month]
-
-                monthly_text = await self._process_monthly_chunk(
-                    month=month,
-                    monthly_events=monthly_events,
-                    report_type=report_type,
-                    language=language,
-                    natal_chart=natal_chart,
-                    partner_chart=None,
-                    user_display_name=user_display_name,
-                    partner_display_name=partner_display_name,
-                    question=question,  # Include question in ALL chunks so each month answers it
-                    has_partner=False,
-                    gender=gender,
-                )
-
-                # Format month for display
-                month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
-                full_report += f"\n\n## Прогноза за {month_display}\n\n{monthly_text}\n\n---\n"
-
-            return full_report
-
-        elif partner_chart and transit_chart:
+        if partner_chart and transit_chart:
             # PRIORITY 3: RELATIONSHIP TRANSIT FORECAST (Snapshot - Single Date)
             theme = THEME_FOCUS.get(report_type, THEME_FOCUS["general"])
 

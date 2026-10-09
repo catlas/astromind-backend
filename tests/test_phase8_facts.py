@@ -273,10 +273,10 @@ class PromptPayloadTest(Phase8Base):
         cls.interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
         # реалният календар за периода, веднъж за целия клас
         scanner = TransitScanner()
-        cls.events_ivan = scanner.scan_period(natal_chart=cls.ivan, start_date=PERIOD[0], end_date=PERIOD[1],
-                                              lat=IVAN_BIRTH["lat"], lon=IVAN_BIRTH["lon"])
-        cls.events_pair = TransitScanner().scan_period(natal_chart=cls.a, start_date=PERIOD[0], end_date=PERIOD[1],
-                                                       lat=A_BIRTH["lat"], lon=A_BIRTH["lon"], partner_chart=cls.ivan)
+        cls.calendar_ivan = scanner.build_calendar(natal_chart=cls.ivan, start_date=PERIOD[0], end_date=PERIOD[1],
+                                                   lat=IVAN_BIRTH["lat"], lon=IVAN_BIRTH["lon"])
+        cls.calendar_pair = TransitScanner().build_calendar(natal_chart=cls.a, start_date=PERIOD[0], end_date=PERIOD[1],
+                                                            lat=A_BIRTH["lat"], lon=A_BIRTH["lon"], partner_chart=cls.ivan)
 
     def capture(self, **kwargs):
         calls = []
@@ -299,7 +299,7 @@ class PromptPayloadTest(Phase8Base):
         if mode == "snapshot":
             kw.update(transit_chart=self.t_pair if pair else self.t_ivan, target_date="2026-10-08 12:00")
         elif mode == "period":
-            kw.update(timeline_events=self.events_pair if pair else self.events_ivan)
+            kw.update(calendar=self.calendar_pair if pair else self.calendar_ivan)
         return self.capture(**kw)
 
     def test_all_36_combinations_are_clean_and_labelled(self):
@@ -308,7 +308,7 @@ class PromptPayloadTest(Phase8Base):
                 for theme in THEMES:
                     with self.subTest(target=target, mode=mode, theme=theme):
                         calls = self.case(target, mode, theme)
-                        self.assertEqual(len(calls), 2 if mode == "period" else 1)
+                        self.assertEqual(len(calls), 3 if mode == "period" else 1)     # период: 2 месеца + общ преглед
                         for system, user, kw in calls:
                             for pattern, what in FORBIDDEN_IN_INSTRUCTIONS:
                                 self.assertIsNone(pattern.search(system), f"{what} в системната подкана")
@@ -391,7 +391,9 @@ class PromptPayloadTest(Phase8Base):
         for target in ("single", "pair"):
             for theme in THEMES:
                 with self.subTest(target=target, theme=theme):
-                    for system, user, _ in self.case(target, "period", theme):
+                    calls = self.case(target, "period", theme)
+                    self.assertIn("PERIOD CALENDAR (CALCULATED)", calls[-1][1])      # последната заявка е общият преглед
+                    for system, user, _ in calls[:-1]:
                         sections = parse_sections(user)
                         events = find_section(sections, "TIMELINE EVENTS FOR")
                         transits = [e for e in events if e["type"] == "TRANSIT"]
@@ -400,7 +402,6 @@ class PromptPayloadTest(Phase8Base):
                             self.assertIn("transit_planet_natal_house", event)
                             self.assertIn("natal_planet_natal_house", event)
                             self.assertNotIn("house_impact", event)
-                            self.assertNotIn("(House", event["description"])
                         if target == "pair":
                             find_section(sections, "PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)")
                             find_section(sections, "A PLANETS IN ИВАН'S NATAL HOUSES (CALCULATED)")

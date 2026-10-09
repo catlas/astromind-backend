@@ -1,0 +1,212 @@
+[
+  {
+    "subject": "A",
+    "transit": "Saturn",
+    "natal": "Mars",
+    "angle": 90,
+    "exact_events": [],
+    "minimum_sampled_orb_12h": 0.641314040082591,
+    "minimum_sampled_time_utc": "2026-10-01T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Uranus",
+    "natal": "Mercury",
+    "angle": 120,
+    "exact_events": [
+      {
+        "utc": "2026-10-30T23:05:01.135255+00:00",
+        "sofia": "2026-10-31T01:05:01.135255+02:00",
+        "vienna": "2026-10-31T00:05:01.135255+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.0013689878192622018,
+    "minimum_sampled_time_utc": "2026-10-31T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Neptune",
+    "natal": "Jupiter",
+    "angle": 90,
+    "exact_events": [],
+    "minimum_sampled_orb_12h": 0.7000321661443962,
+    "minimum_sampled_time_utc": "2026-12-01T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Mars",
+    "natal": "Mercury",
+    "angle": 180,
+    "exact_events": [
+      {
+        "utc": "2026-10-06T05:42:52.009278+00:00",
+        "sofia": "2026-10-06T08:42:52.009278+03:00",
+        "vienna": "2026-10-06T07:42:52.009278+02:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.13625362649247563,
+    "minimum_sampled_time_utc": "2026-10-06T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Mars",
+    "natal": "Pluto",
+    "angle": 90,
+    "exact_events": [
+      {
+        "utc": "2026-10-30T08:15:28.015137+00:00",
+        "sofia": "2026-10-30T10:15:28.015137+02:00",
+        "vienna": "2026-10-30T09:15:28.015137+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.07932479355415012,
+    "minimum_sampled_time_utc": "2026-10-30T12:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Mars",
+    "natal": "Mars",
+    "angle": 90,
+    "exact_events": [],
+    "minimum_sampled_orb_12h": 40.285811506535225,
+    "minimum_sampled_time_utc": "2026-12-01T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Pluto",
+    "natal": "Mercury",
+    "angle": 0,
+    "exact_events": [],
+    "minimum_sampled_orb_12h": 1.1552205071631647,
+    "minimum_sampled_time_utc": "2026-12-01T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Jupiter",
+    "natal": "Sun",
+    "angle": 180,
+    "exact_events": [
+      {
+        "utc": "2026-11-24T23:55:16.223145+00:00",
+        "sofia": "2026-11-25T01:55:16.223145+02:00",
+        "vienna": "2026-11-25T00:55:16.223145+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.000188340873847892,
+    "minimum_sampled_time_utc": "2026-11-25T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Saturn",
+    "natal": "Uranus",
+    "angle": 90,
+    "exact_events": [
+      {
+        "utc": "2026-11-22T18:11:46.311036+00:00",
+        "sofia": "2026-11-22T20:11:46.311036+02:00",
+        "vienna": "2026-11-22T19:11:46.311036+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.007726290078949205,
+    "minimum_sampled_time_utc": "2026-11-23T00:00:00+00:00"
+  },
+  {
+    "subject": "A",
+    "transit": "Mars",
+    "natal": "Sun",
+    "angle": 180,
+    "exact_events": [
+      {
+        "utc": "2026-11-17T15:31:13.059083+00:00",
+        "sofia": "2026-11-17T17:31:13.059083+02:00",
+        "vienna": "2026-11-17T16:31:13.059083+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.0644958707817409,
+    "minimum_sampled_time_utc": "2026-11-17T12:00:00+00:00"
+  },
+  {
+    "subject": "IVAN",
+    "transit": "Saturn",
+    "natal": "Venus",
+    "angle": 60,
+    "exact_events": [],
+    "minimum_sampled_orb_12h": 1.1397509942767385,
+    "minimum_sampled_time_utc": "2026-12-01T00:00:00+00:00"
+  },
+  {
+    "subject": "IVAN",
+    "transit": "Neptune",
+    "natal": "Neptune",
+    "angle": 90,
+    "exact_events": [
+      {
+        "utc": "2026-11-21T14:26:25.876465+00:00",
+        "sofia": "2026-11-21T16:26:25.876465+02:00",
+        "vienna": "2026-11-21T15:26:25.876465+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.0012032051209871497,
+    "minimum_sampled_time_utc": "2026-11-21T12:00:00+00:00"
+  },
+  {
+    "subject": "IVAN",
+    "transit": "Mars",
+    "natal": "Moon",
+    "angle": 90,
+    "exact_events": [
+      {
+        "utc": "2026-11-02T04:55:09.191895+00:00",
+        "sofia": "2026-11-02T06:55:09.191895+02:00",
+        "vienna": "2026-11-02T05:55:09.191895+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.10248990094271448,
+    "minimum_sampled_time_utc": "2026-11-02T00:00:00+00:00"
+  },
+  {
+    "subject": "IVAN",
+    "transit": "Mars",
+    "natal": "Saturn",
+    "angle": 90,
+    "exact_events": [
+      {
+        "utc": "2026-11-07T01:11:44.113770+00:00",
+        "sofia": "2026-11-07T03:11:44.113770+02:00",
+        "vienna": "2026-11-07T02:11:44.113770+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.024047151187545523,
+    "minimum_sampled_time_utc": "2026-11-07T00:00:00+00:00"
+  },
+  {
+    "subject": "IVAN",
+    "transit": "Mars",
+    "natal": "Jupiter",
+    "angle": 180,
+    "exact_events": [
+      {
+        "utc": "2026-10-24T14:28:39.689942+00:00",
+        "sofia": "2026-10-24T17:28:39.689942+03:00",
+        "vienna": "2026-10-24T16:28:39.689942+02:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.05429991073049223,
+    "minimum_sampled_time_utc": "2026-10-24T12:00:00+00:00"
+  },
+  {
+    "subject": "IVAN",
+    "transit": "Mars",
+    "natal": "Mercury",
+    "angle": 0,
+    "exact_events": [
+      {
+        "utc": "2026-10-28T08:22:35.163575+00:00",
+        "sofia": "2026-10-28T10:22:35.163575+02:00",
+        "vienna": "2026-10-28T09:22:35.163575+01:00"
+      }
+    ],
+    "minimum_sampled_orb_12h": 0.0777315549398736,
+    "minimum_sampled_time_utc": "2026-10-28T12:00:00+00:00"
+  }
+]

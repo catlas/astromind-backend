@@ -198,17 +198,22 @@ class ProfilesReportsTest(unittest.TestCase):
     def test_stream_saves_report(self):
         h = register_and_login(self.client, "stream@test.bg")
         fake = mock.AsyncMock(return_value="<p>Месец</p>")
+        overview = mock.AsyncMock(return_value="<p>Преглед</p>")
         body = {**CHART, "name": "Аз", "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-02-28"}
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", fake):
+        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", fake), \
+                mock.patch.object(main.ai_interpreter, "compose_period_overview", overview):
             r = self.client.post("/interpret-stream", json=body, headers=h)
         self.assertEqual(r.status_code, 200)
         self.assertIn('"type": "complete"', r.text)
+        self.assertIn('"type": "overview_complete"', r.text)
         reports = self.client.get("/reports", headers=h).json()
         self.assertEqual(len(reports), 1)
         self.assertTrue(reports[0]["label"].startswith("Прогноза"))
         db = SessionLocal()
         try:
-            self.assertIn("<p>Месец</p>", db.get(Report, reports[0]["id"]).content)
+            content = db.get(Report, reports[0]["id"]).content
+            self.assertIn("<p>Месец</p>", content)
+            self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n<p>Преглед</p>"))
         finally:
             db.close()
 

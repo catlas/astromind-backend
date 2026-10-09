@@ -102,7 +102,8 @@ class BillingTest(unittest.TestCase):
     def test_forecast_debits_per_month(self):
         h = register_and_login(self.client, "forecast@test.bg")
         body = {**CHART, "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-01-31"}
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>m</p>")):
+        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>m</p>")), \
+                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value="<p>o</p>")):
             r = self.client.post("/interpret-stream", json=body, headers=h)
         self.assertIn('"coins_charged": 5', r.text)
         self.assertEqual(self.client.get("/me", headers=h).json()["coins"], 5)
