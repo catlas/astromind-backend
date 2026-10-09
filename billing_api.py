@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import billing
+import limits
 import mailer
 from database import CoinTransaction, Purchase, User, get_db
 from deps import get_current_user, get_optional_user
@@ -54,6 +55,11 @@ def billing_config(user: Optional[User] = Depends(get_optional_user)):
         "packages": billing.packages_for(user_id),
         "pricing_variant": billing.pricing_variant(user_id),
         "costs": billing.costs(),
+        # Горна граница на периода на прогнозата (календарни месеци)
+        "limits": {
+            "forecast_max_months_single": limits.FORECAST_MAX_MONTHS_SINGLE,
+            "forecast_max_months_pair": limits.FORECAST_MAX_MONTHS_PAIR,
+        },
     }
 
 

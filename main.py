@@ -20,6 +20,8 @@ from dotenv import load_dotenv
 import engine
 from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
+import factpack
+from limits import forecast_period_error
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
 from database import SessionLocal, User, get_db
@@ -118,27 +120,6 @@ def require_docx_quota(current_user: User = Depends(get_current_user)) -> User:
     """Изисква вход и ограничава генерирането на DOCX файлове."""
     enforce(f"docx:{current_user.id}", DOCX_LIMIT_PER_HOUR, 3600, "Достигнахте лимита за DOCX файлове.")
     return current_user
-
-
-def _calculate_max_months_for_token_limit(has_partner: bool = False) -> int:
-    """
-    Изчислява максималния брой месеци които могат да се поберат в лимита от 30,000 токена.
-    
-    Базирано на:
-    - Лимит: 30,000 токена
-    - Приблизително 50-100 събития на месец (зависи от периода)
-    - С партньор: ~100-200 събития на месец (събития за двама)
-    - Приблизително 50-80 токена на събитие (JSON формат)
-    - Натална карта: ~2000 токена (или ~4000 с партньор)
-    - System prompt: ~500-1000 токена
-    - Остават ~27,500 токена за събития (индивидуално) или ~25,000 (с партньор)
-    
-    Returns:
-        int: Максимален брой месеци (3 за индивидуално, 1 с партньор)
-    """
-    if has_partner:
-        return 1  # С партньор: максимум 1 месец
-    return 3  # Индивидуално: максимум 3 месеца
 
 
 def _filter_and_limit_events(events: List[Dict], max_events: int = 400) -> List[Dict]:
@@ -277,6 +258,9 @@ class ChartRequest(BaseModel):
         ge=-180, le=180,
         description="Географска дължина на партньора"
     )
+    # Известен пол (male/female). Без него AI пише неутрално и не гадае пола.
+    gender: Optional[str] = Field(default=None, max_length=20, description="Пол на първия човек, ако е известен")
+    partner_gender: Optional[str] = Field(default=None, max_length=20, description="Пол на втория човек, ако е известен")
 
 
 class ChartResponse(BaseModel):
@@ -403,6 +387,14 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 finally:
                     track_db.close()
                 yield f"data: {json.dumps({'type': 'crisis', 'html': safety.CRISIS_MESSAGE_HTML}, ensure_ascii=False)}\n\n"
+                return
+
+            stream_has_partner = bool(request.partner_date and request.partner_time
+                                      and request.partner_lat is not None and request.partner_lon is not None)
+            period_error = forecast_period_error(
+                request.target_date or datetime.now().strftime("%Y-%m-%d"), request.end_date, stream_has_partner)
+            if period_error:
+                yield f"data: {json.dumps({'type': 'error', 'message': period_error}, ensure_ascii=False)}\n\n"
                 return
             
             # Initialize engine
@@ -531,7 +523,9 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
             
             mem_db = SessionLocal()
             try:
-                memory_used = memory.activate(mem_db, mem_db.get(User, current_user.id), request.name)
+                memory_used = memory.activate(
+                    mem_db, mem_db.get(User, current_user.id), request.name,
+                    request.partner_name if partner_chart_data else None)
             finally:
                 mem_db.close()
 
@@ -553,10 +547,12 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                     language="bg",
                     natal_chart=natal_chart_data,
                     partner_chart=partner_chart_data,
-                    user_display_name=request.name or "User",
-                    partner_display_name=request.partner_name or "Partner",
+                    user_display_name=factpack.display_name(request.name, factpack.FIRST_PERSON_DEFAULT),
+                    partner_display_name=factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT),
                     question=request.question or "",
-                    has_partner=bool(partner_chart_data)
+                    has_partner=bool(partner_chart_data),
+                    gender=request.gender,
+                    partner_gender=request.partner_gender,
                 )
                 
                 monthly_text, month_flags = safety.check_output(monthly_text, request.report_type or "general")
@@ -688,8 +684,14 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
             # Използваме target_date като start_date, или текущата дата
             start_date = request.target_date if request.target_date else datetime.now().strftime("%Y-%m-%d")
             end_date = request.end_date
+
+            # Първо безопасността: при криза не се връща грешка за периода (отговорът е подкрепящото съобщение)
+            period_error = None if safety.detect_crisis(request.question) else forecast_period_error(
+                start_date, end_date, has_partner)
+            if period_error:
+                raise HTTPException(status_code=400, detail=period_error)
             
-            # Note: Monthly chunking now handles token limits, so we don't restrict period length
+            # Дължината на периода е проверена по-горе (limits.forecast_period_error); всеки месец е отделна AI заявка
             
             # Изчисляване на partner карта (ако е предоставена) - за Relationship Forecast Mode
             partner_chart_data_for_timeline = None
@@ -764,7 +766,8 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
         # Определяне на правилната target_date за AI prompt
         # Ако имаме транзитна карта, използваме datetime_local (което включва дата, час и timezone)
         if transit_chart_data and transit_chart_data.get("datetime_local"):
-            target_date_for_ai = transit_chart_data["datetime_local"]
+            zone = transit_chart_data.get("timezone")
+            target_date_for_ai = f"{transit_chart_data['datetime_local']} ({zone})" if zone else transit_chart_data["datetime_local"]
         elif transit_date:
             # Fallback: комбинираме датата и часа ако са отделни
             if request.target_time:
@@ -780,7 +783,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
             interpretation = safety.CRISIS_MESSAGE_HTML
             events.track(db, "crisis_detected", current_user.id)
         else:
-            memory_used = memory.activate(db, current_user, request.name)
+            memory_used = memory.activate(db, current_user, request.name, request.partner_name if has_partner else None)
             interpretation = await ai_interpreter.interpret_chart(
                 natal_chart=natal_chart_data,
                 transit_chart=transit_chart_data,  # Може да е None ако не е заявен транзитен анализ
@@ -791,7 +794,9 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                 language="bg",  # По подразбиране български
                 report_type=request.report_type or "general",
                 user_name=request.name,
-                timeline_events=timeline_events  # Timeline events за Dynamic Forecast Mode
+                timeline_events=timeline_events,  # Timeline events за Dynamic Forecast Mode
+                gender=request.gender,
+                partner_gender=request.partner_gender,
             )
             interpretation, flags = safety.check_output(interpretation, request.report_type or "general")
             if flags:

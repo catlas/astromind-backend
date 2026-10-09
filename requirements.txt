@@ -13,7 +13,10 @@ requests==2.32.3
 
 # Astrology / timezone
 pyswisseph==2.10.3.2
-timezonefinder==8.1.0
+# ВАЖНО: версии 8.0.x и 8.1.x връщат слети зони (България като Europe/Athens, Австрия като Europe/Paris), а това
+# дава грешен час при исторически дати (напр. лято 1975 в София или 1977 във Виена). 7.0.2 и 9.0.0 връщат точните зони.
+# Тестът tests/test_timezones.py хваща такава регресия при обновяване.
+timezonefinder==7.0.2
 pytz==2026.4
 # NumPy 2.x may not have compatible wheels for older macOS versions (e.g. macOS 11),
 # so we pin to a known-good wheel for Python 3.11.

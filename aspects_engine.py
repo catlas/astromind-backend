@@ -5,6 +5,16 @@
 
 from typing import Dict, List, Tuple, Optional
 
+# Единна версионирана политика на орбисите. Какво важи къде:
+#  - натални и синастрични аспекти: _get_orb_for_aspect (8° / 5°, при външна планета 5° / 4°);
+#  - аспекти между небето в избран момент и наталната карта (анализ за дата): TRANSIT_SNAPSHOT_MAX_ORB;
+#  - календар на периода (scanner.py): 1,5° приближаващ и 1,0° отделящ се аспект.
+# Аспект извън тези граници не се подава към AI като активен фактор.
+ORB_POLICY_VERSION = "orbs-v1"
+TRANSIT_SNAPSHOT_MAX_ORB = 3.0
+
+ASPECT_ANGLES = [("conjunction", 0), ("opposition", 180), ("square", 90), ("trine", 120), ("sextile", 60)]
+
 
 def _get_orb_for_aspect(
     planet1: str,
@@ -142,54 +152,88 @@ def calculate_synastry_aspects(
     return aspects
 
 
+def _wrap180(value: float) -> float:
+    """Нормализира разлика на дължини в интервала [-180, 180)."""
+    return ((value + 180.0) % 360.0) - 180.0
+
+
+def _is_applying(transit_lon: float, speed: Optional[float], natal_lon: float, aspect_angle: float) -> Optional[bool]:
+    """
+    Дали транзитната планета се приближава към точния аспект (True) или се отдалечава (False).
+    None, когато скоростта липсва или планетата е практически неподвижна (станция).
+    """
+    if speed is None or abs(speed) < 0.001:
+        return None
+    nearest = None
+    for exact in {(natal_lon + aspect_angle) % 360.0, (natal_lon - aspect_angle) % 360.0}:
+        distance = _wrap180(transit_lon - exact)
+        if nearest is None or abs(distance) < abs(nearest):
+            nearest = distance
+    return nearest * speed < 0
+
+
 def calculate_transit_aspects_to_natal(
     natal_chart: Dict,
     transit_chart: Dict,
-    use_wider_orbs: bool = False
+    use_wider_orbs: bool = False,
+    max_orb: Optional[float] = None,
+    include_angles: bool = False,
 ) -> List[Dict]:
     """
     Изчислява аспекти между транзитни планети и натална карта.
     Transit Planet → Natal Planet.
-    
+
     Args:
         natal_chart: Натална карта
-        transit_chart: Транзитна карта
-        use_wider_orbs: Дали да се използват по-широки орбове
-    
+        transit_chart: Транзитна карта (небето в избрания момент)
+        use_wider_orbs: Дали да се използват по-широки орбове (само без max_orb)
+        max_orb: Ако е зададен, е най-големият орбис за всички аспекти (политика за дата)
+        include_angles: Добавя натални ASC и MC като цели на аспекта
+
     Returns:
         Списък с речници, всеки съдържа:
         - "transit_planet": транзитна планета
-        - "natal_planet": натална планета
+        - "natal_planet": натална планета или ъгъл (ASC, MC)
         - "aspect": тип аспект
         - "angle": изчисленият ъгъл
         - "orb": орбът
+        - "applying": True/False според скоростта на транзитната планета (липсва при станция)
     """
     natal_points = {}
-    transit_points = {}
-
     for name, data in natal_chart.get("planets", {}).items():
         if data.get("longitude") is not None:
             natal_points[name] = data["longitude"]
-    
+    if include_angles:
+        angles = natal_chart.get("angles", {})
+        if angles.get("Ascendant") is not None:
+            natal_points["ASC"] = angles["Ascendant"]
+        if angles.get("MC") is not None:
+            natal_points["MC"] = angles["MC"]
+
+    transit_points = {}
     for name, data in transit_chart.get("planets", {}).items():
         if data.get("longitude") is not None:
-            transit_points[name] = data["longitude"]
+            transit_points[name] = (data["longitude"], data.get("speed"))
 
     aspects = []
-    for t_name, t_lon in transit_points.items():
+    for t_name, (t_lon, t_speed) in transit_points.items():
         for n_name, n_lon in natal_points.items():
             angle = _calculate_angle(t_lon, n_lon)
-            for aspect_name, ideal in [("conjunction", 0), ("opposition", 180), ("square", 90), ("trine", 120), ("sextile", 60)]:
+            for aspect_name, ideal in ASPECT_ANGLES:
                 orb = abs(angle - ideal)
-                max_orb = _get_orb_for_aspect(t_name, n_name, aspect_name, use_wider_orbs)
-                if orb <= max_orb:
-                    aspects.append({
+                limit = max_orb if max_orb is not None else _get_orb_for_aspect(t_name, n_name, aspect_name, use_wider_orbs)
+                if orb <= limit:
+                    entry = {
                         "transit_planet": t_name,
                         "natal_planet": n_name,
                         "aspect": aspect_name,
                         "angle": round(angle, 2),
-                        "orb": round(orb, 2)
-                    })
+                        "orb": round(orb, 2),
+                    }
+                    applying = _is_applying(t_lon, t_speed, n_lon, ideal)
+                    if applying is not None:
+                        entry["applying"] = applying
+                    aspects.append(entry)
     aspects.sort(key=lambda x: x["orb"])
     return aspects
 

@@ -12,6 +12,121 @@ from timezonefinder import TimezoneFinder  # type: ignore
 import pytz
 
 
+def house_for_longitude(planet_longitude: float, house_cusps: Dict[str, float]) -> Optional[int]:
+    """
+    Определя в кой дом е планетата базирано на нейната дължина и cusp-овете на домовете.
+
+    Алгоритъм за Placidus система:
+    - Планетата е в дом X ако нейната дължина е >= cusp(X) и < cusp(X+1)
+    - Обработваме wrap-around когато домовете преминават през 360°->0°
+    - Използваме оригиналния ред на домовете (House1 до House12)
+
+    Args:
+        planet_longitude: Дължината на планетата в градуси (0-360)
+        house_cusps: Речник с домове {"House1": 104.5, "House2": 135.2, ...}
+
+    Returns:
+        Номер на дома (1-12) или None ако не може да се определи
+    """
+    if not house_cusps or planet_longitude is None:
+        return None
+
+    # Нормализиране на planet_longitude (0-360)
+    planet_lon = planet_longitude % 360.0
+
+    # Създаване на списък от домове в правилния ред (House1 до House12)
+    house_cusp_list = []
+    for i in range(1, 13):
+        house_name = f"House{i}"
+        if house_name in house_cusps:
+            cusp = house_cusps[house_name] % 360.0
+            house_cusp_list.append((i, cusp))
+
+    if not house_cusp_list:
+        return None
+
+    # Проверка за всеки дом в последователен ред
+    for i in range(len(house_cusp_list)):
+        current_house_num, current_cusp = house_cusp_list[i]
+        next_house_num, next_cusp = house_cusp_list[(i + 1) % len(house_cusp_list)]
+
+        # Обработка на wrap-around (напр. House12=352°, House1=14°)
+        if next_cusp < current_cusp:
+            # Wrap-around case: домът обхваща диапазона от current_cusp до 360° и от 0° до next_cusp
+            if planet_lon >= current_cusp or planet_lon < next_cusp:
+                return current_house_num
+        else:
+            # Normal case: домът обхваща диапазона от current_cusp до next_cusp
+            if current_cusp <= planet_lon < next_cusp:
+                return current_house_num
+
+    # Fallback: ако не сме намерили (не би трябвало да се случи), връщаме дома с най-близкия cusp
+    closest_house = min(house_cusp_list, key=lambda x: min(
+        abs(x[1] - planet_lon),
+        abs((x[1] + 360) - planet_lon),
+        abs(x[1] - (planet_lon + 360))
+    ))
+    return closest_house[0]
+
+
+def decimal_to_dms(longitude: float) -> Dict[str, any]:
+    """
+    Конвертира десетична дължина (0-360) в Zodiac Sign, Degrees и Minutes.
+
+    Args:
+        longitude: Дължина в градуси (0-360)
+
+    Returns:
+        Речник с:
+        - sign: Име на зодиакалния знак
+        - deg: Градуси в знака (0-29)
+        - min: Минути (0-59)
+        - str: Форматиран string "Sign deg°min'"
+    """
+    # Нормализиране на дължината в диапазона 0-360
+    while longitude < 0:
+        longitude += 360
+    while longitude >= 360:
+        longitude -= 360
+
+    # Определяне на зодиакалния знак (всеки знак е 30 градуса)
+    sign_index = int(longitude / 30)
+    degrees_in_sign = longitude % 30
+
+    # Списък с зодиакални знаци
+    signs = [
+        "Aries", "Taurus", "Gemini", "Cancer",
+        "Leo", "Virgo", "Libra", "Scorpio",
+        "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    ]
+
+    sign = signs[sign_index]
+
+    # Извличане на градуси и минути
+    deg = int(degrees_in_sign)
+    minutes_decimal = (degrees_in_sign - deg) * 60
+    min = int(round(minutes_decimal))
+
+    # Корекция ако минутите са 60
+    if min >= 60:
+        min = 0
+        deg += 1
+        if deg >= 30:
+            deg = 0
+            sign_index = (sign_index + 1) % 12
+            sign = signs[sign_index]
+
+    # Форматиране на string
+    formatted = f"{sign} {deg}°{min:02d}'"
+
+    return {
+        "sign": sign,
+        "deg": deg,
+        "min": min,
+        "str": formatted
+    }
+
+
 class AstrologyEngine:
     """Основен клас за астрологични изчисления"""
     
@@ -269,61 +384,8 @@ class AstrologyEngine:
         return self.calculate_synastry_house_overlays(user_natal_chart, transit_planets)
     
     def _decimal_to_dms(self, longitude: float) -> Dict[str, any]:
-        """
-        Конвертира десетична дължина (0-360) в Zodiac Sign, Degrees и Minutes.
-        
-        Args:
-            longitude: Дължина в градуси (0-360)
-            
-        Returns:
-            Речник с:
-            - sign: Име на зодиакалния знак
-            - deg: Градуси в знака (0-29)
-            - min: Минути (0-59)
-            - str: Форматиран string "Sign deg°min'"
-        """
-        # Нормализиране на дължината в диапазона 0-360
-        while longitude < 0:
-            longitude += 360
-        while longitude >= 360:
-            longitude -= 360
-        
-        # Определяне на зодиакалния знак (всеки знак е 30 градуса)
-        sign_index = int(longitude / 30)
-        degrees_in_sign = longitude % 30
-        
-        # Списък с зодиакални знаци
-        signs = [
-            "Aries", "Taurus", "Gemini", "Cancer",
-            "Leo", "Virgo", "Libra", "Scorpio",
-            "Sagittarius", "Capricorn", "Aquarius", "Pisces"
-        ]
-        
-        sign = signs[sign_index]
-        
-        # Извличане на градуси и минути
-        deg = int(degrees_in_sign)
-        minutes_decimal = (degrees_in_sign - deg) * 60
-        min = int(round(minutes_decimal))
-        
-        # Корекция ако минутите са 60
-        if min >= 60:
-            min = 0
-            deg += 1
-            if deg >= 30:
-                deg = 0
-                sign_index = (sign_index + 1) % 12
-                sign = signs[sign_index]
-        
-        # Форматиране на string
-        formatted = f"{sign} {deg}°{min:02d}'"
-        
-        return {
-            "sign": sign,
-            "deg": deg,
-            "min": min,
-            "str": formatted
-        }
+        """Знак, градуси и минути за дължина; логиката е в decimal_to_dms."""
+        return decimal_to_dms(longitude)
     
     def _datetime_to_julian_day(self, dt: datetime) -> float:
         """
@@ -376,60 +438,8 @@ class AstrologyEngine:
 
     
     def _get_planet_house(self, planet_longitude: float, house_cusps: Dict[str, float]) -> Optional[int]:
-        """
-        Определя в кой дом е планетата базирано на нейната дължина и cusp-овете на домовете.
-        
-        Алгоритъм за Placidus система:
-        - Планетата е в дом X ако нейната дължина е >= cusp(X) и < cusp(X+1)
-        - Обработваме wrap-around когато домовете преминават през 360°->0°
-        - Използваме оригиналния ред на домовете (House1 до House12)
-        
-        Args:
-            planet_longitude: Дължината на планетата в градуси (0-360)
-            house_cusps: Речник с домове {"House1": 104.5, "House2": 135.2, ...}
-        
-        Returns:
-            Номер на дома (1-12) или None ако не може да се определи
-        """
-        if not house_cusps or planet_longitude is None:
-            return None
-        
-        # Нормализиране на planet_longitude (0-360)
-        planet_lon = planet_longitude % 360.0
-        
-        # Създаване на списък от домове в правилния ред (House1 до House12)
-        house_cusp_list = []
-        for i in range(1, 13):
-            house_name = f"House{i}"
-            if house_name in house_cusps:
-                cusp = house_cusps[house_name] % 360.0
-                house_cusp_list.append((i, cusp))
-        
-        if not house_cusp_list:
-            return None
-        
-        # Проверка за всеки дом в последователен ред
-        for i in range(len(house_cusp_list)):
-            current_house_num, current_cusp = house_cusp_list[i]
-            next_house_num, next_cusp = house_cusp_list[(i + 1) % len(house_cusp_list)]
-            
-            # Обработка на wrap-around (напр. House12=352°, House1=14°)
-            if next_cusp < current_cusp:
-                # Wrap-around case: домът обхваща диапазона от current_cusp до 360° и от 0° до next_cusp
-                if planet_lon >= current_cusp or planet_lon < next_cusp:
-                    return current_house_num
-            else:
-                # Normal case: домът обхваща диапазона от current_cusp до next_cusp
-                if current_cusp <= planet_lon < next_cusp:
-                    return current_house_num
-        
-        # Fallback: ако не сме намерили (не би трябвало да се случи), връщаме дома с най-близкия cusp
-        closest_house = min(house_cusp_list, key=lambda x: min(
-            abs(x[1] - planet_lon),
-            abs((x[1] + 360) - planet_lon),
-            abs(x[1] - (planet_lon + 360))
-        ))
-        return closest_house[0]
+        """Номер на дома (1-12) за дължина; логиката е в house_for_longitude."""
+        return house_for_longitude(planet_longitude, house_cusps)
     
     def _calculate_houses(self, jd: float, lat: float, lon: float) -> Dict:
         """

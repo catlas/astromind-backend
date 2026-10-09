@@ -415,7 +415,10 @@ class TransitScanner:
                     transit_pos = self.engine._decimal_to_dms(transit_long)
                     natal_pos = self.engine._decimal_to_dms(natal_long)
 
-                    house_impact = self._find_house_for_position(transit_long, natal_chart)
+                    # Две различни неща: къде е транзитната планета в натала на човека и къде е самата
+                    # натална планета. Те не бива да се бъркат (поле house_impact ги смесваше).
+                    transit_house = self._find_house_for_position(transit_long, natal_chart)
+                    natal_house = natal_planets[natal_planet_name].get("house")
 
                     events.append(
                         {
@@ -430,8 +433,9 @@ class TransitScanner:
                             "is_applying": aspect_info["is_applying"],
                             "transit_position": transit_pos["str"],
                             "natal_position": natal_pos["str"],
-                            "house_impact": house_impact,
-                            "description": f"Transit {transit_planet_name} {aspect_info['aspect']} NATAL {natal_planet_name} (House {house_impact})",
+                            "transit_planet_natal_house": int(transit_house) if str(transit_house).isdigit() else None,
+                            "natal_planet_natal_house": natal_house,
+                            "description": f"Transit {transit_planet_name} {aspect_info['aspect']} NATAL {natal_planet_name}",
                         }
                     )
 

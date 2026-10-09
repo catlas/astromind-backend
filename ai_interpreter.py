@@ -6,14 +6,14 @@ AI Интерпретатор за астрологични карти
 from safety import SAFETY_RULES
 import memory
 import os
-import json
 import asyncio
 from typing import Dict, Optional, List, Tuple
 from collections import defaultdict
 import httpx
 from dotenv import load_dotenv
 from engine import AstrologyEngine
-from aspects_engine import calculate_natal_aspects
+from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB, calculate_natal_aspects
+import factpack
 
 # Зареждане на environment променливи
 load_dotenv()
@@ -44,7 +44,7 @@ PROMPT_TEMPLATES = {
         - NEVER use English sign names (Capricorn, Libra, Aries, etc.)
         - ALWAYS use "Асцендент" (not "Ascendant")
         
-        **CRITICAL: ASCENDANT INTERPRETATION (MANDATORY)**
+        **ASCENDANT INTERPRETATION (do not print this label)**
         - The Ascendant (ASC) is an important point in the chart and represents the outer mask, physical appearance, and how the person presents themselves to the world.
         - You MUST include a dedicated section interpreting the Ascendant sign and degree.
         - IMPORTANT: Place the Ascendant section as the SECOND section in your analysis, AFTER the Personality Traits section.
@@ -132,7 +132,7 @@ You DO NOT invent health conditions. You speak only in terms of **tendencies, se
 
 4. **Key Vulnerabilities & Strengths**  
    - Focus on **balance**, not pathology.  
-   - Example: "С Луна в Козирог, емоционалното потискане може да се прояви като напрежение в ставите или храносмилателна скованост."
+   - Style: link the Moon's sign and house, exactly as the data gives them, to a possible bodily tendency (for example tension, digestion or sleep), worded as a tendency and never as a diagnosis.
 
 5. **Holistic Recommendations**  
    - Suggest **lifestyle, rhythm, and awareness practices** (e.g., rest, routine, emotional release).  
@@ -192,7 +192,7 @@ If yes → your analysis is **ethically sound and astrologically responsible**.
         - Retrograde planets as "karmic returns" — opportunities for integration, not repetition.
         - The 4th house (roots, family), 12th house (karma, hidden burdens), and Nodal Axis (soul direction).
         
-        **MANDATORY PLANETARY ANALYSIS (IF PRESENT IN CHART):**
+        **PLANETARY ANALYSIS (cover the planets that are present in the chart; do not print this label):**
         1. **Moon** → Maternal lineage, Inner Child, emotional safety. Always link to its house (especially if in 4th).
         2. **Saturn** → Paternal lineage, karmic duty, authority wounds. Always reference its sign + house.
         3. **Pluto** → Deep transformation of family DNA. If in 4th house, explicitly address ancestral power dynamics.
@@ -202,7 +202,7 @@ If yes → your analysis is **ethically sound and astrologically responsible**.
         
         **ASCENDANT (NON-NEGOTIABLE SECTION):**
         - **ALWAYS include a dedicated Ascendant section as the SECOND section**, right after Personality Traits.
-        - Use the exact value from the `'Ascendant_formatted'` field (e.g., `'14°22′ Cancer'`).
+        - Use the exact value from the `'Ascendant_formatted'` field, as written there.
         - Interpret the Ascendant as the **soul's chosen interface with the world**, often reflecting ancestral survival strategies.
         - Explore:
           - How this outer mask may protect or obscure the Sun.
@@ -219,7 +219,7 @@ If yes → your analysis is **ethically sound and astrologically responsible**.
            - Pluto (transformation),
            - 4th & 12th houses,
            - North Node (soul's evolutionary direction).
-        4. **Strengths & Challenges** – Describe tensions **only from planetary sign/house placements** (e.g., "Moon in Capricorn in 6th suggests emotional restraint tied to work").
+        4. **Strengths & Challenges** – Describe tensions **only from planetary sign/house placements**, read from each planet's own entry in the data.
            → **DO NOT mention aspects** (conjunctions, squares, etc.) **unless the JSON explicitly includes aspect data**.
         5. **Houses of Emphasis** – Highlight houses containing **luminaries (Sun/Moon), Saturn, Pluto, or Nodes** — especially 4th, 6th, 10th, 12th.
         6. **Psychological Patterns & Inner Motivations** – Synthesize contrasts (e.g., "fire Sun vs. water Ascendant") ONLY if both are present in the data.
@@ -229,20 +229,20 @@ If yes → your analysis is **ethically sound and astrologically responsible**.
         - Therapeutic, empathetic, spiritually grounded.
         - **Never say**: "In a past life you were…"
         - **Instead say**: "The chart suggests a karmic resonance with…", "There may be an ancestral imprint around…", "The soul appears to be working with…"
-        - Use metaphors **only when archetypally precise** (e.g., "wound of the leader" for Chiron in 10th).
+        - Use metaphors **only when archetypally precise** and only for the planet and house exactly as the data gives them.
         - **Avoid pathologizing** — frame everything as potential for healing.
         
         **ASTROLOGICAL ACCURACY & DATA INTEGRITY RULES:**
         ✅ **ALWAYS use the provided JSON fields**:
-        - Planet positions → `'formatted_pos'` (e.g., `'23°02′ Aries'`)
-        - House placements → `'house'` field (e.g., `10`)
+        - Planet positions → `'formatted_pos'`, as written
+        - House placements → `'house'` field, the number as given
         - Ascendant → `'Ascendant_formatted'`
         - MC → `'MC_formatted'`
         
         ❌ **NEVER**:
         - Calculate signs from longitude.
         - Guess house cusps.
-        - Assume aspects (e.g., "Venus trine Neptune") — unless aspect data is explicitly included.
+        - Assume aspects between planets — unless aspect data is explicitly included.
         - Assign elements, modalities, or aspect types unless data supports it.
         - Claim a planet is in a house based on Sun sign logic — **always use the provided house number**.
         
@@ -312,7 +312,7 @@ You focus on **energetic patterns, motivation, and service potential**.
 
 5. **Midheaven (MC) and its Ruler**  
    - MC sign → career field resonance (e.g., Везни = diplomacy, art; Скорпион = research, healing).  
-   - Ruler of MC (e.g., "MC Ruler: Venus") → planet that "opens the door" to professional fulfillment.
+   - Ruler of MC (the planet the data names as the ruler of the 10th house) → planet that "opens the door" to professional fulfillment.
 
 6. **Mercury and Mars**  
    - Mercury → communication style, learning, adaptability in work.  
@@ -335,7 +335,7 @@ You focus on **energetic patterns, motivation, and service potential**.
    - What planet must be integrated to fulfill professional potential?
 
 4. **Natural Affinities & Fields**  
-   - Based on MC sign and its ruler (e.g., "MC in Овен, ruler Mars → pioneering, independent, action-oriented fields").  
+   - Based on the MC sign and its ruler, both taken from the data, describe the fields of natural affinity.
    - Avoid fixed job titles; suggest **domains** (e.g., healing, education, innovation, caregiving).
 
 5. **Integration & Growth**  
@@ -410,11 +410,11 @@ If yes → your analysis is **vocationally insightful and astrologically sound**
         2. **DATA SOURCE PRINCIPLE (MANDATORY)**:
            - **ALL house placements for Partner's planets are PRE-CALCULATED** and provided in the section:
              `--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---`
-           - **USE THESE NUMBERS EXCLUSIVELY**. Example: if it says `"Sun": 8`, Partner's Sun is in User's 8th house.
+           - **USE THESE NUMBERS EXCLUSIVELY**. Each entry has the form `"<Planet>": N`: the Partner's planet falls in the User's house number N. Take N only from the data section, never from this text.
            - **NEVER mention Partner's planet house placements from Partner's own natal chart** - ONLY use User's houses from the pre-calculated overlay data.
            - **NEVER recalculate house positions from degrees, signs, or cusps. NEVER use logic like "if degree < cusp → previous house".**
            - **The backend has already applied Placidus logic correctly. Trust it completely.**
-           - **If you see Partner's Sun in Pisces, do NOT assume it's in Partner's 2nd house - check the pre-calculated overlay: it might be in User's 8th house.**
+           - **If you see Partner's Sun in Pisces, do NOT assume which house it is in - read the number for the Sun in the pre-calculated overlay.**
         
         3. **KEY FACTORS TO USE**:
            - **User's Venus** (sign, house) → how User loves and harmonizes
@@ -435,10 +435,8 @@ If yes → your analysis is **vocationally insightful and astrologically sound**
            - **STEP 1: ALWAYS check the PRE-CALCULATED overlay data FIRST** before mentioning any Partner planet's house placement.
            - **STEP 2: Use the EXACT number from the overlay data** - do not round, estimate, or calculate.
            - **STEP 3: Always say "Partner's [Planet] is in User's [X]th house"** - explicitly state "User's" to avoid confusion.
-           - Example: If overlay shows `"Sun": 8`, say "Partner's Sun is in User's 8th house" → "activates intimacy, transformation, shared resources"
-           - Example: If overlay shows `"Moon": 1`, say "Partner's Moon is in User's 1st house" → "emotional mirroring, identity connection"
-           - Example: If overlay shows `"Mars": 12`, say "Partner's Mars is in User's 12th house" → "hidden energy, subconscious reactions, need for solitude"
-           - Example: If overlay shows `"Venus": 8`, say "Partner's Venus is in User's 8th house" → "sexual attraction, deep merging, psychological intimacy"
+           - Format: if the overlay shows `"<Planet>": N`, say "Partner's <Planet> is in User's Nth house" and then explain what that house means (N comes ONLY from the data section).
+           - House meanings for overlays: 1st = identity and self-image; 4th = home and emotional security; 5th = romance and play; 7th = partnership; 8th = intimacy, shared resources, transformation; 12th = hidden energy, the subconscious.
            - **FORBIDDEN: Never say "Partner's [Planet] in [X]th house" without "User's" prefix.**
            - **FORBIDDEN: Never mention Partner's planets in Partner's own houses (e.g., "Partner's Sun in 2nd house").**
            - **FORBIDDEN: Never calculate or guess house positions - ONLY use the overlay numbers.**
@@ -459,10 +457,10 @@ If yes → your analysis is **vocationally insightful and astrologically sound**
         
         **FINAL WARNING - ABSOLUTELY MANDATORY**:  
         ⚠️ If you attempt to recalculate house positions from degrees, signs, or cusps, you WILL make errors.  
-        ⚠️ The ONLY source of truth is the PRE-CALCULATED overlay data section: {"Sun": 8, "Moon": 1, "Venus": 8, "Mars": 12}, etc.  
+        ⚠️ The ONLY source of truth is the PRE-CALCULATED overlay data section in the prompt (never numbers from these instructions).  
         ⚠️ ALWAYS say "Partner's [Planet] is in User's [X]th house" - use the EXACT number from the overlay data.  
         ⚠️ NEVER mention Partner's planets in Partner's own houses (e.g., "Partner's Sun in 2nd house" or "Partner's Sun in 9th house").  
-        ⚠️ NEVER guess house positions (e.g., don't say "9th house" if the data shows 8, or "4th house" if the data shows 12).  
+        ⚠️ NEVER guess house positions: every number you write must be the number in the data section.  
         ⚠️ Every single house placement for Partner's planets MUST come from the overlay data - no exceptions.  
         Use the overlay data. Trust it completely. Never override it. Always reference it explicitly with "User's [X]th house".
     """,
@@ -499,10 +497,8 @@ ALL house placements for Partner's planets are PRE-CALCULATED and provided in th
 ### 🔑 MANDATORY RULES
 
 1. **USE ONLY THE PROVIDED HOUSE NUMBERS — AS FACTS**  
-   - Input: `{"Sun": 8, "Moon": 1, "Venus": 8, "Mars": 12, "Mercury": 1}`  
-   - Interpret as:  
-     - "Partner's Mercury in your 1st house → her words directly shape your self-expression."  
-     - "Partner's Mars in your 12th house → her energy activates your subconscious, not your home."  
+   - Input shape: `{"<Planet>": N, ...}` taken from the data section.  
+   - Interpret each entry as "Partner's <Planet> in your Nth house" plus the meaning of that house (N comes ONLY from the data section; use gender-neutral wording).  
    - **NEVER** say: "Although not explicitly stated..." or "It is assumed that..."  
      → If it's in the JSON, it's a FACT. State it confidently.
 
@@ -516,8 +512,8 @@ ALL house placements for Partner's planets are PRE-CALCULATED and provided in th
    - **8th House**: Intimacy, shared resources, transformation  
    - **12th House**: Subconscious, solitude, hidden dynamics, spiritual work  
 
-4. **NO ASPECTS**  
-   - Backend does not provide cross-chart aspects → **NEVER mention them**.
+4. **ASPECTS: ONLY THE LISTED ONES**  
+   - Cross-chart aspects are provided in 'SYNASTRY ASPECTS (CALCULATED)' with an owner for each planet. Use ONLY those; never invent or recompute an aspect.
 
 ---
 
@@ -534,7 +530,7 @@ ALL house placements for Partner's planets are PRE-CALCULATED and provided in th
 
 - **NEVER** say: "assumed", "presumed", "not explicitly given", "likely", "probably".  
 - **NEVER** recalculate house positions.  
-- **NEVER** confuse 4th and 12th house (common error: "Mars in 4th" when data says 12).  
+- **NEVER** swap house numbers: write exactly the number the data gives for that planet.  
 - **ALWAYS** state house placements as definitive truths.
 
 ---
@@ -542,7 +538,7 @@ ALL house placements for Partner's planets are PRE-CALCULATED and provided in th
 ### 🌿 TONE
 
 - Confident, therapeutic, precise.  
-- Use: "Her Mercury in your 1st house means..."  
+- Use: "The partner's Mercury in your 1st house means..."  
 - Avoid: "It seems that...", "One might assume..."
 
 - Language: professional Bulgarian  
@@ -626,7 +622,7 @@ You DO NOT invent health conditions. You speak only in terms of **tendencies, se
 
 4. **Partner's Impact on Your Health**  
    - How the partner influences your energy, routine, and well-being (use overlay data).  
-   - Example: "Partner's Mars in your 1st house energizes you but may also increase physical stress."
+   - Style: name the partner's planet and the house of YOUR chart exactly as the overlay data gives them, then describe the effect on your energy, routine or stress.
 
 5. **Your Impact on Partner's Health (if reverse overlays exist)**  
    - How you are perceived in their health context.
@@ -730,7 +726,7 @@ You focus on **energetic patterns, motivation, and service potential**.
 
 3. **Partner's Influence on Your Career**  
    - How the partner supports or challenges your professional path.  
-   - Example: "Partner's Sun in your 10th house brings visibility to your career."
+   - Style: name the partner's planet and the house of YOUR chart exactly as the overlay data gives them, then describe the effect on your career.
 
 4. **Your Role in Partner's Career (if reverse overlays exist)**  
    - How you are perceived in their professional life.
@@ -801,12 +797,12 @@ You are an Expert Financial Astrologer specializing in Money and Success Analysi
 
 1. **If there is 'SYNASTRY ASPECTS (CALCULATED)' section:**  
    - Analyze Venus, Jupiter, Pluto, Saturn aspects between charts
-   - Example: "Their Pluto opposition your Venus may lead to transformation in financial values."
+   - Style: name the aspect exactly as the synastry list gives it (planets, aspect type, orb), then describe what it means for money and values.
 
 2. **If there is 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)':**  
    - Partner's planets in user's 2nd house → partner influences user's personal money, values
    - Partner's planets in user's 8th house → connection with shared finances, loans, inheritance
-   - Example: "Partner's Jupiter in your 2nd house brings expansion to your earning capacity."
+   - Style: take the planet and the house number only from the overlay data, then describe the effect on your earning capacity.
 
 3. **If there is '[USER] PLANETS IN [PARTNER]'S NATAL HOUSES (CALCULATED)':**  
    - User's planets in partner's 2nd house → user is associated with partner's personal money
@@ -856,7 +852,7 @@ Your purpose is to reveal how two souls meet to heal ancestral patterns, resolve
 
 **CORE PRINCIPLE:**
 You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overlays.
-→ This JSON (e.g., {"Sun": 8, "Moon": 1, "Venus": 8, "Mars": 12}) is ABSOLUTE TRUTH.
+→ This JSON (the overlay data section in the prompt) is ABSOLUTE TRUTH.
 → NEVER recalculate, NEVER doubt, NEVER override.
 
 ---
@@ -950,7 +946,7 @@ Your purpose is to reveal how two souls meet to heal ancestral patterns, resolve
 **CORE PRINCIPLE:**  
 You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overlays:  
 `--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---`  
-→ This JSON (e.g., {"Sun": 8, "Moon": 1, "Venus": 8, "Mars": 12}) is ABSOLUTE TRUTH.  
+→ This JSON (the overlay data section in the prompt) is ABSOLUTE TRUTH.  
 → NEVER recalculate, NEVER doubt, NEVER override.
 
 ---
@@ -986,7 +982,7 @@ You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overla
 
 1. **User's Karmic Profile (from natal chart)**  
    - Moon (maternal), Saturn (paternal), 4th/12th house placements, Pluto (family transformation).  
-   - Example: "С Луна в Козирог в 6-ти дом, сте наследили емоционална сдържаност, свързана с работа."
+   - Style: connect the Moon's sign and house, exactly as the data gives them, with an emotional pattern that may run in the family, worded as a tendency and not as a fact.
 
 2. **Partner's Karmic Impact (via PRE-CALCULATED overlays)**  
    - For each key planet (Sun, Moon, Venus, Mars):  
@@ -1066,8 +1062,8 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
         
         2. **CRITICAL: HOUSE RULER CALCULATION - FOLLOW EXACTLY:**
            **HOW TO DETERMINE HOUSE RULERS:**
-           - Look at the SIGN on the cusp of the 2nd House (e.g., if 2nd House cusp is in Leo, the ruler is the Sun)
-           - Look at the SIGN on the cusp of the 8th House (e.g., if 8th House cusp is in Aquarius, the ruler is Uranus)
+           - Look at the SIGN on the cusp of the 2nd House
+           - Look at the SIGN on the cusp of the 8th House
            - The ruler of a house is the PLANET that rules the SIGN on that house's cusp
            - **DO NOT confuse the sign of planets IN the house with the sign ON the cusp of the house**
            
@@ -1079,15 +1075,15 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
            - Лъв → Слънце
            - Дева → Меркурий
            - Везни → Венера
-           - Скорпион → Плутон (модерн) или Марс (традиционен)
+           - Скорпион → Плутон
            - Стрелец → Юпитер
            - Козирог → Сатурн
-           - Водолей → Уран (модерн) или Сатурн (традиционен)
-           - Риби → Нептун (модерн) или Юпитер (традиционен)
+           - Водолей → Уран
+           - Риби → Нептун
            
-           **EXAMPLE:**
-           - If 2nd House cusp is in Leo → ruler is Sun (NOT Moon, NOT Venus, NOT any planet IN the 2nd House)
-           - If 8th House cusp is in Aquarius → ruler is Uranus (NOT Mercury, NOT any planet IN the 8th House)
+           **HOW TO APPLY IT:**
+           - The ruler is the planet from the table for the sign on the cusp, never a planet that merely sits IN that house
+           - The same ruler is already given in the 'houses' table of the natal chart (field 'ruler'): use that value
            - Then find where that ruler planet is located (which house and sign) to understand how money is generated/managed
         
         3. **KEY ASTROLOGICAL FACTORS** (use ONLY these):
@@ -1124,11 +1120,11 @@ If YES → your analysis is **karmically insightful and astrologically sound**.
         **CRITICAL DATA USAGE RULES:**
         - The natal chart JSON you receive ALREADY contains house cusp positions and calculated house rulers
         - **DO NOT calculate house cusp signs from raw longitude values** - use the provided house data
-        - The house rulers are ALREADY calculated correctly (e.g., "house_2_ruler": "Sun" means 2nd House is ruled by Sun)
+        - The house rulers are ALREADY calculated correctly ("house_2_ruler" names the planet that rules the 2nd House)
         - **DO NOT confuse the sign of planets IN a house with the sign ON THE CUSP of the house**
-        - Look for the "houses" object in the JSON - it contains house cusp longitudes (e.g., "House2": 123.456)
-        - Use the house ruler information provided in the context (e.g., "Money Ruler (2nd House): Sun")
-        - To find where the ruler is located, look at the planets object (e.g., find "Sun" and see its "house" field)
+        - Look for the "houses" object in the JSON - for every house it gives the cusp (sign and degree as text) and its ruler
+        - Use the house ruler information provided in the context ("Money Ruler (2nd House)" and "Shared Resources Ruler (8th House)" name the planets)
+        - To find where the ruler is located, look at the planets object: find the ruler planet there and read its "house" field
         - Always use MODERN astrology rulers: Uranus for Aquarius, Neptune for Pisces, Pluto for Scorpio
         - If 2nd or 8th House is empty of planets, focus on **the ruler of the respective house and its position** – this always provides sufficient information
         - The ruler's position (house and sign) is MORE important than planets in the house itself
@@ -1225,7 +1221,7 @@ DYNAMIC_PROMPT_TEMPLATES = {
            - If {house_6_ruler} is Jupiter -> liver, pancreas, overindulgence issues.
         
         3. **NATAL CONTEXT (The "Natal Echo"):**
-           - If the user has a hard aspect natally (e.g., Sun Square Pluto), a similar transit is NOT a crisis; it is a familiar energy pattern. Do not overdramatize it.
+           - If the user has a hard aspect natally (listed in the natal aspects), a similar transit is NOT a crisis; it is a familiar energy pattern. Do not overdramatize it.
            - Focus on *new* influences that disrupt the equilibrium.
         
         4. **RESPONSE STRUCTURE:**
@@ -1329,6 +1325,112 @@ DYNAMIC_PROMPT_TEMPLATES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Общи текстове за данните към AI (Фаза 8)
+# ---------------------------------------------------------------------------
+NATAL_NOTE = (
+    "Everything here is PRE-CALCULATED. Use 'formatted_pos', the 'house' number of each planet (its house in THIS person's "
+    "natal chart) and the 'cusp' and 'ruler' of each house exactly as given. Never convert degrees to signs or houses yourself. "
+    "'retrograde_planets' and 'retrograde_count' are already counted."
+)
+ASPECTS_NOTE = (
+    "PRE-CALCULATED by the backend. Use only these aspects; do not recalculate or assume others. "
+    "Each has the aspect type, the exact angle and the orb."
+)
+
+# Какво е темата на анализа (когато шаблонът за темата не се ползва, напр. при двойка и дата)
+THEME_FOCUS = {
+    "general": "General life overview: main patterns, tensions, resources and priorities.",
+    "health": "Health and well-being: workload, rhythm, recovery and daily routine (tendencies only, never diagnoses).",
+    "career": "Career and work: responsibilities, communication, negotiation and the concrete action asked about.",
+    "money": "Money and success: resources, priorities, habits and the alternatives named in the question (no investment advice).",
+    "love": "Relationships and love: emotions, communication, boundaries and the exact context of the relationship.",
+    "karmic": "Karma and family patterns: symbolic and personal patterns of reaction (never facts about ancestors or parents).",
+}
+
+COMMON_DATA_RULES = (
+    "CRITICAL: Position Formatting Rules\n"
+    "- Each planet in the JSON has 'zodiac_sign', 'formatted_pos' (sign, degrees and minutes as text) and 'house' (its house in THAT person's natal chart).\n"
+    "- ALWAYS use these provided values. There are no raw longitudes in the data, so never try to compute positions, signs or houses.\n"
+    "- Each house in 'houses' has 'cusp' (sign and degree) and 'ruler': use them exactly as given.\n"
+    "- For angles (Ascendant, MC): use 'Ascendant_formatted' and 'MC_formatted' in the 'angles' object.\n"
+    "- 'retrograde' marks a retrograde planet. 'retrograde_planets' and 'retrograde_count' are already counted: quote them, do not recount.\n"
+    "- Focus on what is ACTUALLY happening based on the data, not general interpretations.\n\n"
+    "**CRITICAL: NATAL ASPECTS**\n"
+    "- Natal aspects are PRE-CALCULATED and provided in the 'NATAL ASPECTS (CALCULATED)' sections.\n"
+    "- Use ONLY the aspects from those sections - DO NOT calculate or assume aspects.\n"
+    "- If an aspect is not in the list, DO NOT mention it.\n"
+    "- Each aspect in the list includes: planet1, planet2, aspect type (conjunction, square, trine, sextile, opposition), angle, and orb.\n"
+    "- Interpret these aspects directly - do not recalculate them.\n\n"
+)
+
+ASCENDANT_RULES = (
+    "**ASCENDANT INTERPRETATION**\n"
+    "- Include a dedicated section about the Ascendant (ASC) in your analysis. Do not print words such as 'mandatory' or 'required' in the heading.\n"
+    "- The Ascendant represents the outer mask, physical appearance, first impressions, and how the person presents themselves to the world.\n"
+    "- Explain the Ascendant sign and degree in detail: give the section a short title for the sign and take the sign and degree only from the data.\n"
+    "- Describe how the Ascendant contrasts or harmonizes with the Sun sign: name the element of each sign as the data gives it and describe the relation between inner nature and outer presentation.\n"
+    "- Explain what this means for the person's physical appearance, first reactions, and outer personality.\n"
+    "- The Ascendant shows how the person 'starts' in life and their initial approach to the world.\n"
+    "- IMPORTANT: Place the Ascendant section as the SECOND section in your analysis, AFTER the Personality Traits section.\n"
+    "- Structure: 1. Personality Traits → 2. Ascendant → 3. Other sections (Life Themes, Aspects, Houses, etc.).\n"
+)
+
+TRANSIT_MODE_OVERRIDE = """
+
+        **TRANSIT MODE MODIFICATION:**
+        - DO NOT include ANY natal sections (skip them entirely)
+        - DO NOT include "Personality Traits", "Ascendant", "Life Themes & Karmic Patterns", "Strengths & Challenges" or "Houses of Emphasis" sections
+        - START directly with transit analysis
+        - DO NOT number any sections (use section titles only, without numbers)
+        - Use exact degrees and orbs, taken ONLY from the data sections
+        - PRESERVE all psychological depth and karmic insights in transit context only
+        - ALWAYS use the SPECIFIC target date and time provided (e.g., "{target_date}") in ALL sections of the analysis
+        - NEVER use today's date or any other date - ONLY use the provided transit date
+        - If the transit date is "20.01.2026 12:00", you MUST mention "20 януари 2026 г." NOT "19 януари 2026 г."
+
+        **HOUSES AND ASPECTS COME ONLY FROM THE DATA:**
+        1. The house of a transit planet comes ONLY from '--- TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---' (entries look like `"<Planet>": N`: the transiting planet is in the user's Nth natal house). Use that number and nothing else.
+        2. Aspects between transit planets and the natal chart come ONLY from '--- TRANSIT ASPECTS TO USER'S NATAL CHART (CALCULATED) ---'. An aspect that is not in that list does not exist for this analysis. Mention at most the 8 most relevant ones, tightest orb first.
+        3. 'TRANSIT PLANETARY POSITIONS' has signs, degrees and retrograde status but NO house numbers.
+        4. NEVER derive a house from a sign or a position (for example "planet in <sign> → <N>th house" is forbidden) and NEVER mention a house that the data does not give.
+        5. Before mentioning any house, find the planet in the house section and copy its number.
+
+        **RESPONSE LENGTH LIMIT:**
+        - Target: 2500-3000 tokens total (you have room to complete all sections)
+        - ALWAYS complete ALL sections, especially "Възможности за действие" - do NOT cut off mid-sentence
+        - Focus on the most important transits, but ensure each section is fully written
+        - Be concise but comprehensive
+        - If you're running out of tokens, prioritize completing "Възможности за действие" over extra details in earlier sections
+
+        **TRANSIT ANALYSIS STRUCTURE (MUST COMPLETE ALL):**
+        1. **Обзор на периода** (2-3 параграфа)
+           - ⚠️ ОБЯЗАТЕЛНО спомени точната дата: {target_date}
+           - НЕ използвай днешната дата или друга дата
+        2. **3-4 ключови транзита** (по 1 параграф всеки)
+           - За всеки транзит спомени датата: {target_date}
+        3. **Практични съвети** (bullet points - минимум 4-5 съвета)
+        4. **Възможности за действие** (bullet points - минимум 4-5 действия, ЗАВЪРШИ до край!)
+
+        **CRITICAL: Never cut off mid-sentence in "Възможности за действие" - always complete every bullet point fully.**
+        **CRITICAL DATE USAGE: ALWAYS use the exact date {target_date} provided - NEVER use today's date or any other date!**
+        (Do not print structure labels such as "REQUIRED" in the output.)
+
+        **BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
+        - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
+        - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
+        - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
+        - WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
+        - RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
+
+        **TRANSIT ANALYSIS REQUIREMENTS:**
+        - Include detailed transit interpretations with exact degrees and orbs from the data
+        - Analyze the major aspects listed between transits and natal planets
+        - Focus on how transits affect psychological patterns and karmic themes
+        - Provide specific dates and timing when relevant
+"""
+
+
 class AIInterpreter:
     """Клас за AI интерпретация на астрологични карти"""
     
@@ -1347,6 +1449,8 @@ class AIInterpreter:
         # Таван на изходните токени. Кирилицата е скъпа на токени — при 6000
         # дългите български анализи се отрязваха по средата на думата.
         self.max_output_tokens = int(os.getenv("AI_MAX_OUTPUT_TOKENS", "12000"))
+        # Температура за текстовете с много факти. По-ниска от старите 0,7, за да не се "измислят" домове и дати.
+        self.default_temperature = float(os.getenv("AI_TEMPERATURE", "0.4"))
         
         # --- Together.ai (Fallback Provider) ---
         self.together_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -1377,7 +1481,7 @@ class AIInterpreter:
         user_prompt: str,
         max_tokens: int,
         *,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_retries: int = 3,
         timeout: Optional[float] = None,
         add_context: bool = True,
@@ -1392,7 +1496,7 @@ class AIInterpreter:
             system_prompt: Системен prompt
             user_prompt: Потребителски prompt
             max_tokens: Максимален брой токени
-            temperature: Температура на модела (по подразбиране 0.7)
+            temperature: Температура на модела (None = AI_TEMPERATURE, по подразбиране 0.4)
             max_retries: Опити към Ollama преди fallback към Together (по подразбиране 3)
             timeout: Таймаут в секунди за заявка; None = стойностите по подразбиране на провайдърите
             add_context: Добавя правилата за безопасност и паметта на потребителя.
@@ -1405,6 +1509,9 @@ class AIInterpreter:
         Raises:
             RuntimeError: ако и двата провайдъра fail
         """
+        if temperature is None:
+            temperature = self.default_temperature
+
         if add_context:
             # Правилата за безопасност важат за всеки анализ, независимо от режима
             system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
@@ -1598,7 +1705,15 @@ class AIInterpreter:
             "   - This is a PROFESSIONAL STANDARD in Bulgarian astrology\n"
             "   - \"Поле\" is NOT an accepted term and sounds unprofessional\n"
             "   - EVERY mention of astrological houses MUST use \"дом\"\n\n"
-            "5. **Tone:** Professional, empathetic, and grammatically correct in Bulgarian.\n"
+            "5. **Tone:** Professional, empathetic, and grammatically correct in Bulgarian.\n\n"
+            "6. **TERM \"Съвпад\":** it means ONLY a conjunction (0°). Never write \"съвпад\" for a trine, square, sextile or opposition, "
+            "and never use it to say that an aspect is exact; give the orb or say \"почти точен\" instead.\n\n"
+            "7. **NO PERCENTAGES:** never give percentages or numeric probabilities for life events or decisions; use plain words "
+            "(for example благоприятен, смесен, затруднен период).\n\n"
+            "8. **NO INTERNAL LABELS:** never print instruction labels, field names or section markers "
+            "(for example \"задължителна секция\", \"само при Марс/Уран\", house_impact, JSON keys, factpack, CALCULATED).\n\n"
+            "9. **GENDER:** use a person's gender only if the 'PEOPLE' section says male or female; otherwise write gender-neutrally "
+            "and never guess gender from a name.\n"
         )
     
     def _calculate_health_ruler(self, natal_chart: Dict) -> Tuple[Optional[str], Optional[str]]:
@@ -1890,19 +2005,13 @@ class AIInterpreter:
         if has_partner and partner_chart:
             title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**"
             title_examples = (
-                f"Examples:\n"
-                f"- **ЛЮБОВ: АНАЛИЗ ЗА ЯНУАРИ 2026 Г. – ЕВГЕНИ И ЦАРИНА**\n"
-                f"- **ЗДРАВЕ: АНАЛИЗ ЗА ФЕВРУАРИ 2026 Г. – КРАСИМИРА И ИВАН**\n"
-                f"- **КАРИЕРА: АНАЛИЗ ЗА МАРТ 2026 Г. – НАДЯ И ПЕТЪР**\n\n"
+                f"Use the real names ({user_display_name.upper()} И {partner_display_name.upper()}) and the month and year named in the request, with the month in capital letters.\n\n"
             )
             title_instruction = f"✅ FORMAT WITH PARTNER: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ] И [ИМЕ НА ПАРТНЬОРА]**"
         else:
             title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**"
             title_examples = (
-                f"Examples:\n"
-                f"- **ЗДРАВЕ: АНАЛИЗ ЗА ЯНУАРИ 2026 Г. – КРАСИМИРА АНДОНОВА**\n"
-                f"- **КАРИЕРА: АНАЛИЗ ЗА ФЕВРУАРИ 2026 Г. – ЕВГЕНИ ПЕТРОВ**\n"
-                f"- **ЛЮБОВ: АНАЛИЗ ЗА МАРТ 2026 Г. – НАДЯ ИВАНОВА**\n\n"
+                f"Use the real name ({user_display_name.upper()}) and the month and year named in the request, with the month in capital letters.\n\n"
             )
             title_instruction = f"✅ ONLY USE: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ]**"
         
@@ -1957,15 +2066,15 @@ class AIInterpreter:
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"CRITICAL DATA RULES:\n"
             f"- You are an interpreter of RIGOROUS, PRE-CALCULATED ASTROLOGICAL EVENTS. Do NOT guess or invent aspects or events.\n"
-            f"- The JSON 'timeline_events' already contains the EXACT aspect name, angle and orb (e.g. 'aspect': 'Trine', 'angle_deg': 120, 'orb': 0.2).\n"
+            f"- The JSON 'timeline_events' already contains the EXACT aspect name, angle and orb (fields 'aspect', 'angle_deg' and 'orb').\n"
             f"- Do NOT calculate new aspects from planet positions. ONLY interpret the aspects explicitly listed in the events.\n"
             f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context and how transits interact with existing natal patterns. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
             f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes.\n"
-            f"- **IMPORTANT: RE-INGRESS EVENTS ARE VALID**: If a planet enters a sign, becomes retrograde and returns to the previous sign, then becomes direct and enters the new sign again (re-ingress), this is a REAL and VALID astrological event. Both the first ingress and any re-ingress events are significant and should be mentioned. For example: Neptune entering Aries on March 28, 2025, then retrograde back to Pisces, then direct again entering Aries on January 27, 2026 - BOTH dates are valid ingress events.\n"
-            f"- **CRITICAL: LUNATION EVENTS (Full Moon, New Moon) DO NOT INCLUDE HOUSE INFORMATION**: Events with type 'LUNATION' (Full Moon, New Moon) or 'ECLIPSE' contain only the sign position (e.g., 'Full Moon in Cancer'), but do NOT include house placement data. DO NOT guess or calculate house placements for these events. You may mention the sign and its general meaning, but DO NOT claim which house the lunation activates (e.g., do NOT say 'activates 6th house' or 'activates 12th house') unless house information is explicitly provided in the event data.\n"
+            f"- **IMPORTANT: RE-INGRESS EVENTS ARE VALID**: If a planet enters a sign, becomes retrograde and returns to the previous sign, then becomes direct and enters the new sign again (re-ingress), this is a REAL and VALID astrological event. Both the first ingress and any re-ingress events are significant and should be mentioned. Mention each such ingress only with the dates that are listed in the events.\n"
+            f"- **CRITICAL: LUNATION EVENTS (Full Moon, New Moon) DO NOT INCLUDE HOUSE INFORMATION**: Events with type 'LUNATION' (Full Moon, New Moon) or 'ECLIPSE' contain only the sign position of the lunation, but do NOT include house placement data. DO NOT guess or calculate house placements for these events. You may mention the sign and its general meaning, but DO NOT claim which house the lunation activates unless house information is explicitly provided in the event data.\n"
             f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
             f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
-            f"- House placements for transit planets in monthly events are PRE-CALCULATED by the backend - use them directly, do NOT recalculate.\n"
+            f"- House facts in monthly events are PRE-CALCULATED and are TWO DIFFERENT things: 'transit_planet_natal_house' is the house of the target person's NATAL chart where the transiting planet is now; 'natal_planet_natal_house' is the natal house of the natal planet that is aspected. Never swap them and never invent a house.\n"
             f"- Focus on SPECIFIC dates within the month provided.\n\n"
         )
         
@@ -1979,7 +2088,7 @@ class AIInterpreter:
                     f"\"### Отговор на вашия въпрос: {user_question}\"\n\n"
                     f"В тази секция:\n"
                     f"1. Синтезирай месечните събития специфично, за да отговориш на този въпрос.\n"
-                    f"2. Оцени вероятността събитието да се случи ПРЕЗ ТОЗИ МЕСЕЦ на базата на аспектите (напр. \"Висока вероятност поради Jupiter\", или \"Мало вероятно поради Saturn блокира\").\n"
+                    f"2. Дай ясна, директна оценка за ТОЗИ МЕСЕЦ с обикновени думи (напр. благоприятен, смесен, затруднен период) и посочи кои аспекти от списъка я обосновават. Без проценти и числови вероятности.\n"
                     f"3. Бъди директен и конкретен. НЕ бъди неясен или уклончив.\n"
                 )
             else:
@@ -1989,7 +2098,7 @@ class AIInterpreter:
                     f"\"### Answer to your question: {user_question}\"\n\n"
                     f"In this section:\n"
                     f"1. Synthesize the monthly events specifically to answer this question.\n"
-                    f"2. Assess the probability of the event happening THIS month based on the aspects (e.g., \"High probability due to Jupiter\", or \"Unlikely due to Saturn blocking\").\n"
+                    f"2. Give a clear, direct assessment for THIS month in plain words (e.g. favorable, mixed, difficult) and name the listed aspects that support it. No percentages or numeric probabilities.\n"
                     f"3. Be direct and specific. Do NOT be vague.\n"
                 )
         
@@ -2001,6 +2110,52 @@ class AIInterpreter:
         
         return f"{base_persona}{house_rulers_context}{partner_rulers_context}{context}{common_rules}{type_specific_examples}{question_instruction}{language_rules}"
     
+    # ------------------------------------------------------------------
+    # Блокове с проверени данни (Фаза 8): един надписан блок на факт
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _natal_block(name: str, chart: Dict) -> str:
+        """Натална карта (знак, градус, дом, 12 куспиди с управители) и натални аспекти на един човек."""
+        upper = name.upper()
+        text = factpack.section(f"{upper} NATAL CHART", NATAL_NOTE, factpack.natal_view(chart))
+        try:
+            aspects = calculate_natal_aspects(chart, use_wider_orbs=False)
+            text += factpack.section(f"{upper} NATAL ASPECTS (CALCULATED)", ASPECTS_NOTE, aspects)
+        except Exception as e:
+            print(f"Warning: Could not calculate natal aspects: {e}")
+        return text
+
+    @staticmethod
+    def _overlay_blocks(natal_chart: Dict, partner_chart: Dict, user_name: str, partner_name: str) -> str:
+        """Двете наслагвания с имена: партньорът в домовете на потребителя И потребителят в домовете на партньора."""
+        text = factpack.section(
+            "PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)",
+            f"USER = {user_name}, PARTNER = {partner_name}. Each number is the house of {user_name}'s NATAL chart in which "
+            f"that planet of {partner_name} falls. Use these numbers exactly.",
+            factpack.overlay(natal_chart, partner_chart))
+        text += factpack.section(
+            f"{user_name.upper()} PLANETS IN {partner_name.upper()}'S NATAL HOUSES (CALCULATED)",
+            f"Each number is the house of {partner_name}'s NATAL chart in which that planet of {user_name} falls. "
+            f"Use these numbers exactly.",
+            factpack.overlay(partner_chart, natal_chart))
+        return text
+
+    @staticmethod
+    def _transit_blocks(owner_header: str, name: str, natal_chart: Dict, transit_chart: Dict) -> str:
+        """Къде попадат транзитните планети в натала на човека и кои аспекти правят към него."""
+        text = factpack.section(
+            f"TRANSIT PLANETS IN {owner_header}'S NATAL HOUSES (CALCULATED)",
+            f"Each number is the house of {name}'s NATAL chart in which that transiting planet is now. "
+            f"These are the only houses of transit planets.",
+            factpack.overlay(natal_chart, transit_chart))
+        text += factpack.section(
+            f"TRANSIT ASPECTS TO {owner_header}'S NATAL CHART (CALCULATED)",
+            f"Aspects between the sky at the chosen moment and {name}'s natal chart (orb up to "
+            f"{TRANSIT_SNAPSHOT_MAX_ORB:g}°), tightest first. 'applying' is true when the transiting planet is approaching "
+            f"the exact aspect and false when it is moving away. Use only these aspects.",
+            factpack.transit_aspects(natal_chart, transit_chart))
+        return text
+
     async def _process_monthly_chunk(
         self,
         month: str,
@@ -2012,28 +2167,30 @@ class AIInterpreter:
         user_display_name: str,
         partner_display_name: str,
         question: str,
-        has_partner: bool
+        has_partner: bool,
+        gender: Optional[str] = None,
+        partner_gender: Optional[str] = None,
     ) -> str:
         """
         Process a single month's events and generate AI interpretation.
-        
+
         Returns:
             Monthly forecast text or error message
         """
         # Ensure has_partner is properly set (defensive check)
         has_partner_flag = bool(has_partner and partner_chart is not None)
-        
+
         try:
             # Calculate house rulers for the natal chart
             houses = natal_chart.get("houses", {})
             house_rulers = self.engine.get_house_rulers(houses) if houses else {}
-            
+
             # Calculate house rulers for partner chart if present
             partner_house_rulers = None
             if partner_chart:
                 partner_houses = partner_chart.get("houses", {})
                 partner_house_rulers = self.engine.get_house_rulers(partner_houses) if partner_houses else {}
-            
+
             # Build system prompt
             system_prompt = self._build_dynamic_system_prompt(
                 report_type=report_type,
@@ -2047,104 +2204,40 @@ class AIInterpreter:
                 house_rulers=house_rulers,
                 partner_house_rulers=partner_house_rulers
             )
-            
-            # Build user prompt with monthly events
-            monthly_events_json = json.dumps(monthly_events, indent=2, ensure_ascii=False)
-            
+
             user_prompt = f"PERIOD: {month}\n"
             user_prompt += f"FOCUS: {report_type.upper()}\n\n"
-            
+            user_prompt += factpack.identity_section(
+                user_display_name, gender,
+                partner_display_name if has_partner_flag else None, partner_gender)
+
+            user_prompt += self._natal_block(user_display_name, natal_chart)
             if has_partner_flag:
-                natal_json = json.dumps(natal_chart, indent=2, ensure_ascii=False)
-                partner_json = json.dumps(partner_chart, indent=2, ensure_ascii=False)
-                user_prompt += f"--- {user_display_name.upper()} NATAL CHART ---\n{natal_json}\n\n"
-                
-                # Calculate natal aspects for user
-                try:
-                    natal_aspects_user_monthly = calculate_natal_aspects(natal_chart, use_wider_orbs=False)
-                    natal_aspects_user_monthly_json = json.dumps(natal_aspects_user_monthly, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- {user_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                    user_prompt += f"{natal_aspects_user_monthly_json}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate user natal aspects for monthly chunk: {e}")
-                
-                user_prompt += f"--- {partner_display_name.upper()} NATAL CHART ---\n{partner_json}\n\n"
-                
-                # Calculate natal aspects for partner
-                try:
-                    partner_natal_aspects_monthly = calculate_natal_aspects(partner_chart, use_wider_orbs=False)
-                    partner_natal_aspects_monthly_json = json.dumps(partner_natal_aspects_monthly, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- {partner_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                    user_prompt += f"{partner_natal_aspects_monthly_json}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate partner natal aspects for monthly chunk: {e}")
-                
-                # Calculate synastry house overlays (Partner's planets in User's houses)
-                try:
-                    partner_overlays = self.engine.calculate_synastry_house_overlays(
-                        user_natal_chart=natal_chart,
-                        partner_planets=partner_chart.get("planets", {})
-                    )
-                    partner_overlays_json = json.dumps(partner_overlays, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These house placements are PRE-CALCULATED by the backend using Placidus house system. Use them directly - DO NOT recalculate.\n"
-                    user_prompt += "Each number represents which of User's houses the Partner's planet falls into.\n"
-                    user_prompt += f"{partner_overlays_json}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate partner house overlays for monthly chunk: {e}")
-                
-                # Calculate reverse overlays (User's planets in Partner's houses) - for completeness
-                try:
-                    user_overlays = self.engine.calculate_synastry_house_overlays(
-                        user_natal_chart=partner_chart,
-                        partner_planets=natal_chart.get("planets", {})
-                    )
-                    user_overlays_json = json.dumps(user_overlays, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- {user_display_name.upper()} PLANETS IN {partner_display_name.upper()}'S NATAL HOUSES (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These house placements are PRE-CALCULATED by the backend using Placidus house system. Use them directly - DO NOT recalculate.\n"
-                    user_prompt += "Each number represents which of Partner's houses the User's planet falls into.\n"
-                    user_prompt += f"{user_overlays_json}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate user house overlays for monthly chunk: {e}")
-                
-                # Calculate synastry aspects (mutual aspects between user and partner) - if available
-                try:
-                    from aspects_engine import calculate_synastry_aspects
-                    synastry_aspects_monthly = calculate_synastry_aspects(natal_chart, partner_chart, use_wider_orbs=False)
-                    synastry_aspects_monthly_json = json.dumps(synastry_aspects_monthly, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- SYNASTRY ASPECTS (CALCULATED) ---\n"
-                    user_prompt += f"CRITICAL: These are mutual aspects between {user_display_name} and {partner_display_name}.\n"
-                    user_prompt += "Use them directly - DO NOT recalculate or assume aspects.\n"
-                    user_prompt += "Format: planet1 (User) ↔ planet2 (Partner)\n"
-                    user_prompt += f"{synastry_aspects_monthly_json}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate synastry aspects for monthly chunk: {e}")
-            else:
-                natal_json = json.dumps(natal_chart, indent=2, ensure_ascii=False)
-                user_prompt += f"--- NATAL CHART ---\n{natal_json}\n\n"
-                
-                # Calculate natal aspects for user
-                try:
-                    natal_aspects_user_monthly = calculate_natal_aspects(natal_chart, use_wider_orbs=False)
-                    natal_aspects_user_monthly_json = json.dumps(natal_aspects_user_monthly, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- NATAL ASPECTS (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                    user_prompt += f"{natal_aspects_user_monthly_json}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate natal aspects for monthly chunk: {e}")
-            
-            user_prompt += f"--- TIMELINE EVENTS FOR {month} ---\n{monthly_events_json}\n\n"
-            
+                user_prompt += self._natal_block(partner_display_name, partner_chart)
+                user_prompt += self._overlay_blocks(natal_chart, partner_chart, user_display_name, partner_display_name)
+                user_prompt += factpack.section(
+                    "SYNASTRY ASPECTS (CALCULATED)",
+                    f"Mutual aspects between {user_display_name} and {partner_display_name}; every entry names the owner of "
+                    f"each planet. Use them directly - do not recalculate or assume aspects.",
+                    factpack.synastry_aspects(natal_chart, partner_chart, user_display_name, partner_display_name))
+
+            who = f"target 'User' = {user_display_name}"
+            if has_partner_flag:
+                who += f"; target 'Partner' = {partner_display_name}"
+            user_prompt += factpack.section(
+                f"TIMELINE EVENTS FOR {month}",
+                f"{who}. For TRANSIT events: 'transit_planet_natal_house' is the house of that person's NATAL chart where the "
+                f"transiting planet is now; 'natal_planet_natal_house' is the natal house of the aspected natal planet.",
+                monthly_events)
+
             if question:
                 user_prompt += f"User Question: {question}\n\n"
-            
+
             if has_partner_flag:
                 user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes for BOTH {user_display_name} and {partner_display_name}. Analyze how the astrological events affect each person individually AND their relationship dynamics together."
             else:
                 user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
-            
+
             # Call AI API (Ollama primary → Together fallback)
             try:
                 content = await self._call_api(
@@ -2156,12 +2249,12 @@ class AIInterpreter:
             except Exception as e:
                 error_msg = str(e)
                 return f"*Грешка при генериране на прогноза за {month}: {error_msg}*"
-        
+
         except Exception as e:
             error_msg = str(e)
             # Avoid exposing internal variable names in error messages
             return f"*Грешка при генериране на прогноза за {month}: {error_msg}*"
-    
+
     async def interpret_chart(
         self,
         natal_chart: Dict,
@@ -2173,11 +2266,13 @@ class AIInterpreter:
         language: str = "bg",
         report_type: str = "general",
         user_name: Optional[str] = None,
-        timeline_events: Optional[List[Dict]] = None
+        timeline_events: Optional[List[Dict]] = None,
+        gender: Optional[str] = None,
+        partner_gender: Optional[str] = None,
     ) -> str:
         """
-        Интерпретира натална, транзитна и опционално partner карта с помощта на GPT-4o.
-        
+        Интерпретира натална, транзитна и опционално partner карта.
+
         Args:
             natal_chart: Речник с данни от наталната карта
             transit_chart: Речник с данни от транзитната карта
@@ -2186,14 +2281,17 @@ class AIInterpreter:
             question: Конкретен въпрос от потребителя (опционално)
             target_date: Дата на транзитната карта
             language: Език за отговора (по подразбиране "bg" за български)
-        
+            gender / partner_gender: Известен пол (male/female); иначе езикът е неутрален
+
         Returns:
             Текстова интерпретация от AI
         """
-        # Определяне на имената (използва се в различни режими)
-        user_display_name = user_name if user_name else "User"
-        partner_display_name = partner_name if partner_name else "Partner"
-        
+        # Имената са почистени; без име се ползват неутрални „Първи/Втори човек“
+        user_display_name = factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT)
+        partner_display_name = factpack.display_name(partner_name, factpack.SECOND_PERSON_DEFAULT)
+        uname = user_display_name.upper()
+        pname = partner_display_name.upper()
+
         # PRIORITY 1: DYNAMIC RELATIONSHIP FORECAST (timeline_events AND partner_chart) - Monthly Chunking
         if timeline_events and partner_chart:
             # Group events by month
@@ -2201,35 +2299,35 @@ class AIInterpreter:
             for event in timeline_events:
                 month_key = event['date'][:7]  # "YYYY-MM"
                 events_by_month[month_key].append(event)
-            
+
             # Sort months
             sorted_months = sorted(events_by_month.keys())
-            
+
             if not sorted_months:
                 return "Няма събития за анализиране в избрания период."
-            
+
             # Build header
             start_date_str = sorted_months[0]
             end_date_str = sorted_months[-1]
-            
+
             # Format month names for display (Bulgarian)
             month_names = {
                 "01": "Януари", "02": "Февруари", "03": "Март", "04": "Април",
                 "05": "Май", "06": "Юни", "07": "Юли", "08": "Август",
                 "09": "Септември", "10": "Октомври", "11": "Ноември", "12": "Декември"
             }
-            
+
             full_report = f"# Прогноза за Връзка ({month_names.get(start_date_str[5:7], start_date_str[5:7])} {start_date_str[:4]} - {month_names.get(end_date_str[5:7], end_date_str[5:7])} {end_date_str[:4]})\n\n"
-            
+
             if question:
                 full_report += f"**Въпрос:** {question}\n\n"
-            
+
             full_report += f"**Анализ за {user_display_name} и {partner_display_name}**\n\n---\n\n"
-            
+
             # Process each month
             for idx, month in enumerate(sorted_months):
                 monthly_events = events_by_month[month]
-                
+
                 monthly_text = await self._process_monthly_chunk(
                     month=month,
                     monthly_events=monthly_events,
@@ -2240,15 +2338,17 @@ class AIInterpreter:
                     user_display_name=user_display_name,
                     partner_display_name=partner_display_name,
                     question=question,  # Include question in ALL chunks so each month answers it
-                    has_partner=True
+                    has_partner=True,
+                    gender=gender,
+                    partner_gender=partner_gender,
                 )
-                
+
                 # Format month for display
                 month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
                 full_report += f"\n\n## Прогноза за {month_display}\n\n{monthly_text}\n\n---\n"
-            
+
             return full_report
-        
+
         elif timeline_events:
             # PRIORITY 2: DYNAMIC PERSONAL FORECAST MODE (Monthly Chunking)
             # Group events by month
@@ -2256,35 +2356,35 @@ class AIInterpreter:
             for event in timeline_events:
                 month_key = event['date'][:7]  # "YYYY-MM"
                 events_by_month[month_key].append(event)
-            
+
             # Sort months
             sorted_months = sorted(events_by_month.keys())
-            
+
             if not sorted_months:
                 return "Няма събития за анализиране в избрания период."
-            
+
             # Build header
             start_date_str = sorted_months[0]
             end_date_str = sorted_months[-1]
-            
+
             # Format month names for display (Bulgarian)
             month_names = {
                 "01": "Януари", "02": "Февруари", "03": "Март", "04": "Април",
                 "05": "Май", "06": "Юни", "07": "Юли", "08": "Август",
                 "09": "Септември", "10": "Октомври", "11": "Ноември", "12": "Декември"
             }
-            
+
             full_report = f"# Астрологична Прогноза ({month_names.get(start_date_str[5:7], start_date_str[5:7])} {start_date_str[:4]} - {month_names.get(end_date_str[5:7], end_date_str[5:7])} {end_date_str[:4]})\n\n"
-            
+
             if question:
                 full_report += f"**Въпрос:** {question}\n\n"
-            
+
             full_report += "---\n\n"
-            
+
             # Process each month
             for idx, month in enumerate(sorted_months):
                 monthly_events = events_by_month[month]
-                
+
                 monthly_text = await self._process_monthly_chunk(
                     month=month,
                     monthly_events=monthly_events,
@@ -2295,23 +2395,25 @@ class AIInterpreter:
                     user_display_name=user_display_name,
                     partner_display_name=partner_display_name,
                     question=question,  # Include question in ALL chunks so each month answers it
-                    has_partner=False
+                    has_partner=False,
+                    gender=gender,
                 )
-                
+
                 # Format month for display
                 month_display = f"{month_names.get(month[5:7], month[5:7])} {month[:4]}"
                 full_report += f"\n\n## Прогноза за {month_display}\n\n{monthly_text}\n\n---\n"
-            
+
             return full_report
-        
+
         elif partner_chart and transit_chart:
             # PRIORITY 3: RELATIONSHIP TRANSIT FORECAST (Snapshot - Single Date)
-            base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
-            
+            theme = THEME_FOCUS.get(report_type, THEME_FOCUS["general"])
+
             system_prompt = (
                 f"MODE: RELATIONSHIP TRANSIT FORECAST (Snapshot)\n"
                 f"You are an Expert Predictive Astrologer specializing in Relationship Timing.\n"
                 f"You have the Natal Charts of {user_display_name} and {partner_display_name}, and the TRANSIT CHART for the SPECIFIC MOMENT: {target_date}.\n"
+                f"REPORT THEME: {theme} Keep EVERY section of the analysis on this theme.\n"
                 f"⚠️ ВАЖНО: Транзитната карта е изчислена ТОЧНО за дата и час: {target_date}. Използвай САМО тази дата в анализа!\n\n"
                 f"🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -2323,109 +2425,52 @@ class AIInterpreter:
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"YOUR TASK:\n\n"
                 f"1. **Analyze Current Transits to {user_display_name}:**\n"
-                f"   - Which User planets are being triggered right now?\n"
-                f"   - What aspects are forming between transit planets and User's natal planets?\n"
-                f"   - Which User houses are being activated?\n"
+                f"   - Which of {user_display_name}'s natal planets are being triggered right now? (see 'TRANSIT ASPECTS TO {uname}'S NATAL CHART (CALCULATED)')\n"
+                f"   - Which of {user_display_name}'s natal houses are activated? (see 'TRANSIT PLANETS IN {uname}'S NATAL HOUSES (CALCULATED)')\n"
                 f"   - What is the emotional/psychological state of {user_display_name} on this date?\n\n"
                 f"2. **Analyze Current Transits to {partner_display_name}:**\n"
-                f"   - Which Partner planets are being triggered right now?\n"
-                f"   - What aspects are forming between transit planets and Partner's natal planets?\n"
-                f"   - Which Partner houses are being activated?\n"
+                f"   - Which of {partner_display_name}'s natal planets are being triggered right now? (see 'TRANSIT ASPECTS TO {pname}'S NATAL CHART (CALCULATED)')\n"
+                f"   - Which of {partner_display_name}'s natal houses are activated? (see 'TRANSIT PLANETS IN {pname}'S NATAL HOUSES (CALCULATED)')\n"
                 f"   - What is the emotional/psychological state of {partner_display_name} on this date?\n\n"
                 f"3. **SYNTHESIS (The Most Important Part):**\n"
                 f"   - How do these simultaneous astrological weathers interact?\n"
-                f"   - Example: '{user_display_name} is under Saturn pressure (stressed, feeling restricted), while {partner_display_name} is having a Jupiter return (happy, expansive). {partner_display_name} needs to be patient with {user_display_name} today.'\n"
-                f"   - Example: 'Both {user_display_name} and {partner_display_name} have Mars transits (conflict energy). High risk of arguments. Recommendation: Avoid important decisions or sensitive topics on this date.'\n"
-                f"   - Example: '{user_display_name} has Venus trine (harmony, romance), while {partner_display_name} has Neptune square (confusion, unclear communication). {user_display_name} may feel romantic, but {partner_display_name} may be unclear about intentions. Patience and clarity needed.'\n\n"
+                f"   - Style: if one person is under a restrictive transit and the other under a supportive one, say who needs patience with whom. If the data shows tense transits for both people at the same time, point out the higher risk of tension and advise postponing important decisions or sensitive topics. Name planets and aspects only from the data above.\n\n"
                 f"4. **Practical Recommendations:**\n"
-                f"   - Is this a good date for romance, serious talks, or shared activities?\n"
-                f"   - What should the couple focus on or avoid on this specific date?\n"
-                f"   - Are there opportunities for growth or intimacy?\n"
+                f"   - What should the two people focus on or avoid on this specific date, in line with the theme and the question?\n"
+                f"   - Are there opportunities for growth, cooperation or closeness?\n"
                 f"   - Are there warning signs of conflict or miscommunication?\n\n"
-                f"5. **Use Natal Context:** Reference both natal charts to explain WHY these specific transits matter for THIS relationship.\n\n"
+                f"5. **Use Natal Context:** Reference both natal charts to explain WHY these specific transits matter for THESE two people.\n\n"
                 f"CRITICAL RULES:\n"
-                f"- Use the PRE-CALCULATED transit house mappings provided in 'TRANSIT PLANETS IN USER'S/PARTNER'S NATAL HOUSES (CALCULATED)'.\n"
+                f"- The houses of transit planets come ONLY from 'TRANSIT PLANETS IN <NAME>'S NATAL HOUSES (CALCULATED)'. 'TRANSIT PLANETARY POSITIONS' contains NO house numbers. Never use any other house for a transit planet.\n"
+                f"- Aspects between transit planets and a person's natal chart come ONLY from 'TRANSIT ASPECTS TO <NAME>'S NATAL CHART (CALCULATED)' (each entry already has the orb; 'applying' true = approaching exact, false = moving away). An aspect that is not listed does not exist for this analysis: do not mention it and never recompute aspects from positions or signs.\n"
                 f"- DO NOT recalculate house positions - use the provided numbers directly.\n"
-                f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
+                f"- Always use the 'formatted_pos' field for planetary positions.\n"
                 f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
-                f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
+                f"- **CRITICAL: NATAL ASPECTS**: Use only the PRE-CALCULATED ones in the 'NATAL ASPECTS (CALCULATED)' sections to understand each natal chart. DO NOT calculate or assume natal aspects.\n"
                 f"- Focus on the SPECIFIC DATE AND TIME provided ({target_date}). This is a snapshot analysis for this EXACT moment, not a timeline.\n"
                 f"- ⚠️ CRITICAL: The transit chart is calculated for {target_date} - use ONLY this date, do NOT use any other date (like today's date).\n"
                 f"- Do NOT perform general synastry analysis (inter-aspects between natal charts) unless relevant to understanding the transit interactions.\n"
             )
-            
+
             # Add strict Bulgarian language rules
             system_prompt += self._get_bulgarian_language_rules()
-            
-            # Форматиране на данните като JSON за user_prompt
-            natal_json = json.dumps(natal_chart, indent=2, ensure_ascii=False)
-            partner_json = json.dumps(partner_chart, indent=2, ensure_ascii=False)
-            
-            # За транзитната карта, извличаме само планетите (без домовете)
-            transit_planets_only = {
-                "planets": transit_chart.get("planets", {}),
-                "datetime_utc": transit_chart.get("datetime_utc", ""),
-                "julian_day": transit_chart.get("julian_day", 0),
-                "timezone": transit_chart.get("timezone", ""),
-                "datetime_local": transit_chart.get("datetime_local", "")
-            }
-            transit_json = json.dumps(transit_planets_only, indent=2, ensure_ascii=False)
-            
+
             user_prompt = f"User Question: {question if question else 'Provide a relationship forecast for this specific date.'}\n\n"
-            # Calculate transit house mappings for both user and partner
-            transit_planets = transit_chart.get("planets", {})
-            try:
-                user_transit_house_map = self.engine.map_transit_planets_to_natal_houses(
-                    natal_chart, transit_planets
-                )
-                user_transit_map_json = json.dumps(user_transit_house_map, indent=2, ensure_ascii=False)
-                user_prompt += f"--- TRANSIT PLANETS IN {user_display_name.upper()}'S NATAL HOUSES (CALCULATED) ---\n"
-                user_prompt += "CRITICAL: These house placements are PRE-CALCULATED. Use them directly - DO NOT recalculate.\n"
-                user_prompt += f"{user_transit_map_json}\n\n"
-            except Exception as e:
-                print(f"Warning: Could not calculate user transit house mappings: {e}")
-            
-            try:
-                partner_transit_house_map = self.engine.map_transit_planets_to_natal_houses(
-                    partner_chart, transit_planets
-                )
-                partner_transit_map_json = json.dumps(partner_transit_house_map, indent=2, ensure_ascii=False)
-                user_prompt += f"--- TRANSIT PLANETS IN {partner_display_name.upper()}'S NATAL HOUSES (CALCULATED) ---\n"
-                user_prompt += "CRITICAL: These house placements are PRE-CALCULATED. Use them directly - DO NOT recalculate.\n"
-                user_prompt += f"{partner_transit_map_json}\n\n"
-            except Exception as e:
-                print(f"Warning: Could not calculate partner transit house mappings: {e}")
-            
-            # Calculate natal aspects for user
-            try:
-                natal_aspects_user_rtf = calculate_natal_aspects(natal_chart, use_wider_orbs=False)
-                natal_aspects_user_rtf_json = json.dumps(natal_aspects_user_rtf, indent=2, ensure_ascii=False)
-            except Exception as e:
-                print(f"Warning: Could not calculate user natal aspects: {e}")
-                natal_aspects_user_rtf_json = None
-            
-            user_prompt += f"--- {user_display_name.upper()} NATAL CHART ---\n"
-            user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-            user_prompt += f"{natal_json}\n\n"
-            
-            # Add user natal aspects if calculated
-            if natal_aspects_user_rtf_json:
-                user_prompt += f"--- {user_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
-                user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                user_prompt += f"{natal_aspects_user_rtf_json}\n\n"
-            
-            user_prompt += f"--- {partner_display_name.upper()} NATAL CHART ---\n"
-            user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-            user_prompt += f"{partner_json}\n\n"
-            user_prompt += f"--- TRANSIT PLANETARY POSITIONS (Date: {target_date}) ---\n"
-            user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-            user_prompt += f"{transit_json}\n\n"
+            user_prompt += factpack.identity_section(user_display_name, gender, partner_display_name, partner_gender)
+            user_prompt += self._transit_blocks(uname, user_display_name, natal_chart, transit_chart)
+            user_prompt += self._transit_blocks(pname, partner_display_name, partner_chart, transit_chart)
+            user_prompt += self._natal_block(user_display_name, natal_chart)
+            user_prompt += self._natal_block(partner_display_name, partner_chart)
+            user_prompt += factpack.section(
+                f"TRANSIT PLANETARY POSITIONS (Date: {target_date})",
+                "Signs, degrees and retrograde status of the sky at this moment. There are NO house numbers here.",
+                factpack.transit_view(transit_chart))
             user_prompt += (
-                f"Analyze how the current transits on {target_date} affect {user_display_name} and {partner_display_name} individually, "
-                f"and then synthesize how these simultaneous astrological energies interact as a couple. "
+                f"Analyze how the transits on {target_date} affect {user_display_name} and {partner_display_name} individually, "
+                f"and then synthesize how these simultaneous astrological energies interact between them. "
                 f"Provide practical recommendations for this specific date."
             )
-        
+
         elif partner_chart:
             # PRIORITY 4: STATIC SYNASTRY MODE
             # Check if there is a dedicated "report_type_with_partner" template
@@ -2447,7 +2492,7 @@ class AIInterpreter:
                 print(f"✅ Using fallback synastry template for type: {report_type}")
             context_instruction = "\nCONTEXT: SYNASTRY MODE. Apply the persona above to the RELATIONSHIP dynamics between User and Partner."
             system_prompt = f"{base_persona}\n{context_instruction}\n\n"
-        
+
             # Add Synastry rules
             system_prompt += (
                 "🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
@@ -2460,145 +2505,46 @@ class AIInterpreter:
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 "SYNASTRY RULES:\n\n"
                 "1. SYNASTRY ASPECTS (PRE-CALCULATED):\n"
-                "   - The backend DOES provide aspect data between User and Partner charts in 'SYNASTRY ASPECTS (CALCULATED)' section.\n"
+                "   - The backend provides the aspects between the two charts in 'SYNASTRY ASPECTS (CALCULATED)'; every entry names the OWNER of each planet (person1/person2).\n"
                 "   - Use ONLY the aspects from that section - DO NOT calculate or assume aspects.\n"
-                "   - These are mutual aspects between User and Partner planets (e.g., User's Sun trine Partner's Moon).\n"
                 "   - If an aspect is not in the 'SYNASTRY ASPECTS' list, DO NOT mention it.\n"
                 "   - Focus on key aspects: conjunction, square, trine, sextile, opposition.\n"
-                "   - Interpret these aspects in the context of relationship dynamics.\n\n"
-                "2. HOUSE OVERLAYS (CRITICAL - MANDATORY - STRICTLY ENFORCED):\n"
-                "   ⚠️ The house placements are ALREADY CALCULATED in 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                "   ⚠️ You MUST look at that section and use the EXACT numbers provided there.\n"
-                "   ⚠️ Example: If the data shows {\"Sun\": 8, \"Moon\": 1, \"Venus\": 8, \"Mars\": 12}, then:\n"
-                "      - Say EXACTLY: 'Partner's Sun is in User's 8th house' (NOT 9th, NOT 2nd, NOT any other number)\n"
-                "      - Say EXACTLY: 'Partner's Moon is in User's 1st house' (NOT 6th, NOT any other number)\n"
-                "      - Say EXACTLY: 'Partner's Venus is in User's 8th house' (NOT 9th, NOT any other number)\n"
-                "      - Say EXACTLY: 'Partner's Mars is in User's 12th house' (NOT 4th, NOT any other number)\n"
-                "   ⚠️ FORBIDDEN: Never mention Partner's planets in Partner's own houses (e.g., 'Partner's Sun in 2nd house' referring to Partner's chart).\n"
+                "   - Interpret these aspects in the context of the relationship between the two people.\n\n"
+                "2. HOUSE OVERLAYS (CRITICAL - STRICTLY ENFORCED):\n"
+                "   ⚠️ There are TWO separate overlay sections and both are ALREADY CALCULATED:\n"
+                "      - 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)': the Partner's planets in the User's houses.\n"
+                "      - '<USER> PLANETS IN <PARTNER>'S NATAL HOUSES (CALCULATED)': the User's planets in the Partner's houses.\n"
+                "   ⚠️ USER and PARTNER are the two people named in the 'PEOPLE' section. Never swap the two directions.\n"
+                "   ⚠️ Use the EXACT house number given in the section for that planet and direction - never a number from these instructions, from the planet's own natal house, or from memory.\n"
+                "   ⚠️ Every time you mention a planet in the other person's house, name whose planet it is and whose house it is.\n"
                 "   ⚠️ FORBIDDEN: Never calculate house positions from planet longitudes, signs, or house cusps.\n"
                 "   ⚠️ FORBIDDEN: Never use logic like 'if degree < cusp → previous house'.\n"
-                "   ⚠️ FORBIDDEN: Never guess or estimate house positions - ONLY use the pre-calculated numbers.\n"
-                "   ⚠️ Every time you mention a Partner planet's house placement, you MUST reference the exact number from the overlay data.\n\n"
-                "   Key houses to analyze (use the numbers from overlay data): 1st (Identity), 4th (Home/Emotional Security), 5th (Romance), 7th (Partnership), 8th (Intimacy), 10th (Career/Public Image), 12th (Subconscious).\n\n"
-                )
-            
+                "   ⚠️ FORBIDDEN: Never guess or estimate house positions - ONLY use the pre-calculated numbers.\n\n"
+                "   Key houses to analyze (numbers come only from the overlay data): 1st (Identity), 4th (Home/Emotional Security), 5th (Romance), 7th (Partnership), 8th (Intimacy), 10th (Career/Public Image), 12th (Subconscious).\n\n"
+            )
+
             # Add type-specific synastry focus
             type_focus = self._get_synastry_type_focus(report_type)
             if type_focus:
                 system_prompt += f"\n{type_focus}\n"
-            
+
             # Общи инструкции
-            system_prompt += (
-                "CRITICAL: Position Formatting Rules\n"
-                "- Each planet in the JSON has a 'formatted_pos' field (e.g., 'Aries 23°02'').\n"
-                "- ALWAYS use the 'formatted_pos' string provided in the JSON for your analysis.\n"
-                "- Do NOT attempt to calculate degrees from the raw 'longitude' float.\n"
-                "- Do NOT guess or estimate positions. Use the exact 'formatted_pos' value.\n"
-                "- The 'formatted_pos' is pre-calculated and accurate - trust it completely.\n\n"
-                "- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
-                "- Do NOT calculate Ascendant or MC signs from raw longitude values.\n"
-                "- The formatted angles are in the 'angles' object: angles.Ascendant_formatted and angles.MC_formatted.\n\n"
-                "- Do NOT guess positions. Use the provided JSON data precisely.\n"
-                "- Focus on what is ACTUALLY happening based on the data, not general interpretations.\n\n"
-                "**CRITICAL: NATAL ASPECTS**\n"
-                "- Natal aspects are PRE-CALCULATED and provided in the 'NATAL ASPECTS (CALCULATED)' section.\n"
-                "- Use ONLY the aspects from that section - DO NOT calculate or assume aspects.\n"
-                "- If an aspect is not in the 'NATAL ASPECTS' list, DO NOT mention it.\n"
-                "- Each aspect in the list includes: planet1, planet2, aspect type (conjunction, square, trine, sextile, opposition), angle, and orb.\n"
-                "- Interpret these aspects directly - do not recalculate them.\n\n"
-                "**MANDATORY: ASCENDANT INTERPRETATION**\n"
-                "- You MUST include a dedicated section about the Ascendant (ASC) in your analysis.\n"
-                "- The Ascendant represents the outer mask, physical appearance, first impressions, and how the person presents themselves to the world.\n"
-                "- Explain the Ascendant sign and degree in detail (e.g., 'Ascendant in Cancer 14°22' - The Protective Shell').\n"
-                "- Describe how the Ascendant contrasts or harmonizes with the Sun sign (e.g., 'Sun in Aries (fire) with Ascendant in Cancer (water) creates a contrast between inner boldness and outer sensitivity').\n"
-                "- Explain what this means for the person's physical appearance, first reactions, and outer personality.\n"
-                "- The Ascendant shows how the person 'starts' in life and their initial approach to the world.\n"
-                "- IMPORTANT: Place the Ascendant section as the SECOND section in your analysis, AFTER the Personality Traits section.\n"
-                "- Structure: 1. Personality Traits → 2. Ascendant → 3. Other sections (Life Themes, Aspects, Houses, etc.).\n"
-            )
-            
+            system_prompt += COMMON_DATA_RULES + ASCENDANT_RULES
+
             # Add strict Bulgarian language rules
             system_prompt += self._get_bulgarian_language_rules()
-            
-            # Форматиране на данните като JSON за user_prompt
-            natal_json = json.dumps(natal_chart, indent=2, ensure_ascii=False)
-            partner_json = json.dumps(partner_chart, indent=2, ensure_ascii=False)
-            
-            # Calculate natal aspects for user
-            try:
-                natal_aspects_user = calculate_natal_aspects(natal_chart, use_wider_orbs=False)
-                natal_aspects_user_json = json.dumps(natal_aspects_user, indent=2, ensure_ascii=False)
-            except Exception as e:
-                print(f"Warning: Could not calculate user natal aspects: {e}")
-                natal_aspects_user_json = None
-            
-            # Calculate partner natal aspects
-            try:
-                partner_natal_aspects = calculate_natal_aspects(partner_chart, use_wider_orbs=False)
-                partner_natal_aspects_json = json.dumps(partner_natal_aspects, indent=2, ensure_ascii=False)
-                print(f"✅ Calculated {len(partner_natal_aspects)} partner natal aspects")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not calculate partner natal aspects: {e}")
-                partner_natal_aspects_json = None
-            
-            # Calculate synastry aspects (mutual aspects between user and partner)
-            try:
-                from aspects_engine import calculate_synastry_aspects
-                synastry_aspects = calculate_synastry_aspects(natal_chart, partner_chart, use_wider_orbs=False)
-                synastry_aspects_json = json.dumps(synastry_aspects, indent=2, ensure_ascii=False)
-                print(f"✅ Calculated {len(synastry_aspects)} synastry aspects")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not calculate synastry aspects: {e}")
-                synastry_aspects_json = None
-            
-            # Calculate reverse overlays (user planets in partner houses)
-            try:
-                reverse_overlays = self.engine.calculate_synastry_house_overlays(
-                    user_natal_chart=partner_chart,
-                    partner_planets=natal_chart.get("planets", {})
-                )
-                reverse_overlays_json = json.dumps(reverse_overlays, indent=2, ensure_ascii=False)
-                print(f"✅ Calculated reverse overlays: {user_display_name} planets in {partner_display_name} houses")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not calculate reverse overlays: {e}")
-                reverse_overlays_json = None
-            
+
             user_prompt = f"User Question: {question if question else 'General analysis'}\n\n"
-            user_prompt += f"--- {user_display_name.upper()} NATAL CHART ---\n"
-            user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-            user_prompt += f"{natal_json}\n\n"
-            
-            # Add user natal aspects if calculated
-            if natal_aspects_user_json:
-                user_prompt += f"--- {user_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
-                user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                user_prompt += f"{natal_aspects_user_json}\n\n"
-            
-            user_prompt += f"--- {partner_display_name.upper()} NATAL CHART ---\n"
-            user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-            user_prompt += f"{partner_json}\n\n"
-            
-            # Add partner natal aspects if calculated
-            if partner_natal_aspects_json:
-                user_prompt += f"--- {partner_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
-                user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                user_prompt += f"{partner_natal_aspects_json}\n\n"
-            
-            # Add synastry aspects if calculated
-            if synastry_aspects_json:
-                user_prompt += f"--- SYNASTRY ASPECTS (CALCULATED) ---\n"
-                user_prompt += f"CRITICAL: These are mutual aspects between {user_display_name} and {partner_display_name}.\n"
-                user_prompt += "Use them directly - DO NOT recalculate or assume aspects.\n"
-                user_prompt += "Format: planet1 (User) ↔ planet2 (Partner)\n"
-                user_prompt += f"{synastry_aspects_json}\n\n"
-            
-            # Add reverse overlays if calculated
-            if reverse_overlays_json:
-                user_prompt += f"--- {user_display_name.upper()} PLANETS IN {partner_display_name.upper()}'S NATAL HOUSES (CALCULATED) ---\n"
-                user_prompt += f"CRITICAL: These house placements show how {user_display_name} influences {partner_display_name}.\n"
-                user_prompt += "This is the REVERSE of the primary overlay. Use these numbers directly.\n"
-                user_prompt += f"{reverse_overlays_json}\n\n"
-            
+            user_prompt += factpack.identity_section(user_display_name, gender, partner_display_name, partner_gender)
+            user_prompt += self._natal_block(user_display_name, natal_chart)
+            user_prompt += self._natal_block(partner_display_name, partner_chart)
+            user_prompt += factpack.section(
+                "SYNASTRY ASPECTS (CALCULATED)",
+                f"Mutual aspects between {user_display_name} (person1) and {partner_display_name} (person2); every entry names the "
+                f"owner of each planet. Use them directly - DO NOT recalculate or assume aspects.",
+                factpack.synastry_aspects(natal_chart, partner_chart, user_display_name, partner_display_name))
+            user_prompt += self._overlay_blocks(natal_chart, partner_chart, user_display_name, partner_display_name)
+
             user_prompt += (
                 f"Please provide a comprehensive SYNASTRY analysis covering:\n\n"
                 f"1. SYNASTRY ASPECTS:\n"
@@ -2610,7 +2556,7 @@ class AIInterpreter:
                 f"      - Use 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'\n"
                 f"      - How does {partner_display_name} impact {user_display_name}'s life areas?\n"
                 f"   B. {user_display_name}'s influence on {partner_display_name}:\n"
-                f"      - Use '{user_display_name.upper()} PLANETS IN {partner_display_name.upper()}'S NATAL HOUSES (CALCULATED)'\n"
+                f"      - Use '{uname} PLANETS IN {pname}'S NATAL HOUSES (CALCULATED)'\n"
                 f"      - How does {user_display_name} impact {partner_display_name}'s life areas?\n"
                 f"   - DO NOT recalculate house positions - use the provided numbers.\n"
                 f"   - Key houses: 1st (identity), 4th (home), 5th (romance), 7th (partnership), 8th (intimacy), 10th (career), 12th (subconscious).\n\n"
@@ -2626,469 +2572,132 @@ class AIInterpreter:
                 f"   - Section 3: How {user_display_name} affects {partner_display_name} (reverse overlays + aspects)\n"
                 f"   - Section 4: Mutual aspects and overall compatibility\n"
                 f"   - Section 5: Growth areas and challenges\n\n"
-                f"5. Use ONLY the 'formatted_pos' values provided. Do NOT calculate from raw longitude.\n"
+                f"5. Use ONLY the 'formatted_pos' values provided.\n"
                 f"6. Do NOT predict the future or mention transits unless explicitly provided."
             )
-        
+
         else:
-            # PRIORITY 5: DEFAULT - NATAL/TRANSIT ANALYSIS
-            # If report_type is "karmic" and partner_chart is present, use "karmic_relationship" template
-            if report_type == "karmic" and partner_chart:
-                base_persona = PROMPT_TEMPLATES.get("karmic_relationship", PROMPT_TEMPLATES.get("karmic", PROMPT_TEMPLATES["general"]))
-            else:
-                # SPECIAL LOGIC FOR TRANSIT MODE - applies to ALL report types when transit_chart is present
-                if transit_chart and report_type in ["general", "karmic", "health", "career", "money", "love"]:
-                    # Use the original template but modify instructions to skip first 2 sections
-                    base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
-                    
-                    # Add special transit instructions that preserve depth but skip ALL natal sections
-                    # Note: target_date will be inserted later via string formatting
-                    transit_override = """
-                    
-                    **🚨 TRANSIT MODE MODIFICATION:**
-                    - DO NOT include ANY natal sections (skip them entirely)
-                    - DO NOT include "Personality Traits" section
-                    - DO NOT include "Ascendant" section  
-                    - DO NOT include "Life Themes & Karmic Patterns" section
-                    - DO NOT include "Strengths & Challenges" section
-                    - DO NOT include "Houses of Emphasis" section
-                    - START directly with transit analysis
-                    - DO NOT number any sections (remove all numbering like "3.", "4.", etc.)
-                    - Use section titles only, without numbers
-                    - ADD comprehensive transit analysis with exact degrees and orbs
-                    - PRESERVE all psychological depth and karmic insights in transit context only
-                    - ALWAYS use the SPECIFIC target date and time provided (e.g., "{target_date}") in ALL sections of the analysis
-                    - NEVER use today's date or any other date - ONLY use the provided transit date
-                    - If the transit date is "20.01.2026 12:00", you MUST mention "20 януари 2026 г." NOT "19 януари 2026 г."
-                    
-                    **╔══════════════════════════════════════════════════════════════════════════════╗**
-                    **║  🚨 КРИТИЧНО ПРАВИЛО: ВАЛИДАЦИЯ НА ДОМОВЕТЕ ПРЕДИ ВСЯКО СПОМЕНВАНЕ! 🚨    ║**
-                    **╚══════════════════════════════════════════════════════════════════════════════╝**
-                    
-                    **📋 СТЪПКИ ЗА ВАЛИДАЦИЯ (ОБЯЗАТЕЛНО ПРЕДИ ВСЯКО СПОМЕНВАНЕ НА ДОМ):**
-                    1. ✅ Намери секцията '--- TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---' в prompt-а
-                    2. ✅ Отвори JSON обекта и намери планетата (напр. "Pluto", "Saturn", "Neptune")
-                    3. ✅ Прочети числото до планетата (напр. {"Pluto": 5} означава 5-ти дом)
-                    4. ✅ Използвай САМО това число - НЕ изчислявай от знаци или позиции
-                    5. ✅ Кажи точно: "Транзитният [Планета] е в [X]-ти дом" (където X = числото от JSON-а)
-                    
-                    **🚫 АБСОЛЮТНО ЗАБРАНЕНО:**
-                    - ❌ НИКОГА не казвай "Планетата е в X знак, затова е в Y дом"
-                    - ❌ НИКОГА не изчислявай домове от знаци (напр. "Плутон във Водолей → 7-ми дом")
-                    - ❌ НИКОГА не споменавай дом, който НЕ е в JSON секцията
-                    - ❌ НИКОГА не използвай логика като "е в близост до X cusp, значи е в Y дом"
-                    
-                    **✅ ПРИМЕРИ ЗА ПРАВИЛНО ИЗПОЛЗВАНЕ:**
-                    
-                    Пример 1:
-                    JSON: {"Pluto": 5, "Saturn": 10, "Neptune": 10}
-                    ❌ ГРЕШНО: "Плутон във Водолей е в 7-ми дом, защото Водолей е близо до 7-ми дом cusp"
-                    ✅ ПРАВИЛНО: "Плутон е в 5-ти дом" (използваш JSON: {"Pluto": 5})
-                    
-                    Пример 2:
-                    JSON: {"Saturn": 10, "Neptune": 10}
-                    ❌ ГРЕШНО: "Сатурн и Нептун в Риби са в 7-ми дом"
-                    ✅ ПРАВИЛНО: "Сатурн и Нептун са в 10-ти дом" (използваш JSON: {"Saturn": 10, "Neptune": 10})
-                    
-                    Пример 3:
-                    JSON: {"Mercury": 4, "Mars": 4}
-                    ❌ ГРЕШНО: "Меркурий в Козирог → 5-ти дом"
-                    ✅ ПРАВИЛНО: "Меркурий и Марс са в 4-ти дом" (използваш JSON: {"Mercury": 4, "Mars": 4})
-                    
-                    **🔥 ФИНАЛНО ПРЕДУПРЕЖДЕНИЕ:**
-                    Ако споменеш който и да е дом БЕЗ да го валидираш с JSON данните първо = КРИТИЧНА ГРЕШКА!
-                    Backend-ът изчислява домовете точно - твоята задача е само да използваш числата от JSON-а.
-                    
-                    **🚨 RESPONSE LENGTH LIMIT:**
-                    - Target: 2500-3000 tokens total (you have room to complete all sections)
-                    - ALWAYS complete ALL sections, especially "Възможности за действие" - do NOT cut off mid-sentence
-                    - Focus on the most important transits, but ensure each section is fully written
-                    - Be concise but comprehensive
-                    - If you're running out of tokens, prioritize completing "Възможности за действие" over extra details in earlier sections
-                    
-                    **🚨 TRANSIT ANALYSIS STRUCTURE (MUST COMPLETE ALL):**
-                    1. **Обзор на периода** (2-3 параграфа) - REQUIRED
-                       - ⚠️ ОБЯЗАТЕЛНО спомени точната дата: {target_date}
-                       - НЕ използвай днешната дата или друга дата
-                    2. **3-4 ключови транзита** (по 1 параграф всеки) - REQUIRED
-                       - За всеки транзит спомени датата: {target_date}
-                    3. **Практични съвети** (bullet points - минимум 4-5 съвета) - REQUIRED
-                    4. **Възможности за действие** (bullet points - минимум 4-5 действия, ЗАВЪРШИ до край!) - REQUIRED
-                    
-                    **⚠️ CRITICAL: Never cut off mid-sentence in "Възможности за действие" - always complete every bullet point fully.**
-                    **⚠️ CRITICAL DATE USAGE: ALWAYS use the exact date {target_date} provided - NEVER use today's date or any other date!**
-                    
-                    **🚨 ASPECT FILTERING:**
-                    - Include ONLY aspects with orb under 5°
-                    - Focus ONLY on: conjunction, opposition, trine, square
-                    - Maximum 8 aspects total
-                    
-                    **🚨 BULGARIAN TERMINOLOGY (STRICTLY ENFORCED):**
-                    - Planet Names in Bulgarian: Слънце (Sun), Луна (Moon), Меркурий (Mercury), Венера (Venus), Марс (Mars), Юпитер (Jupiter), Сатурн (Saturn), Уран (Uranus), Нептун (Neptune), Плутон (Pluto), Хирон (Chiron)
-                    - Zodiac Signs in Bulgarian: Овен (Aries), Телец (Taurus), Близнаци (Gemini), Рак (Cancer), Лъв (Leo), Дева (Virgo), Везни (Libra), Скорпион (Scorpio), Стрелец (Sagittarius), Козирог (Capricorn), Водолей (Aquarius), Риби (Pisces)
-                    - Houses: ALWAYS use "дом" (house), NEVER "поле" (field)
-                    - WRONG: "Capricorn", "Libra", "Aries", "Chiron", "5-то поле"
-                    - RIGHT: "Козирог", "Везни", "Овен", "Хирон", "5-ти дом"
-                    
-                    **🚨 TRANSIT ANALYSIS REQUIREMENTS:**
-                    - Include detailed transit interpretations with exact degrees and orbs
-                    - Analyze major aspects between transits and natal planets
-                    - Focus on how transits affect psychological patterns and karmic themes
-                    - Provide specific dates and timing when relevant
-                    """
-                    # Format transit_override with target_date if available
-                    # Use replace instead of format to avoid issues with special characters
-                    if target_date:
-                        transit_override = transit_override.replace("{target_date}", target_date)
-                    else:
-                        transit_override = transit_override.replace("{target_date}", "the provided date")
-                    base_persona += transit_override
-                else:
-                    base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
-            
-            # Add Context (Natal, Transit, or Synastry)
+            # PRIORITY 5: ЕДИНИЧЕН АНАЛИЗ - натален или за дата (без партньор)
+            base_persona = PROMPT_TEMPLATES.get(report_type, PROMPT_TEMPLATES["general"])
+
+            # SPECIAL LOGIC FOR TRANSIT MODE - applies to ALL report types when transit_chart is present
+            if transit_chart and report_type in ["general", "karmic", "health", "career", "money", "love"]:
+                base_persona += TRANSIT_MODE_OVERRIDE.replace("{target_date}", target_date or "the provided date")
+
+            # Add Context (Natal or Transit)
             if transit_chart:
                 context_instruction = f"\nCONTEXT: FORECAST/TRANSIT MODE. Apply the persona above to the TRANSITS for the SPECIFIC DATE AND TIME: {target_date}. How do these transits affect the specific topic (Career/Love/Health/Money/Karmic)?\n⚠️ IMPORTANT: Use ONLY the date {target_date} - NEVER use today's date or any other date!"
-            elif partner_chart:
-                context_instruction = "\nCONTEXT: SYNASTRY MODE. Apply the persona above to the RELATIONSHIP dynamics between User and Partner."
             else:
                 context_instruction = "\nCONTEXT: NATAL CHART ONLY. Analyze the birth potential regarding this specific topic."
-            
+
             # Build base system prompt
             system_prompt = f"{base_persona}\n{context_instruction}\n\n"
-            
-            # Add house rulers context for static analysis
-            houses = natal_chart.get("houses", {})
-            house_rulers_static = self.engine.get_house_rulers(houses) if houses else {}
-            house_rulers_context_static = ""
-            if house_rulers_static:
-                house_rulers_context_static = (
-                    f"\n\n*** ASTROLOGICAL CONTEXT (HOUSE RULERS) ***\n"
-                    f"- **Money Ruler (2nd House):** {house_rulers_static.get('house_2_ruler', 'unknown')}\n"
-                    f"- **Shared Resources Ruler (8th House):** {house_rulers_static.get('house_8_ruler', 'unknown')}\n"
-                    f"- **Career Ruler (10th House):** {house_rulers_static.get('house_10_ruler', 'unknown')}\n"
-                    f"- **Health Ruler (6th House):** {house_rulers_static.get('house_6_ruler', 'unknown')}\n"
-                    f"- **Love Ruler (7th House):** {house_rulers_static.get('house_7_ruler', 'unknown')}\n\n"
-                    f"These rulers are ALREADY CALCULATED - use them directly. Do NOT recalculate from house cusp longitudes.\n"
-                )
-            system_prompt += house_rulers_context_static
-            
-            # Add Synastry rules if partner chart exists
-            if partner_chart:
+
+            # Управители на домовете: всичките 12 са в таблицата с домове; тук са най-важните за темите
+            rulers = factpack.house_rulers(natal_chart)
+            if rulers:
                 system_prompt += (
-                    "SYNASTRY RULES:\n\n"
-                    "1. NO ASPECT CALCULATIONS:\n"
-                    "   - The backend does NOT provide aspect data between User and Partner charts.\n"
-                    "   - **THEREFORE, YOU MUST NOT MENTION ANY ASPECTS** (conjunction, square, trine, sextile, opposition).\n"
-                    "   - **NEVER say**: 'Your Venus trine her Mars' or 'Sun-Moon square' or any aspect terminology.\n"
-                    "   - Focus ONLY on house overlays and natal chart interpretations.\n\n"
-                    "2. HOUSE OVERLAYS (CRITICAL - MANDATORY - STRICTLY ENFORCED):\n"
-                    "   ⚠️ The house placements are ALREADY CALCULATED in 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                    "   ⚠️ You MUST look at that section and use the EXACT numbers provided there.\n"
-                    "   ⚠️ Example: If the data shows {\"Sun\": 8, \"Moon\": 1, \"Venus\": 8, \"Mars\": 12}, then:\n"
-                    "      - Say EXACTLY: 'Partner's Sun is in User's 8th house' (NOT 9th, NOT 2nd, NOT any other number)\n"
-                    "      - Say EXACTLY: 'Partner's Moon is in User's 1st house' (NOT 6th, NOT any other number)\n"
-                    "      - Say EXACTLY: 'Partner's Venus is in User's 8th house' (NOT 9th, NOT any other number)\n"
-                    "      - Say EXACTLY: 'Partner's Mars is in User's 12th house' (NOT 4th, NOT any other number)\n"
-                    "   ⚠️ FORBIDDEN: Never mention Partner's planets in Partner's own houses (e.g., 'Partner's Sun in 2nd house' referring to Partner's chart).\n"
-                    "   ⚠️ FORBIDDEN: Never calculate house positions from planet longitudes, signs, or house cusps.\n"
-                    "   ⚠️ FORBIDDEN: Never use logic like 'if degree < cusp → previous house'.\n"
-                    "   ⚠️ FORBIDDEN: Never guess or estimate house positions - ONLY use the pre-calculated numbers.\n"
-                    "   ⚠️ Every time you mention a Partner planet's house placement, you MUST reference the exact number from the overlay data.\n\n"
-                    "   Key houses to analyze (use the numbers from overlay data): 1st (Identity), 4th (Home/Emotional Security), 5th (Romance), 7th (Partnership), 8th (Intimacy), 10th (Career/Public Image), 12th (Subconscious).\n\n"
+                    f"\n\n*** ASTROLOGICAL CONTEXT (HOUSE RULERS) ***\n"
+                    f"- **Money Ruler (2nd House):** {rulers.get('house_2_ruler', 'unknown')}\n"
+                    f"- **Shared Resources Ruler (8th House):** {rulers.get('house_8_ruler', 'unknown')}\n"
+                    f"- **Career Ruler (10th House):** {rulers.get('house_10_ruler', 'unknown')}\n"
+                    f"- **Health Ruler (6th House):** {rulers.get('house_6_ruler', 'unknown')}\n"
+                    f"- **Love Ruler (7th House):** {rulers.get('house_7_ruler', 'unknown')}\n"
+                    f"- **Family/Roots Ruler (4th House):** {rulers.get('house_4_ruler', 'unknown')}\n\n"
+                    f"The rulers of ALL 12 houses (and the sign and degree of every cusp) are in the 'houses' table of the natal chart. "
+                    f"They are ALREADY CALCULATED - use them directly. Do NOT recalculate from house cusp longitudes.\n"
                 )
-            
+
             # Add Transit rules if transit chart exists
             if transit_chart:
                 system_prompt += (
                     "TRANSIT ANALYSIS RULES:\n"
                     "1. NATAL CHART - The user's birth potential, showing their inherent nature and life patterns.\n"
                     "2. TRANSIT CHART - The sky at the moment of the question/future date, showing current planetary influences.\n\n"
-                    "CRITICAL RULE FOR TRANSITS:\n"
-                    "The house placements of transit planets are ALREADY CALCULATED and provided in the section "
-                    "'TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                    "USE THESE PRE-CALCULATED HOUSE NUMBERS directly - DO NOT attempt to recalculate them.\n"
-                    "Example: If the calculated data shows 'Jupiter: 12', then Transiting Jupiter is in the 12th natal house.\n"
-                    "DO NOT try to calculate house positions from planet longitudes or house cusps.\n\n"
-                    "Key Analysis Points:\n"
-                    "- Use the provided transit house mappings to understand which natal houses are activated.\n"
-                    "- Look for Transiting Jupiter/Saturn in important natal houses (MC, Ascendant area, etc.).\n"
-                    "- Identify exact aspects (Conjunctions, Trines, Squares, Oppositions) between Transit and Natal planets.\n"
-                    "- Calculate orb tolerance: Conjunctions/Squares/Oppositions (8°), Trines/Sextiles (6°).\n"
+                    "CRITICAL RULES FOR TRANSITS:\n"
+                    "- The house of every transit planet is ALREADY CALCULATED in 'TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED)'. USE THESE numbers directly; 'TRANSIT PLANETARY POSITIONS' has signs and degrees but NO house numbers.\n"
+                    "- The aspects between transit planets and the natal chart are ALREADY CALCULATED in 'TRANSIT ASPECTS TO USER'S NATAL CHART (CALCULATED)' with their orbs. Use ONLY those aspects. An aspect that is not in the list does not exist for this analysis.\n"
+                    "- DO NOT try to calculate house positions or aspects from planet longitudes, signs or house cusps.\n"
                     "- Be specific about the DATE provided in the transit chart.\n\n"
                 )
-            
-            # Общи инструкции
-            system_prompt += (
-                "CRITICAL: Position Formatting Rules\n"
-                "- Each planet in the JSON has a 'formatted_pos' field (e.g., 'Aries 23°02'').\n"
-                "- ALWAYS use the 'formatted_pos' string provided in the JSON for your analysis.\n"
-                "- Do NOT attempt to calculate degrees from the raw 'longitude' float.\n"
-                "- Do NOT guess or estimate positions. Use the exact 'formatted_pos' value.\n"
-                "- The 'formatted_pos' is pre-calculated and accurate - trust it completely.\n\n"
-                "- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
-                "- Do NOT calculate Ascendant or MC signs from raw longitude values.\n"
-                "- The formatted angles are in the 'angles' object: angles.Ascendant_formatted and angles.MC_formatted.\n\n"
-                "- Do NOT guess positions. Use the provided JSON data precisely.\n"
-                "- Focus on what is ACTUALLY happening based on the data, not general interpretations.\n\n"
-                "**CRITICAL: NATAL ASPECTS**\n"
-                "- Natal aspects are PRE-CALCULATED and provided in the 'NATAL ASPECTS' section.\n"
-                "- Use ONLY the aspects from that section - DO NOT calculate or assume aspects.\n"
-                "- If an aspect is not in the 'NATAL ASPECTS' list, DO NOT mention it.\n"
-                "- Each aspect in the list includes: planet1, planet2, aspect type (conjunction, square, trine, sextile, opposition), angle, and orb.\n"
-                "- Interpret these aspects directly - do not recalculate them.\n\n"
-                "**MANDATORY: ASCENDANT INTERPRETATION**\n"
-                "- You MUST include a dedicated section about the Ascendant (ASC) in your analysis.\n"
-                "- The Ascendant represents the outer mask, physical appearance, first impressions, and how the person presents themselves to the world.\n"
-                "- Explain the Ascendant sign and degree in detail (e.g., 'Ascendant in Cancer 14°22' - The Protective Shell').\n"
-                "- Describe how the Ascendant contrasts or harmonizes with the Sun sign (e.g., 'Sun in Aries (fire) with Ascendant in Cancer (water) creates a contrast between inner boldness and outer sensitivity').\n"
-                "- Explain what this means for the person's physical appearance, first reactions, and outer personality.\n"
-                "- The Ascendant shows how the person 'starts' in life and their initial approach to the world.\n"
-                "- IMPORTANT: Place the Ascendant section as the SECOND section in your analysis, AFTER the Personality Traits section.\n"
-                "- Structure: 1. Personality Traits → 2. Ascendant → 3. Other sections (Life Themes, Aspects, Houses, etc.).\n"
-            )
-            
+
+            # Общи инструкции (блокът за Асцендента не важи при транзити: шаблонът ги изключва)
+            system_prompt += COMMON_DATA_RULES
+            if transit_chart is None:
+                system_prompt += ASCENDANT_RULES
+
             # Add strict Bulgarian language rules
             system_prompt += self._get_bulgarian_language_rules()
-            
-            # Форматиране на данните като JSON за user_prompt
-            natal_json = json.dumps(natal_chart, indent=2, ensure_ascii=False)
-            
-            # Calculate natal aspects
-            try:
-                natal_aspects = calculate_natal_aspects(natal_chart, use_wider_orbs=False)
-                natal_aspects_json = json.dumps(natal_aspects, indent=2, ensure_ascii=False)
-            except Exception as e:
-                print(f"Warning: Could not calculate natal aspects: {e}")
-                natal_aspects_json = None
-            
+
             user_prompt = f"User Question: {question if question else 'General analysis'}\n\n"
-            user_prompt += f"--- {user_display_name.upper()} NATAL CHART ---\n"
-            user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-            user_prompt += f"{natal_json}\n\n"
-            
-            # Add natal aspects if calculated
-            if natal_aspects_json:
-                user_prompt += f"--- NATAL ASPECTS (CALCULATED) ---\n"
-                user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                user_prompt += f"{natal_aspects_json}\n\n"
-            
-            if partner_chart:
-                # Calculate synastry house overlays (backend calculation, not AI)
-                partner_planets = partner_chart.get("planets", {})
-                try:
-                    synastry_overlays = self.engine.calculate_synastry_house_overlays(
-                        natal_chart, partner_planets
-                    )
-                    synastry_overlays_json = json.dumps(synastry_overlays, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---\n"
-                    user_prompt += "⚠️⚠️⚠️ MANDATORY - READ THIS SECTION FIRST BEFORE WRITING ANYTHING ABOUT HOUSE PLACEMENTS ⚠️⚠️⚠️\n"
-                    user_prompt += "This JSON contains the ONLY VALID house placements for Partner's planets in User's houses.\n"
-                    user_prompt += "YOU MUST USE THESE EXACT NUMBERS - DO NOT calculate, guess, or infer house positions from degrees/signs/cusps.\n\n"
-                    user_prompt += "FORBIDDEN ERRORS TO AVOID:\n"
-                    user_prompt += "❌ NEVER say 'Partner's Sun in 11th house' if the JSON shows 'Sun': 8 (it's 8th, not 11th)\n"
-                    user_prompt += "❌ NEVER say 'Partner's Venus in 1st house' if the JSON shows 'Venus': 8 (it's 8th, not 1st)\n"
-                    user_prompt += "❌ NEVER say 'Partner's Mars in 4th house' if the JSON shows 'Mars': 12 (it's 12th, not 4th)\n"
-                    user_prompt += "❌ NEVER calculate house positions manually - use ONLY the numbers below\n\n"
-                    user_prompt += f"PRE-CALCULATED DATA (USE THESE NUMBERS EXCLUSIVELY):\n{synastry_overlays_json}\n\n"
-                    user_prompt += "CORRECT USAGE EXAMPLES:\n"
-                    user_prompt += "✅ If JSON shows {\"Sun\": 8} → Say EXACTLY: 'Partner's Sun is in User's 8th house' (activates intimacy, transformation, shared resources)\n"
-                    user_prompt += "✅ If JSON shows {\"Moon\": 1} → Say EXACTLY: 'Partner's Moon is in User's 1st house' (emotional mirroring, identity connection)\n"
-                    user_prompt += "✅ If JSON shows {\"Venus\": 8} → Say EXACTLY: 'Partner's Venus is in User's 8th house' (deep intimacy, sexual attraction, psychological merging)\n"
-                    user_prompt += "✅ If JSON shows {\"Mars\": 12} → Say EXACTLY: 'Partner's Mars is in User's 12th house' (hidden energy, subconscious reactions, spiritual connection)\n\n"
-                    user_prompt += "⚠️⚠️⚠️ REMINDER: Before mentioning ANY Partner planet's house placement, check this JSON first and use the EXACT number shown.\n"
-                    user_prompt += "⚠️⚠️⚠️ If you mention a house number that doesn't match the JSON, your analysis is WRONG.\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate synastry overlays: {e}")
-                
-                # Calculate partner natal aspects for prompt
-                try:
-                    partner_natal_aspects = calculate_natal_aspects(partner_chart, use_wider_orbs=False)
-                    partner_natal_aspects_json = json.dumps(partner_natal_aspects, indent=2, ensure_ascii=False)
-                    user_prompt += f"--- {partner_display_name.upper()} NATAL ASPECTS (CALCULATED) ---\n"
-                    user_prompt += "CRITICAL: These aspects are PRE-CALCULATED by the backend. Use them directly - DO NOT recalculate or assume aspects.\n"
-                    user_prompt += f"{partner_natal_aspects_json}\n\n"
-                    print(f"✅ Added partner natal aspects to prompt ({len(partner_natal_aspects)} aspects)")
-                except Exception as e:
-                    print(f"⚠️ Warning: Could not calculate partner natal aspects: {e}")
-                
-                partner_json = json.dumps(partner_chart, indent=2, ensure_ascii=False)
-                user_prompt += f"--- {partner_display_name.upper()} NATAL CHART ---\n"
-                user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-                user_prompt += f"{partner_json}\n\n"
-            
+            user_prompt += factpack.identity_section(user_display_name, gender)
+            user_prompt += self._natal_block(user_display_name, natal_chart)
+
             # Условно добавяне на транзитни данни
             if transit_chart is not None:
-                # Calculate transit planets mapped to natal houses (backend calculation, not AI)
-                transit_planets = transit_chart.get("planets", {})
-                try:
-                    transit_house_map = self.engine.map_transit_planets_to_natal_houses(
-                        natal_chart, transit_planets
-                    )
-                    transit_house_map_json = json.dumps(transit_house_map, indent=2, ensure_ascii=False)
-                    user_prompt += f"\n{'='*80}\n"
-                    user_prompt += f"╔══════════════════════════════════════════════════════════════════════════════╗\n"
-                    user_prompt += f"║  🚨 ЕДИНСТВЕНИ ВАЛИДНИ ДОМОВИ ПОЗИЦИИ - ИЗПОЛЗВАЙ САМО ТЕЗИ ЧИСЛА! 🚨      ║\n"
-                    user_prompt += f"╚══════════════════════════════════════════════════════════════════════════════╝\n"
-                    user_prompt += f"--- TRANSIT PLANETS IN USER'S NATAL HOUSES (PRE-CALCULATED BY BACKEND) ---\n"
-                    user_prompt += "⚠️ КРИТИЧНО: Тези домови позиции са преизчислени от backend системата.\n"
-                    user_prompt += "⚠️ ОБЯЗАТЕЛНО: Използвай САМО числата от JSON-а - НЕ изчислявай от знаци или позиции!\n"
-                    user_prompt += "⚠️ ПРЕДИ ВСЯКО СПОМЕНВАНЕ: Валидирай с този JSON първо!\n\n"
-                    user_prompt += f"{transit_house_map_json}\n\n"
-                    user_prompt += f"{'='*80}\n\n"
-                except Exception as e:
-                    print(f"Warning: Could not calculate transit house mappings: {e}")
-                
-                # За транзитната карта, извличаме само планетите (без домовете)
-                transit_planets_only = {
-                    "planets": transit_planets,
-                    "datetime_utc": transit_chart.get("datetime_utc", ""),
-                    "julian_day": transit_chart.get("julian_day", 0),
-                    "timezone": transit_chart.get("timezone", ""),
-                    "datetime_local": transit_chart.get("datetime_local", "")
-                }
-                transit_json = json.dumps(transit_planets_only, indent=2, ensure_ascii=False)
-                
-                # Използваме datetime_local от транзитната карта за точна дата и час
-                transit_datetime_display = transit_chart.get("datetime_local", target_date)
-                if not transit_datetime_display:
-                    transit_datetime_display = target_date
-                
-                user_prompt += f"--- TRANSIT PLANETARY POSITIONS (Date & Time: {transit_datetime_display}) ---\n"
-                user_prompt += f"⚠️ КРИТИЧНО: Транзитната карта е изчислена за ТОЧНО това време ({transit_datetime_display}).\n"
-                user_prompt += "⚠️ ОБЯЗАТЕЛНО: Използвай САМО тази дата и час в анализа - НЕ използвай други дати!\n"
-                user_prompt += "CRITICAL: Use the 'formatted_pos' field for each planet's position. Do NOT calculate from 'longitude'.\n"
-                user_prompt += f"{transit_json}\n\n"
-            
-            # Add specific instructions for money and love reports
+                user_prompt += self._transit_blocks("USER", user_display_name, natal_chart, transit_chart)
+                transit_datetime_display = transit_chart.get("datetime_local", target_date) or target_date
+                user_prompt += factpack.section(
+                    f"TRANSIT PLANETARY POSITIONS (Date & Time: {transit_datetime_display})",
+                    f"The sky is calculated for EXACTLY this moment ({transit_datetime_display}); use only this date and time. "
+                    f"Signs, degrees and retrograde status only: there are NO house numbers here.",
+                    factpack.transit_view(transit_chart))
+
+            # Add specific instructions for money reports
             if report_type == "money":
                 user_prompt += (
                     "\n*** CRITICAL INSTRUCTIONS FOR MONEY ANALYSIS ***\n"
                     "1. **HOUSE RULERS ARE ALREADY CALCULATED** - Do NOT recalculate them from house cusp longitudes.\n"
-                    "2. **USE HOUSE RULERS FROM CONTEXT** - The system prompt provides the rulers (e.g., 'Money Ruler (2nd House): Sun').\n"
-                    "3. **TO FIND HOUSE CUSP SIGNS**: Look in the 'houses' object - use the 'formatted_pos' or convert the cusp longitude to sign using _decimal_to_dms logic (but prefer using provided house ruler info).\n"
-                    "4. **TO FIND WHERE THE RULER IS**: Look in the 'planets' object for the ruler planet (e.g., if ruler is 'Sun', find 'Sun' in planets and see its 'house' field).\n"
-                    "5. **EXAMPLE CORRECT LOGIC**:\n"
-                    "   - System says: 'Money Ruler (2nd House): Sun'\n"
-                    "   - In planets JSON, find 'Sun' → see it has 'house': 10 and 'zodiac_sign': 'Aries'\n"
-                    "   - Therefore: '2nd House is ruled by Sun. Sun is in Aries in 10th House → Money comes through career/public role'\n"
-                    "6. **DO NOT**: Say '2nd House is in Aries' or calculate house cusp signs incorrectly from longitude.\n"
-                    "7. **ALWAYS USE MODERN RULERS**: Uranus for Aquarius, Neptune for Pisces, Pluto for Scorpio.\n"
+                    "2. **USE HOUSE RULERS FROM CONTEXT** - The system prompt provides the rulers ('Money Ruler (2nd House)' and 'Shared Resources Ruler (8th House)').\n"
+                    "3. **HOUSE CUSP SIGNS** are in the 'houses' object of the natal chart: each house has 'cusp' (sign and degree) and 'ruler'. Use them as given.\n"
+                    "4. **TO FIND WHERE THE RULER IS**: Look in the 'planets' object for the ruler planet and read its 'house' and 'zodiac_sign' fields.\n"
+                    "5. **EXAMPLE OF CORRECT LOGIC**: the context says the 2nd house ruler is planet X; find X in 'planets' and read its sign and house; then explain how money is generated through that sign and house.\n"
+                    "6. **DO NOT**: Say '2nd House is in <sign>' unless the 'cusp' of House2 says so.\n"
+                    "7. **ALWAYS USE MODERN RULERS** (as already given in the data): Uranus for Aquarius, Neptune for Pisces, Pluto for Scorpio.\n"
                     "8. **FOCUS ON**: Position of the ruler (which house and sign it's in) - this shows HOW money is generated.\n\n"
                 )
-            elif report_type == "love" and partner_chart:
-                user_prompt += (
-                    "\n*** ⚠️ CRITICAL INSTRUCTIONS FOR LOVE ANALYSIS (SYNASTRY MODE) - MANDATORY ***\n"
-                    "1. **PARTNER HOUSE OVERLAYS ARE PRE-CALCULATED** - Look at 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)' section above.\n"
-                    "2. **USE EXACT NUMBERS FROM OVERLAY DATA** - If it shows {\"Sun\": 8}, say 'User's 8th house' (NOT 9th, NOT 2nd, NOT any other number).\n"
-                    "3. **ALWAYS SAY 'User's [X]th house'** - Never say just '[X]th house' without 'User's' prefix to avoid confusion.\n"
-                    "4. **FORBIDDEN EXAMPLES** - Never say:\n"
-                    "   - 'Partner's Sun in 9th house' if overlay shows 8\n"
-                    "   - 'Partner's Mars in 4th house' if overlay shows 12\n"
-                    "   - 'Partner's Sun in 2nd house' (referring to Partner's own chart)\n"
-                    "5. **CORRECT EXAMPLES** - Always say:\n"
-                    "   - 'Partner's Sun is in User's 8th house' (if overlay shows \"Sun\": 8)\n"
-                    "   - 'Partner's Moon is in User's 1st house' (if overlay shows \"Moon\": 1)\n"
-                    "   - 'Partner's Venus is in User's 8th house' (if overlay shows \"Venus\": 8)\n"
-                    "   - 'Partner's Mars is in User's 12th house' (if overlay shows \"Mars\": 12)\n"
-                    "6. **HOUSE RULERS ARE ALREADY CALCULATED** - Use them from context (e.g., 'Love Ruler (7th House): Venus').\n"
-                    "7. **DO NOT mention aspects** between planets unless they are explicitly provided in the chart data.\n\n"
-                )
-            
+
             # Условни инструкции базирани на режима
             if transit_chart is None:
-                if partner_chart:
-                    user_prompt += (
-                        f"Please provide a comprehensive SYNASTRY analysis covering:\n\n"
-                        f"1. NO ASPECT CALCULATIONS:\n"
-                        f"   - The backend does NOT provide aspect data between charts.\n"
-                        f"   - **DO NOT mention any aspects** (conjunction, square, trine, etc.) between {user_display_name} and {partner_display_name}.\n"
-                        f"   - Focus ONLY on house overlays and natal chart interpretations.\n\n"
-                        f"2. HOUSE OVERLAYS:\n"
-                        f"   - The house placements are ALREADY CALCULATED in 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                        f"   - USE THESE PRE-CALCULATED HOUSE NUMBERS - DO NOT recalculate them.\n"
-                        f"   - How does {partner_display_name} impact {user_display_name}'s life goals (10th house) and emotional security (4th house)?\n"
-                        f"   - Analyze 1st house (identity), 5th house (romance), 7th house (partnership), 8th house (intimacy), 12th house (subconscious).\n\n"
-                        f"3. RELATIONSHIP AREAS:\n"
-                        f"   - Emotional connection (her Moon in your house, 4th house overlays)\n"
-                        f"   - Communication (her Mercury in your house, 3rd house overlays)\n"
-                        f"   - Sexual chemistry (her Venus/Mars in your 5th/8th/12th house overlays)\n"
-                        f"   - Long-term potential (Saturn in your houses, 7th/10th house overlays)\n\n"
-                        f"4. Use ONLY the 'formatted_pos' values provided. Do NOT calculate from raw longitude.\n"
-                        f"5. Do NOT predict the future or mention transits."
-                    )
-                else:
-                    user_prompt += (
-                        "Please provide a comprehensive NATAL CHART analysis:\n"
-                        "1. **PERSONALITY TRAITS:** Analyze personality traits based on planetary positions and signs.\n"
-                        "2. **ASCENDANT (MANDATORY SECTION):** Analyze the Ascendant sign and degree in detail. Explain:\n"
-                        "   - The outer mask and first impression the person creates\n"
-                        "   - Physical appearance tendencies\n"
-                        "   - How the Ascendant contrasts or harmonizes with the Sun sign\n"
-                        "   - The person's initial reaction to the world and how they 'start' in life\n"
-                        "   - Example: 'Ascendant in Cancer 14°22' - The Protective Shell: Despite the fiery Sun in Aries, your outer presentation is soft, caring, and intuitive. People see you as someone they can trust and rely on.'\n"
-                        "3. Identify life themes and karmic patterns.\n"
-                        "4. Explain strengths and challenges from aspects.\n"
-                        "5. Describe house placements and their meanings.\n"
-                        "6. Focus on psychological patterns and inner motivations.\n"
-                        "7. Do NOT predict the future or mention transits.\n"
-                        "8. Focus on the person's inherent nature and potential."
-                    )
+                user_prompt += (
+                    "Please provide a comprehensive NATAL CHART analysis:\n"
+                    "1. **PERSONALITY TRAITS:** Analyze personality traits based on planetary positions and signs.\n"
+                    "2. **ASCENDANT:** Analyze the Ascendant sign and degree in detail (do not print words such as 'mandatory' or 'required' in the heading). Explain:\n"
+                    "   - The outer mask and first impression the person creates\n"
+                    "   - Physical appearance tendencies\n"
+                    "   - How the Ascendant contrasts or harmonizes with the Sun sign\n"
+                    "   - The person's initial reaction to the world and how they 'start' in life\n"
+                    "   - Style: a short title for the Ascendant sign, then a paragraph on how this outer mask contrasts with or matches the Sun sign. Take the Ascendant, the Sun and their degrees only from the data.\n"
+                    "3. Identify life themes and karmic patterns.\n"
+                    "4. Explain strengths and challenges from aspects.\n"
+                    "5. Describe house placements and their meanings.\n"
+                    "6. Focus on psychological patterns and inner motivations.\n"
+                    "7. Do NOT predict the future or mention transits.\n"
+                    "8. Focus on the person's inherent nature and potential."
+                )
             else:
-                if partner_chart:
-                    user_prompt += (
-                        f"Please provide a comprehensive SYNASTRY + FORECAST analysis:\n\n"
-                        f"1. SYNASTRY (Compatibility):\n"
-                        f"   - Compare {user_display_name}'s planets with {partner_display_name}'s planets.\n"
-                        f"   - Focus on Personal Planets (Sun, Moon, Mercury, Venus, Mars).\n"
-                        f"   - Identify Sun/Moon conjunctions (soulmate potential).\n"
-                        f"   - Identify Mars/Venus aspects (sexual chemistry).\n"
-                        f"   - House overlays: Use the PRE-CALCULATED house placements from 'PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)'.\n"
-                        f"   - DO NOT recalculate house positions - use the provided numbers.\n"
-                        f"   - How does {partner_display_name} impact {user_display_name}'s life goals (10th house) and emotional security (4th house)?\n\n"
-                        f"2. RELATIONSHIP FORECAST (with Transits):\n"
-                        f"   - Analyze transits to BOTH charts ({user_display_name} and {partner_display_name}).\n"
-                        f"   - Will they stay together? Is there a crisis or opportunity?\n"
-                        f"   - **VALIDATE FIRST**: Check 'TRANSIT PLANETS IN USER'S NATAL HOUSES (PRE-CALCULATED BY BACKEND)' section before mentioning any house.\n"
-                        f"   - Use ONLY the numbers from JSON - NEVER calculate from signs.\n"
-                        f"   - Example: If JSON shows {{\"Venus\": 7}}, say 'Venus is in 7th house' (NOT 'Venus in Libra → 7th house').\n"
-                        f"   - Look for transiting planets activating relationship houses (7th house) ONLY if JSON shows it.\n"
-                        f"   - Identify periods of harmony or tension.\n\n"
-                        f"3. RELATIONSHIP AREAS:\n"
-                        f"   - Emotional connection (Moon aspects, 4th house overlays)\n"
-                        f"   - Communication (Mercury aspects, 3rd house overlays)\n"
-                        f"   - Sexual chemistry (Mars/Venus aspects, 5th/8th house overlays)\n"
-                        f"   - Long-term potential (Saturn aspects, 7th/10th house overlays)\n\n"
-                        f"4. Use ONLY the 'formatted_pos' values provided. Do NOT calculate from raw longitude.\n"
-                        f"5. Be specific about dates, degrees, and aspects.\n"
-                        f"6. Focus on practical implications for the relationship."
-                    )
-                else:
-                    user_prompt += (
-                        f"Please provide a comprehensive FORECAST analysis:\n"
-                        f"1. Compare each transit planet's position to the natal chart.\n"
-                        f"2. Identify significant aspects between transit and natal planets.\n"
-                        f"3. **VALIDATE HOUSE PLACEMENTS FIRST**: Before mentioning any house, check the 'TRANSIT PLANETS IN USER'S NATAL HOUSES (PRE-CALCULATED BY BACKEND)' section.\n"
-                        f"   - Find the planet in the JSON (e.g., \"Pluto\": 5)\n"
-                        f"   - Use ONLY that number (e.g., 'Pluto is in 5th house')\n"
-                        f"   - NEVER calculate from signs or positions\n"
-                        f"   - NEVER say 'Pluto in Aquarius → 7th house' (WRONG!)\n"
-                        f"   - ALWAYS say 'Pluto is in 5th house' if JSON shows {{\"Pluto\": 5}} (CORRECT!)\n"
-                        f"4. Analyze potential for meeting a new partner (5th/7th house transits) if relevant.\n"
-                        f"   - But ONLY if the JSON shows planets in 5th or 7th house - DO NOT assume!\n"
-                        f"5. ⚠️ CRITICAL DATE USAGE: Explain what these transits mean for the person at the SPECIFIC DATE AND TIME: {target_date}\n"
-                        f"   - ALWAYS mention the exact date {target_date} in your analysis\n"
-                        f"   - NEVER use today's date or any other date - ONLY use {target_date}\n"
-                        f"6. Be specific about dates, degrees, and aspects.\n"
-                        f"7. Focus on practical implications and timing for {target_date}."
-                    )
-        
+                user_prompt += (
+                    f"Please provide a comprehensive FORECAST analysis:\n"
+                    f"1. Compare each transit planet's position to the natal chart.\n"
+                    f"2. Discuss the significant aspects between transit and natal planets: take them ONLY from 'TRANSIT ASPECTS TO USER'S NATAL CHART (CALCULATED)'.\n"
+                    f"3. **HOUSES FIRST**: before mentioning any house, find the planet in 'TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED)' and use only that number.\n"
+                    f"   - NEVER calculate a house from signs or positions\n"
+                    f"   - NEVER say a house that the data does not give\n"
+                    f"4. Analyze potential for meeting a new partner (5th/7th house transits) if relevant.\n"
+                    f"   - But ONLY if the data shows planets in the 5th or 7th house - DO NOT assume!\n"
+                    f"5. ⚠️ CRITICAL DATE USAGE: Explain what these transits mean for the person at the SPECIFIC DATE AND TIME: {target_date}\n"
+                    f"   - ALWAYS mention the exact date {target_date} in your analysis\n"
+                    f"   - NEVER use today's date or any other date - ONLY use {target_date}\n"
+                    f"6. Be specific about dates, degrees, and aspects (only those in the data).\n"
+                    f"7. Focus on practical implications and timing for {target_date}."
+                )
+
         # Добавяне на инструкция за езика
         if language == "bg":
             user_prompt += "\n\nМоля отговори на български език."
         elif language == "en":
             user_prompt += "\n\nPlease respond in English."
-        
+
         # Логване на prompt-а към AI — само при изрично LOG_PROMPTS=1 (локален дебъг).
         # Prompt-ът съдържа рождени данни, данни за партньор и свободния въпрос,
         # затова по подразбиране (и в продукция) не се записва.
@@ -3110,7 +2719,7 @@ class AIInterpreter:
                     f.write(f"\n{'='*80}\n\n")
             except Exception as e:
                 print(f"⚠️ Warning: Could not log prompt to output.log: {e}")
-        
+
         try:
             # Call AI API (Ollama primary → Together fallback)
             interpretation = await self._call_api(
@@ -3119,7 +2728,7 @@ class AIInterpreter:
                 max_tokens=self.max_output_tokens
             )
             return interpretation
-            
+
         except Exception as e:
             raise RuntimeError(f"Грешка при комуникация с AI API: {e}")
 

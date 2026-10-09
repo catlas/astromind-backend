@@ -204,7 +204,9 @@ class CallApiOptionsTest(unittest.TestCase):
 
     def test_defaults_unchanged(self):
         c = self.run_call()
-        self.assertEqual(c["payload"]["temperature"], 0.7)
+        # Фаза 8: по-ниска температура по подразбиране (AI_TEMPERATURE), търсенето на места си остава на 0
+        self.assertEqual(c["payload"]["temperature"], main.ai_interpreter.default_temperature)
+        self.assertEqual(main.ai_interpreter.default_temperature, 0.4)
         self.assertIn("ПРАВИЛА ЗА БЕЗОПАСНОСТ", c["payload"]["messages"][0]["content"])
         self.assertEqual(c["timeout"], main.ai_interpreter.ollama_timeout)
 

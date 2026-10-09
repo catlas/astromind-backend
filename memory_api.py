@@ -33,8 +33,9 @@ def get_memory(profile_name: Optional[str] = None, current_user: User = Depends(
     return {
         "enabled": bool(current_user.memory_enabled),
         "notes": [memory.note_payload(n) for n in notes],
-        # Прозрачност: точно това ще бъде добавено към следващия анализ
-        "preview": memory.build_context(db, current_user, profile_name),
+        # Прозрачност: точно това ще бъде добавено към следващия анализ.
+        # Без избран профил се показва анализът за основния профил на собственика.
+        "preview": memory.build_context(db, current_user, profile_name or memory.owner_name(db, current_user)),
     }
 
 
