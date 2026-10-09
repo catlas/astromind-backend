@@ -451,6 +451,12 @@ class FakeInterpreter:
         self.overview_failures, self.empty_overview = overview_failures, empty_overview
         self.month_calls, self.overview_calls = [], []
 
+    def build_text_facts(self, **kwargs):                  # проверката на текста (Фаза 10) има собствени тестове
+        return None
+
+    async def guard_text(self, text, facts, *, stage, checks=None, max_tokens=None):
+        return text
+
     async def _process_monthly_chunk(self, **kwargs):
         self.month_calls.append(kwargs["month"])
         if kwargs["month"] == self.fail_month and self.month_failures > 0:

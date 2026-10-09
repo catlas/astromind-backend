@@ -14,6 +14,8 @@ from engine import AstrologyEngine
 from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB, calculate_natal_aspects
 import factpack
 import period_report
+import text_check
+import text_guard
 from scanner import PeriodCalendar
 
 # Зареждане на environment променливи
@@ -2004,7 +2006,7 @@ class AIInterpreter:
         
         # Determine title format based on whether partner is present
         if has_partner and partner_chart:
-            title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**"
+            title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ] И [ИМЕ НА ПАРТНЬОРА]**"
             title_examples = (
                 f"Use the real names ({user_display_name.upper()} И {partner_display_name.upper()}) and the month and year named in the request, with the month in capital letters.\n\n"
             )
@@ -2344,6 +2346,38 @@ class AIInterpreter:
 
         return await self._call_api(system_prompt=system_prompt, user_prompt=user_prompt, max_tokens=4000)
 
+    async def guard_text(self, text: str, facts, *, stage: str, checks: Optional[List[Dict]] = None,
+                         max_tokens: Optional[int] = None) -> str:
+        """
+        Проверка на готовия текст срещу фактите (Фаза 10, виж text_guard.py): най-много една поправка с втора AI заявка.
+        Връща текста (поправен при нужда). Хвърля text_guard.TextCheckError, ако и след поправката има тежко нарушение.
+        checks получава кратко описание на проверката (без текст на анализа) и при успех, и при провал.
+        """
+        async def repair_call(system_prompt: str, user_prompt: str) -> str:
+            return await self._call_api(system_prompt=system_prompt, user_prompt=user_prompt,
+                                        max_tokens=max_tokens or self.max_output_tokens,
+                                        temperature=text_guard.REPAIR_TEMPERATURE)
+
+        try:
+            outcome = await text_guard.guard_text(text, facts, stage=stage, repair_call=repair_call,
+                                                  language_rules=self._get_bulgarian_language_rules())
+        except text_guard.TextCheckError as failure:
+            if checks is not None:
+                checks.append(failure.outcome.summary())
+            raise
+        if checks is not None:
+            checks.append(outcome.summary())
+        return outcome.text
+
+    @staticmethod
+    def build_text_facts(**kwargs):
+        """Фактите за проверката на текста; при грешка None (текстът минава непроверен, отчетът не спира)."""
+        try:
+            return text_check.build_facts(**kwargs)
+        except Exception as exc:
+            print(f"⚠️ Фактите за проверката на текста не се построиха ({type(exc).__name__}: {str(exc)[:120]})")
+            return None
+
     async def _interpret_period(
         self,
         *,
@@ -2357,19 +2391,27 @@ class AIInterpreter:
         language: str,
         gender: Optional[str],
         partner_gender: Optional[str],
+        checks: Optional[List[Dict]] = None,
     ) -> str:
         """Целият отчет за период като един текст: общ преглед и месеци. Хвърля ForecastGenerationError."""
         if not calendar.months_with_events():
             return "Няма събития за анализиране в избрания период."
         final: Optional[Dict] = None
-        async for event in period_report.run_period_report(
-                self, calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart,
-                report_type=report_type, user_name=user_name, partner_name=partner_name, question=question,
-                gender=gender, partner_gender=partner_gender, language=language):
-            if event["type"] == "finished":
-                final = event
+        try:
+            async for event in period_report.run_period_report(
+                    self, calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart,
+                    report_type=report_type, user_name=user_name, partner_name=partner_name, question=question,
+                    gender=gender, partner_gender=partner_gender, language=language):
+                if event["type"] == "finished":
+                    final = event
+        except period_report.ForecastGenerationError as failure:
+            if checks is not None:
+                checks.extend(failure.checks)
+            raise
         if final is None:
             raise period_report.ForecastGenerationError("period")
+        if checks is not None:
+            checks.extend(final.get("checks", []))
         return period_report.markdown_report(
             final["overview"], final["month_texts"], has_partner=partner_chart is not None, question=question,
             user_display=factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT),
@@ -2389,6 +2431,7 @@ class AIInterpreter:
         calendar: Optional[PeriodCalendar] = None,
         gender: Optional[str] = None,
         partner_gender: Optional[str] = None,
+        checks: Optional[List[Dict]] = None,
     ) -> str:
         """
         Интерпретира натална, транзитна и опционално partner карта.
@@ -2403,6 +2446,7 @@ class AIInterpreter:
             language: Език за отговора (по подразбиране "bg" за български)
             calendar: Точният календар на периода (scanner.PeriodCalendar): месеци и общ преглед (Фаза 9)
             gender / partner_gender: Известен пол (male/female); иначе езикът е неутрален
+            checks: списък, който се попълва с кратко описание на проверката на текста (Фаза 10; без текст на анализа)
 
         Returns:
             Текстова интерпретация от AI
@@ -2418,7 +2462,7 @@ class AIInterpreter:
             return await self._interpret_period(
                 calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart, question=question,
                 report_type=report_type, user_name=user_name, partner_name=partner_name, language=language,
-                gender=gender, partner_gender=partner_gender)
+                gender=gender, partner_gender=partner_gender, checks=checks)
 
         if partner_chart and transit_chart:
             # PRIORITY 3: RELATIONSHIP TRANSIT FORECAST (Snapshot - Single Date)
@@ -2742,10 +2786,18 @@ class AIInterpreter:
                 user_prompt=user_prompt,
                 max_tokens=self.max_output_tokens
             )
-            return interpretation
-
         except Exception as e:
             raise RuntimeError(f"Грешка при комуникация с AI API: {e}")
+
+        # Проверка на готовия текст (Фаза 10). TextCheckError не се обвива: извикващият не записва и не таксува.
+        facts = None
+        if language == "bg":
+            facts = self.build_text_facts(
+                mode="snapshot" if transit_chart is not None else "natal", user_name=user_name, natal_chart=natal_chart,
+                partner_name=partner_name, partner_chart=partner_chart, transit_chart=transit_chart,
+                target_date=target_date)
+        return await self.guard_text(interpretation, facts, stage="snapshot" if transit_chart is not None else "natal",
+                                     checks=checks)
 
 
 # Глобална инстанция за удобство (опционално)

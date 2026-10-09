@@ -20,6 +20,7 @@ import engine
 from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
 import period_report
+import text_guard
 from limits import forecast_period_error
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
@@ -96,6 +97,22 @@ def _internal_error(context: str, exc: Exception, user_message: str) -> HTTPExce
     print(f"❌ [{error_id}] {context}: {type(exc).__name__}: {exc}")
     traceback.print_exc()
     return HTTPException(status_code=500, detail=f"{user_message} (код: {error_id})")
+
+
+def _track_text_checks(db, user_id: int, report_type: str, checks) -> None:
+    """Телеметрия на проверката на текста (Фаза 10): етап, кодове и броеве, никога текст на анализа.
+    Записват се само случаите, в които нещо се е случило (поправка, отхвърляне, предупреждение, почистване, грешка)."""
+    for check in checks or []:
+        if check.get("result") not in (None, "ok"):
+            events.track(db, "text_check", user_id, {"type": report_type, **check})
+
+
+def _failure_props(report_type: str, dynamic: bool, stage: str, cause) -> dict:
+    """Свойствата на събитието analysis_failed; при отхвърлен от проверката текст има причина и кодове на нарушенията."""
+    props = {"type": report_type, "dynamic": dynamic, "stage": stage}
+    if isinstance(cause, text_guard.TextCheckError):
+        props.update({"reason": "text_check", "codes": cause.outcome.codes()})
+    return props
 
 
 # Лимити на заявките. Стойностите могат да се сменят през environment в Render.
@@ -463,7 +480,8 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 fail_db = SessionLocal()
                 try:
                     events.track(fail_db, "analysis_failed", current_user.id,
-                                 {"type": request.report_type or "general", "dynamic": True, "stage": failure.stage})
+                                 _failure_props(request.report_type or "general", True, failure.stage, failure.cause))
+                    _track_text_checks(fail_db, current_user.id, request.report_type or "general", failure.checks)
                 finally:
                     fail_db.close()
                 yield f"data: {json.dumps({'type': 'error', 'code': 502, 'message': period_report.USER_MESSAGE}, ensure_ascii=False)}\n\n"
@@ -496,6 +514,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                               "months": len(sorted_months), "coins": coins_charged})
                 if flagged:
                     events.track(db, "ai_output_flagged", current_user.id, {"flags": ",".join(sorted(set(flagged)))})
+                _track_text_checks(db, current_user.id, report.report_type, final.get("checks"))
             except Exception as e:
                 # Прогнозата вече е при потребителя; само записът в историята не успя
                 _internal_error("/interpret-stream save_report", e, "")
@@ -544,6 +563,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
     cost = billing.analysis_cost(has_partner)
     if not safety.detect_crisis(request.question):
         billing.require_balance(current_user, cost)
+    text_checks: List[Dict] = []        # описания на проверката на текста (Фаза 10), за телеметрията
 
     try:
         natal_chart_data = engine.calculate_chart(
@@ -698,6 +718,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                 calendar=timeline_calendar,  # Календарът на периода (Dynamic Forecast Mode)
                 gender=request.gender,
                 partner_gender=request.partner_gender,
+                checks=text_checks,
             )
             interpretation, flags = safety.check_output(interpretation, request.report_type or "general")
             if flags:
@@ -790,6 +811,7 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
         events.track(db, "analysis_completed", current_user.id,
                      {"type": report.report_type, "dynamic": False, "first": is_first,
                       "coins": response_data["coins_charged"]})
+        _track_text_checks(db, current_user.id, report.report_type, text_checks)
 
         return InterpretationResponse(**response_data)
         
@@ -799,8 +821,16 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
     except period_report.ForecastGenerationError as failure:
         print(f"⚠️ /interpret: прогнозата не завърши ({failure})")
         events.track(db, "analysis_failed", current_user.id,
-                     {"type": request.report_type or "general", "dynamic": True, "stage": failure.stage})
+                     _failure_props(request.report_type or "general", True, failure.stage, failure.cause))
+        _track_text_checks(db, current_user.id, request.report_type or "general", failure.checks)
         raise HTTPException(status_code=502, detail=period_report.USER_MESSAGE)
+    except text_guard.TextCheckError as failure:
+        # Текстът не мина проверката и след поправката: нищо не се записва и не се таксува
+        print(f"⚠️ /interpret: анализът не мина проверката ({failure})")
+        events.track(db, "analysis_failed", current_user.id,
+                     _failure_props(request.report_type or "general", False, failure.stage, failure))
+        _track_text_checks(db, current_user.id, request.report_type or "general", text_checks)
+        raise HTTPException(status_code=502, detail=text_guard.USER_MESSAGE)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Невалидни входни данни: {str(e)}")
     except Exception as e:

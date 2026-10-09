@@ -11,6 +11,7 @@ ForecastGenerationError, а извикващият не записва отче�
 като текст "*Грешка при генериране...*", а отчетът пак се записваше и таксуваше.
 """
 import asyncio
+import dataclasses
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
@@ -30,13 +31,16 @@ MONTH_NAMES = {
 
 
 class ForecastGenerationError(Exception):
-    """Месец или общият преглед не можаха да се генерират. stage: "month:YYYY-MM" или "overview"."""
+    """Месец или общият преглед не можаха да се генерират. stage: "month:YYYY-MM" или "overview".
+    cause: последната грешка (при отхвърлен от проверката текст това е text_guard.TextCheckError);
+    checks: описанията на проверките на текстовете до провала (без текст на анализа)."""
 
-    def __init__(self, stage: str, cause: Optional[BaseException] = None):
+    def __init__(self, stage: str, cause: Optional[BaseException] = None, checks: Optional[List[Dict]] = None):
         label = type(cause).__name__ if cause else "празен отговор"
         super().__init__(f"{stage}: {label}")
         self.stage = stage
         self.cause = cause
+        self.checks: List[Dict] = list(checks or [])
 
 
 def month_title(month: str) -> str:
@@ -98,58 +102,79 @@ async def run_period_report(
     retry_pause = RETRY_PAUSE_SECONDS if retry_pause is None else retry_pause
     period = (calendar.start, calendar.end)
 
+    # Фактите за проверката на готовите текстове (Фаза 10): строят се веднъж; при грешка текстовете минават непроверени
+    facts = None
+    if language == "bg":
+        facts = interpreter.build_text_facts(mode="period", user_name=user_name, natal_chart=natal_chart,
+                                             partner_name=partner_name, partner_chart=partner_chart,
+                                             calendar=calendar, report_date=report_date)
+    overview_facts = dataclasses.replace(facts, mode="overview") if facts is not None else None
+
+    checks: List[Dict] = []
     flagged: List[str] = []
     month_texts: List[Tuple[str, str]] = []
-    for idx, month in enumerate(months):
-        title = month_title(month)
-        yield {"type": "month_start", "month": title, "index": idx, "total": len(months)}
-        text = await _attempt(
-            f"month:{month}",
-            lambda m=month: interpreter._process_monthly_chunk(
-                month=m,
-                monthly_events=calendar.month_events(m),
+    try:
+        for idx, month in enumerate(months):
+            title = month_title(month)
+            yield {"type": "month_start", "month": title, "index": idx, "total": len(months)}
+
+            async def month_call(m=month) -> str:
+                raw = await interpreter._process_monthly_chunk(
+                    month=m,
+                    monthly_events=calendar.month_events(m),
+                    report_type=report_type,
+                    language=language,
+                    natal_chart=natal_chart,
+                    partner_chart=partner_chart,
+                    user_display_name=user_display,
+                    partner_display_name=partner_display,
+                    question=question,
+                    has_partner=has_partner,
+                    gender=gender,
+                    partner_gender=partner_gender,
+                    zone=calendar.timezone,
+                    report_date=report_date,
+                    period=period)
+                if not (raw and raw.strip()):
+                    return raw
+                return await interpreter.guard_text(raw, facts, stage=f"month:{m}", checks=checks)
+
+            text = await _attempt(f"month:{month}", month_call, retry_pause)
+            text, flags = safety.check_output(text, report_type)
+            flagged.extend(flags)
+            month_texts.append((title, text))
+            yield {"type": "month_complete", "month": title, "text": text, "index": idx, "total": len(months)}
+            await asyncio.sleep(0.1)
+
+        yield {"type": "overview_start", "title": OVERVIEW_TITLE}
+
+        async def overview_call() -> str:
+            raw = await interpreter.compose_period_overview(
+                calendar_rows=calendar.public_events(),
+                month_texts=month_texts,
                 report_type=report_type,
-                language=language,
-                natal_chart=natal_chart,
-                partner_chart=partner_chart,
                 user_display_name=user_display,
                 partner_display_name=partner_display,
-                question=question,
                 has_partner=has_partner,
+                question=question,
                 gender=gender,
                 partner_gender=partner_gender,
                 zone=calendar.timezone,
                 report_date=report_date,
-                period=period),
-            retry_pause)
-        text, flags = safety.check_output(text, report_type)
-        flagged.extend(flags)
-        month_texts.append((title, text))
-        yield {"type": "month_complete", "month": title, "text": text, "index": idx, "total": len(months)}
-        await asyncio.sleep(0.1)
+                period=period)
+            if not (raw and raw.strip()):
+                return raw
+            return await interpreter.guard_text(raw, overview_facts, stage="overview", checks=checks, max_tokens=4000)
 
-    yield {"type": "overview_start", "title": OVERVIEW_TITLE}
-    overview = await _attempt(
-        "overview",
-        lambda: interpreter.compose_period_overview(
-            calendar_rows=calendar.public_events(),
-            month_texts=month_texts,
-            report_type=report_type,
-            user_display_name=user_display,
-            partner_display_name=partner_display,
-            has_partner=has_partner,
-            question=question,
-            gender=gender,
-            partner_gender=partner_gender,
-            zone=calendar.timezone,
-            report_date=report_date,
-            period=period),
-        retry_pause)
+        overview = await _attempt("overview", overview_call, retry_pause)
+    except ForecastGenerationError as failure:
+        failure.checks = checks
+        raise
     overview, flags = safety.check_output(overview, report_type)
     flagged.extend(flags)
     yield {"type": "overview_complete", "title": OVERVIEW_TITLE, "text": overview}
     yield {"type": "finished", "overview": overview, "month_texts": month_texts, "flags": sorted(set(flagged)),
-           "months": months}
+           "months": months, "checks": checks}
 
 
 def saved_content(overview: str, month_texts: List[Tuple[str, str]]) -> str:
