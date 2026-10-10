@@ -81,6 +81,22 @@ _HEADINGS_RE = re.compile(r"(?<![\w-])(" + "|".join(re.escape(k) for k in sorted
 _HEADING_LOOKUP = {k.lower(): v for k, v in HEADINGS.items()}
 
 
+# Идентификаторите на часови зони (Europe/Sofia) са латиница: в текста стават име на града, а непознатите - „местно време“
+ZONE_CITIES = {"Sofia": "София", "Vienna": "Виена", "Paris": "Париж", "London": "Лондон", "Berlin": "Берлин", "Athens": "Атина",
+               "Istanbul": "Истанбул", "Moscow": "Москва", "Kiev": "Киев", "Kyiv": "Киев", "Bucharest": "Букурещ",
+               "Belgrade": "Белград", "Skopje": "Скопие", "Madrid": "Мадрид", "Rome": "Рим", "Brussels": "Брюксел",
+               "Amsterdam": "Амстердам", "Warsaw": "Варшава", "Prague": "Прага", "Budapest": "Будапеща", "Zurich": "Цюрих",
+               "Lisbon": "Лисабон", "Dublin": "Дъблин", "Stockholm": "Стокхолм", "Helsinki": "Хелзинки",
+               "New_York": "Ню Йорк", "Chicago": "Чикаго", "Los_Angeles": "Лос Анджелис", "Denver": "Денвър",
+               "Toronto": "Торонто", "Dubai": "Дубай", "Tokyo": "Токио", "Shanghai": "Шанхай", "Kolkata": "Колката",
+               "Jerusalem": "Йерусалим", "Cairo": "Кайро", "Sydney": "Сидни"}
+_ZONE_RE = re.compile(r"(?<![\w/])(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)/([A-Za-z_]+(?:/[A-Za-z_]+)?)(?![\w/])")
+
+
+def _zone(m) -> str:
+    return ZONE_CITIES.get(m.group(1).split("/")[-1], "местно време")
+
+
 def bulgarianize(text: str) -> str:
     """Заменя английските имена на знаци и планети и „natal/transit“ с български. Защитените имена остават."""
     if not text:
@@ -92,6 +108,7 @@ def bulgarianize(text: str) -> str:
         holders[marker] = name
         text = re.sub(_WORD % re.escape(name), marker, text)
     text = _HEADINGS_RE.sub(lambda m: _HEADING_LOOKUP[m.group(1).lower()], text)
+    text = _ZONE_RE.sub(_zone, text)
     text = _SIGN_RE.sub(lambda m: SIGNS[m.group(1)], text)
     text = _SIGN_UPPER_RE.sub(lambda m: SIGNS[next(k for k in SIGNS if k.upper() == m.group(1))].upper(), text)
     text = _PLANET_RE.sub(lambda m: PLANETS[m.group(1)], text)

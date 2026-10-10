@@ -334,13 +334,18 @@ class JobTest(unittest.TestCase):
         self.assertEqual(job["status"], "succeeded", job)
         self.assertTrue(seen[0][1]["datetime_utc"].startswith("2026-10-25T01:30"), seen[0][1]["datetime_utc"])
 
-    def test_a_transit_time_in_the_skipped_hour_still_works(self):
+    def test_a_forecast_time_in_the_skipped_hour_is_refused_like_a_birth_time(self):
+        """От Фаза 19 прогнозният момент е със същия строг контрол като рождения: прескочен час се отказва с ясно съобщение."""
         h = register_and_login(self.client, "tr-transit@test.bg")
         seen, patch = self.seen_charts()
         with patch:
-            job = self.post(h, {**CHART, "target_date": "2026-03-29", "target_time": "03:30"}).json()["job"]
-        self.assertEqual(job["status"], "succeeded", job)
-        self.assertIsNotNone(seen[0][2])
+            r = self.post(h, {**CHART, "target_date": "2026-03-29", "target_time": "03:30"})
+        self.assertEqual(r.status_code, 400, r.text)
+        self.assertIn("не съществува", r.json()["detail"])
+        self.assertEqual(seen, [])
+        with patch:
+            ok = self.post(h, {**CHART, "target_date": "2026-03-29", "target_time": "04:00"}).json()["job"]
+        self.assertEqual(ok["status"], "succeeded", ok)
 
     def test_a_fold_outside_zero_or_one_is_rejected(self):
         h = register_and_login(self.client, "tr-badfold@test.bg")

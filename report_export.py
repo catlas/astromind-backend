@@ -49,7 +49,8 @@ def _transit_entry(params: Dict, natal: Optional[Dict]) -> Optional[Dict]:
     if lat is None or lon is None:
         return None
     try:
-        sky = engine.get_engine().calculate_chart(params["target_date"], params["target_time"], float(lat), float(lon))
+        sky = engine.get_engine().calculate_chart(params["target_date"], params["target_time"], float(lat), float(lon),
+                                                  fold=params.get("target_fold"), zone=params.get("forecast_timezone"))
     except Exception:
         return None
     rows = []
@@ -60,7 +61,8 @@ def _transit_entry(params: Dict, natal: Optional[Dict]) -> Optional[Dict]:
                          "planet2": f"натален {names.get(a['natal_planet'], a['natal_planet'])}",
                          "aspect": a["aspect"], "orb": a["orb"]})
     when = f"{'.'.join(reversed(str(params['target_date']).split('-')))} {str(params['target_time'])[:5]}"
-    return {"title": f"Небе на {when} (транзити)", "chart": sky, "aspects": rows}
+    offset = engine.utc_offset_label(sky.get("utc_offset_minutes") or 0)
+    return {"title": f"Небе на {when} ({offset}, транзити)", "chart": sky, "aspects": rows}
 
 
 def _person(params: Dict, prefix: str, fallback_name: str) -> Optional[Dict]:

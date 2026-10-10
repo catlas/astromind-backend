@@ -204,7 +204,8 @@ class AstrologyEngine:
         # Инициализация на TimezoneFinder (тежък обект, зарежда се веднъж)
         self.tf = TimezoneFinder()
     
-    def resolve_local_time(self, date: str, time: str, lat: float, lon: float, fold: Optional[int] = None) -> Dict:
+    def resolve_local_time(self, date: str, time: str, lat: float, lon: float, fold: Optional[int] = None,
+                           zone: Optional[str] = None) -> Dict:
         """
         Превръща местния час в UTC момент и описва зоната. Не хвърля грешка при несъществуващ или повтарящ се час, а ги
         връща като статус, за да ги покаже екранът:
@@ -214,6 +215,8 @@ class AstrologyEngine:
           с избран fold (0 или 1) статусът е "ok" за избрания момент.
         zone_found е False, когато координатите нямат часова зона: тогава се ползва UTC. at_sea е True за точки в открито
         море (зона Etc/GMT±N), най-често грешка в координатите.
+        zone (IANA, например "Europe/Vienna") замества зоната по координати: за прогнозния момент, който се задава в избрана
+        зона, а не в зоната на мястото на раждане. Непозната зона е ValueError.
         """
         date_clean = date.replace("/", "-")
         year, month, day = (int(part) for part in date_clean.split("-")[:3])
@@ -223,16 +226,23 @@ class AstrologyEngine:
         second = int(time_parts[2]) if len(time_parts) > 2 else 0
         local_naive = datetime(year, month, day, hour, minute, second)
 
-        timezone_str = self.tf.timezone_at(lat=lat, lng=lon)
-        zone_found = timezone_str is not None
-        if not zone_found:
-            timezone_str = "UTC"           # няма зона за тези координати
+        if zone:
+            if zone not in pytz.all_timezones_set:
+                raise ValueError(f"Непозната часова зона: {zone}")
+            timezone_str = zone
+            zone_found = True
+        else:
+            timezone_str = self.tf.timezone_at(lat=lat, lng=lon)
+            zone_found = timezone_str is not None
+            if not zone_found:
+                timezone_str = "UTC"       # няма зона за тези координати
         # timezonefinder връща Etc/GMT±N (фиксирано отместване) за точки в открито море: най-често грешка в координатите
         base = {"timezone": timezone_str, "zone_found": zone_found, "at_sea": timezone_str.startswith("Etc/GMT")}
 
-        # СПЕЦИАЛНО ПРАВИЛО ЗА БЪЛГАРИЯ ПРЕДИ 1979: лятното часово време е въведено на 1 април 1979 г., затова преди това
-        # се ползва фиксиран UTC+2 (EET)
-        if timezone_str == "Europe/Sofia" and year < 1979:
+        # ПРАВИЛО ЗА БЪЛГАРИЯ 1945-1979: от 2 април 1945 до въвеждането на лятното часово време през 1979 г. се ползва фиксиран
+        # UTC+2 (EET). Само за този доказан период; преди него важи историческата зона от IANA (1942-1945 CET, преди 1894 местно
+        # слънчево време), а не заменяне на всички ранни дати
+        if timezone_str == "Europe/Sofia" and datetime(1945, 4, 2) <= local_naive < datetime(1979, 1, 1):
             fixed = pytz.FixedOffset(120).localize(local_naive)
             return {**base, "status": "ok", "utc": fixed.astimezone(pytz.UTC), "utc_offset_minutes": 120}
 
@@ -272,7 +282,7 @@ class AstrologyEngine:
             return {**base, "status": "nonexistent", "next_valid_time": next_valid}
 
     def _datetime_to_utc(self, date: str, time: str, lat: float, lon: float, fold: Optional[int] = None,
-                         strict: bool = False) -> Tuple[datetime, str]:
+                         strict: bool = False, zone: Optional[str] = None) -> Tuple[datetime, str]:
         """
         Конвертира локална дата и час в UTC базирано на географски координати.
 
@@ -288,7 +298,7 @@ class AstrologyEngine:
         Returns:
             Tuple от (datetime обект в UTC, timezone string)
         """
-        resolved = self.resolve_local_time(date, time, lat, lon, fold)
+        resolved = self.resolve_local_time(date, time, lat, lon, fold, zone=zone)
         if resolved["status"] == "ok":
             return resolved["utc"], resolved["timezone"]
         if strict:
@@ -671,7 +681,8 @@ class AstrologyEngine:
         lon: float,
         fold: Optional[int] = None,
         strict: bool = False,
-        time_known: bool = True
+        time_known: bool = True,
+        zone: Optional[str] = None
     ) -> Dict:
         """
         Изчислява пълна натална карта.
@@ -701,7 +712,7 @@ class AstrologyEngine:
             return self._calculate_chart_without_time(date, lat, lon)
 
         # Конвертиране на локалното време в UTC базирано на координатите
-        dt_utc, timezone_str = self._datetime_to_utc(date, time, lat, lon, fold=fold, strict=strict)
+        dt_utc, timezone_str = self._datetime_to_utc(date, time, lat, lon, fold=fold, strict=strict, zone=zone)
         
         # Конвертиране в Julian Day
         jd = self._datetime_to_julian_day(dt_utc)
@@ -738,6 +749,7 @@ class AstrologyEngine:
             "datetime_utc": dt_utc.isoformat(),
             "timezone": timezone_str,
             "datetime_local": f"{date} {time}",
+            "utc_offset_minutes": self._offset_minutes(date, time, dt_utc),
             "location": {
                 "latitude": lat,
                 "longitude": lon
@@ -745,6 +757,15 @@ class AstrologyEngine:
         }
         
         return result
+
+    @staticmethod
+    def _offset_minutes(date: str, time: str, dt_utc: datetime) -> int:
+        """Отместването на местния час спрямо UTC в минути (местният час минус UTC момента)."""
+        year, month, day = (int(part) for part in date.replace("/", "-").split("-")[:3])
+        parts = time.split(":")
+        local = datetime(year, month, day, int(parts[0]), int(parts[1]) if len(parts) > 1 else 0,
+                         int(parts[2]) if len(parts) > 2 else 0)
+        return int(round((local - dt_utc.replace(tzinfo=None)).total_seconds() / 60.0))
 
 
 _shared_engine: Optional["AstrologyEngine"] = None
@@ -786,7 +807,8 @@ def calculate_chart(
     base_dir: Path = None,
     fold: Optional[int] = None,
     strict: bool = False,
-    time_known: bool = True
+    time_known: bool = True,
+    zone: Optional[str] = None
 ) -> Dict:
     """
     Удобна функция за изчисляване на натална карта.
@@ -803,7 +825,7 @@ def calculate_chart(
         Речник с данни за картата
     """
     engine = AstrologyEngine(base_dir) if base_dir is not None else get_engine()
-    return engine.calculate_chart(date, time, lat, lon, fold=fold, strict=strict, time_known=time_known)
+    return engine.calculate_chart(date, time, lat, lon, fold=fold, strict=strict, time_known=time_known, zone=zone)
 
 
 if __name__ == "__main__":

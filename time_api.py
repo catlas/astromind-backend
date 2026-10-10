@@ -21,15 +21,20 @@ def time_check(
     http_request: Request,
     date: str,
     time: str,
-    lat: float = Query(..., ge=-90, le=90),
-    lon: float = Query(..., ge=-180, le=180),
+    lat: Optional[float] = Query(None, ge=-90, le=90),
+    lon: Optional[float] = Query(None, ge=-180, le=180),
     fold: Optional[int] = Query(None, ge=0, le=1),
+    timezone: Optional[str] = Query(None, max_length=64),
 ):
+    """Зоната е по координатите (рождено място) или е зададена изрично с timezone (часова зона на прогнозата)."""
     enforce(f"timecheck:{client_ip(http_request)}", 120, 60, "Твърде много проверки на часа.")
+    if not timezone and (lat is None or lon is None):
+        raise HTTPException(status_code=400, detail="Задайте координати или часова зона.")
     try:
-        resolved = engine.get_engine().resolve_local_time(date, time, lat, lon, fold)
+        resolved = engine.get_engine().resolve_local_time(date, time, lat if lat is not None else 0.0,
+                                                          lon if lon is not None else 0.0, fold, zone=timezone or None)
     except (ValueError, IndexError, OverflowError):
-        raise HTTPException(status_code=400, detail="Невалидна дата или час.")
+        raise HTTPException(status_code=400, detail="Невалидна дата, час или часова зона.")
 
     zone = resolved["timezone"]
     out = {"timezone": zone, "zone_found": resolved["zone_found"], "at_sea": resolved["at_sea"],

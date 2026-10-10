@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
+import pytz
+
 import ai_budget
 import bg_text
 import billing
@@ -77,8 +79,8 @@ def kind_of(request: ChartRequest) -> str:
 
 
 def period_start(request: ChartRequest) -> str:
-    """Началото на прогнозата: target_date или днешната дата, НИКОГА датата на раждане."""
-    return request.target_date or datetime.now().strftime("%Y-%m-%d")
+    """Началото на прогнозата: target_date или днешната дата в зоната на прогнозата, НИКОГА датата на раждане."""
+    return request.target_date or datetime.now(pytz.timezone(forecast_zone(request))).strftime("%Y-%m-%d")
 
 
 def quote_for(request: ChartRequest) -> billing.Quote:
@@ -94,7 +96,7 @@ def report_params(request: ChartRequest) -> dict:
     """Параметрите на анализа, без свободния текст на въпроса."""
     keys = ("name", "date", "time", "lat", "lon", "birth_fold", "report_type", "is_dynamic", "end_date",
             "target_date", "target_time", "partner_name", "partner_date", "partner_time", "partner_lat", "partner_lon",
-            "partner_fold")
+            "partner_fold", "forecast_timezone", "target_fold")
     params = {k: getattr(request, k, None) for k in keys if getattr(request, k, None) not in (None, "")}
     if not request.birth_time_known:
         params.pop("time", None)                      # служебният пладне не е час на раждане
@@ -121,10 +123,38 @@ def validate(request: ChartRequest) -> None:
         natal_chart(request)
         if has_partner(request):
             partner_chart(request)
+        if not request.is_dynamic:
+            target_moment(request)
     except engine.TimeResolutionError as exc:
         raise GenerationFailure("invalid_input", exc.message) from exc
     except (ValueError, OverflowError) as exc:
         raise GenerationFailure("invalid_input", f"Невалидни входни данни: {exc}") from exc
+
+
+def forecast_zone(request: ChartRequest) -> str:
+    """Зоната на прогнозата: избраната, иначе зоната на мястото на раждане на първия човек."""
+    if request.forecast_timezone:
+        return request.forecast_timezone
+    zone = engine.get_engine().tf.timezone_at(lat=request.lat, lng=request.lon)
+    return zone or "UTC"
+
+
+def target_moment(request: ChartRequest) -> Optional[Dict]:
+    """
+    Прогнозният момент на анализ за дата: местните дата и час са в зоната на прогнозата (не в зоната на мястото на раждане и не в
+    UTC на сървъра). Несъществуващ час се отказва, повтарящ се изисква избор (target_fold). Без час се ползва текущият час в зоната.
+    Връща {chart, zone, time} или None, когато няма прогнозна дата.
+    """
+    if request.target_date is None:
+        return None
+    zone = forecast_zone(request)
+    time = request.target_time or datetime.now(pytz.timezone(zone)).strftime("%H:%M")
+    chart = engine.get_engine().calculate_chart(
+        date=request.target_date, time=time,
+        lat=request.target_lat if request.target_lat is not None else request.lat,
+        lon=request.target_lon if request.target_lon is not None else request.lon,
+        fold=request.target_fold, strict=True, zone=zone)
+    return {"chart": chart, "zone": zone, "time": time}
 
 
 def natal_chart(request: ChartRequest, instance=None) -> Dict:
@@ -238,18 +268,22 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
     # Транзитна карта само ако е заявена дата за анализа
     transit_chart = None
     transit_date = None
-    if request.target_date is not None:
+    moment_params: Dict[str, Any] = {}
+    try:
+        moment = target_moment(request)
+    except engine.TimeResolutionError as exc:
+        raise GenerationFailure("invalid_input", exc.message) from exc
+    if moment is not None:
         transit_date = request.target_date
-        transit_time = request.target_time or datetime.now().strftime("%H:%M:%S")
-        transit_chart = engine.calculate_chart(
-            date=transit_date, time=transit_time,
-            lat=request.target_lat if request.target_lat is not None else request.lat,
-            lon=request.target_lon if request.target_lon is not None else request.lon)
+        transit_chart = moment["chart"]
+        # запазва се точният използван момент: износът и повторният прочит дават същото небе
+        moment_params = {"target_time": moment["time"], "forecast_timezone": moment["zone"],
+                         "target_datetime_utc": transit_chart["datetime_utc"]}
 
-    # Датата за AI: пълната дата, час и зона от транзитната карта
+    # Датата за AI: пълната местна дата и час и отместването спрямо UTC (без идентификатор на зона: AI не го пише в текста)
     if transit_chart and transit_chart.get("datetime_local"):
-        zone = transit_chart.get("timezone")
-        target_date_for_ai = f"{transit_chart['datetime_local']} ({zone})" if zone else transit_chart["datetime_local"]
+        offset = engine.utc_offset_label(transit_chart.get("utc_offset_minutes") or 0)
+        target_date_for_ai = f"{transit_chart['datetime_local']} ({offset})"
     elif transit_date:
         target_date_for_ai = f"{transit_date} {request.target_time}" if request.target_time else transit_date
     else:
@@ -293,7 +327,7 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         content=interpretation,
         report_type=request.report_type or "general",
         label=data_api.report_label(request.report_type or "general", request.partner_name, question=request.question),
-        params={**report_params(request), "memory_used": memory_used},
+        params={**report_params(request), **moment_params, "memory_used": memory_used},
         months=0, flags=list(flags), checks=checks)
 
 
@@ -307,7 +341,7 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
     start_date = period_start(request)
     calendar = TransitScanner(engine_instance=engine_instance).build_calendar(
         natal_chart=natal, start_date=start_date, end_date=request.end_date,
-        lat=request.lat, lon=request.lon, partner_chart=partner_data)
+        lat=request.lat, lon=request.lon, partner_chart=partner_data, tz_name=forecast_zone(request))
     months = calendar.months_with_events()
     if not months:
         raise GenerationFailure("no_events", "Няма събития за анализиране в избрания период")
@@ -315,7 +349,8 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
     # Транзитната карта към началната дата е само за показване на екрана
     transit_chart = None
     try:
-        transit_chart = engine_instance.calculate_chart(date=start_date, time="12:00:00", lat=request.lat, lon=request.lon)
+        transit_chart = engine_instance.calculate_chart(date=start_date, time="12:00:00", lat=request.lat, lon=request.lon,
+                                                        zone=forecast_zone(request))
     except Exception as exc:
         print(f"Warning: Could not calculate transit chart for start date: {exc}")
 
@@ -363,5 +398,6 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
         report_type=request.report_type or "general",
         label=data_api.report_label(request.report_type or "general", request.partner_name, is_dynamic=True,
                                     question=request.question),
-        params={**report_params(request), "months": len(months), "memory_used": memory_used},
+        params={**report_params(request), "forecast_timezone": forecast_zone(request), "months": len(months),
+                "memory_used": memory_used},
         months=len(months), flags=list(final["flags"]), checks=list(final.get("checks", [])))

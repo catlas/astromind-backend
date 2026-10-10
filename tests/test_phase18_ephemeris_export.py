@@ -135,7 +135,7 @@ class ExportTest(unittest.TestCase):
     def test_a_snapshot_export_contains_the_transit_sky_with_the_used_date_and_time(self):
         report = self.report(target_date="2026-10-10", target_time="12:00")
         charts = report_export.context(report)["charts"]
-        self.assertEqual([c["title"] for c in charts], ["Карта: Тест А", "Небе на 10.10.2026 12:00 (транзити)"])
+        self.assertEqual([c["title"] for c in charts], ["Карта: Тест А", "Небе на 10.10.2026 12:00 (UTC+3, транзити)"])
         sky = charts[1]
         self.assertEqual(sky["chart"]["datetime_local"][:16], "2026-10-10 12:00")
         self.assertTrue(sky["aspects"])
@@ -161,7 +161,7 @@ class ExportTest(unittest.TestCase):
         for blob in (main_docx, worker_docx):
             xml = text(blob)
             self.assertIn("Хирон", xml)
-            self.assertIn("Небе на 10.10.2026 12:00 (транзити)", xml)
+            self.assertIn("Небе на 10.10.2026 12:00 (UTC+3, транзити)", xml)
         self.assertEqual(text(main_docx).count("Хирон"), text(worker_docx).count("Хирон"))
 
     def test_the_target_place_is_used_when_the_report_saved_one(self):

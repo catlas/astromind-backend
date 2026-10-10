@@ -1783,7 +1783,9 @@ class AIInterpreter:
             "15. **TRANSIT OR NATAL:** every statement about the sign, house, retrograde or direct motion of a TRANSITING planet comes from the "
             "transit or calendar data of that moment, never from the natal chart. Write \"транзитният Юпитер\" and \"наталният Юпитер\". "
             "The aspect word always matches the 'aspect' field and the angle (0° съвпад, 60° секстил, 90° квадратура, 120° тригон, 180° опозиция); "
-            "when you name an aspect between two people, say whose planet is whose.\n"
+            "when you name an aspect between two people, say whose planet is whose.\n\n"
+            "16. **TIME ZONES:** never write a time zone identifier such as Europe/Sofia or America/New_York. Write the local time and, "
+            "when the zone matters, \"по местно време\" or the UTC offset (for example 21:00 (UTC+3)).\n"
         )
     
     def _calculate_health_ruler(self, natal_chart: Dict) -> Tuple[Optional[str], Optional[str]]:

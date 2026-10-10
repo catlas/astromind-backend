@@ -55,6 +55,15 @@ class ChartRequest(BaseModel):
         default=None,
         description="Час за транзит анализ. Ако не е предоставен, използва се текущият час."
     )
+    forecast_timezone: Optional[str] = Field(
+        default=None, max_length=64,
+        description="Часова зона на прогнозата (IANA, например Europe/Sofia): датата и часът на прогнозата са местни за нея. "
+                    "Без нея важи зоната на мястото на раждане на първия човек."
+    )
+    target_fold: Optional[int] = Field(
+        default=None, ge=0, le=1,
+        description="0 или 1 при повтарящ се прогнозен час (първото или второто преминаване)"
+    )
     target_lat: Optional[float] = Field(
         default=None,
         ge=-90, le=90,
@@ -102,6 +111,16 @@ class ChartRequest(BaseModel):
     gender: Optional[str] = Field(default=None, max_length=20, description="Пол на първия човек, ако е известен")
     partner_gender: Optional[str] = Field(default=None, max_length=20, description="Пол на втория човек, ако е известен")
 
+
+    @field_validator("forecast_timezone")
+    @classmethod
+    def _known_zone(cls, value):
+        if value in (None, ""):
+            return None
+        import pytz
+        if value not in pytz.all_timezones_set:
+            raise ValueError("Непозната часова зона на прогнозата")
+        return value
 
     @field_validator("relationship")
     @classmethod
