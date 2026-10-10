@@ -16,6 +16,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 import unittest
 from datetime import date, timedelta
@@ -495,12 +496,18 @@ class GuardTest(unittest.TestCase):
         self.assertTrue(ctx.exception.outcome.rejected)
         self.assertEqual(ctx.exception.outcome.codes(), "house")
 
-    def test_only_one_repair_is_made(self):
+    def test_at_most_two_repairs_are_made(self):
         facts, _, bad, _ = good_and_bad_text()
         replies = [bad, bad, bad]
         with self.assertRaises(text_guard.TextCheckError):
             self.run_guard(bad, facts, replies)
-        self.assertEqual(len(replies), 2)                              # втората и третата не са пипнати
+        self.assertEqual(len(replies), 1)                              # третата не е пипната
+
+    def test_the_second_repair_gets_the_remaining_mistakes_and_can_save_the_text(self):
+        facts, good, bad, wrong = good_and_bad_text()
+        outcome, calls = self.run_guard(bad, facts, [bad.replace("Това дава", "Това е"), good])
+        self.assertEqual((outcome.repaired, outcome.text, len(calls)), (True, good, 2))
+        self.assertIn("Това е сила", calls[1][1].split("MISTAKES TO CORRECT")[0])      # вторият опит получава резултата на първия
 
     def test_a_failed_empty_or_truncated_repair_rejects_the_text(self):
         facts, good, bad, _ = good_and_bad_text()
@@ -551,21 +558,55 @@ class GuardTest(unittest.TestCase):
             self.assertNotIn("state_in_month", outcome.text)
             self.assertEqual(outcome.cleaned, 2)
 
-    def test_a_crash_in_the_checker_never_stops_the_report(self):
+    def test_a_crash_in_the_checker_rejects_in_enforce_and_lets_the_text_pass_in_warn(self):
         facts, _, bad, _ = good_and_bad_text()
         with mock.patch.object(text_check_module(), "check_text", side_effect=ValueError("повреда")):
-            outcome, calls = self.run_guard(bad, facts, [])
-        self.assertEqual((outcome.text, calls, outcome.result), (bad, [], "error"))
+            with self.assertRaises(text_guard.TextCheckError) as caught:
+                self.run_guard(bad, facts, [])
+            outcome = caught.exception.outcome
+            self.assertEqual((outcome.result, outcome.reason, outcome.codes()), ("rejected", "checker_error", "checker"))
+            self.assertEqual(outcome.summary()["reason"], "checker_error")
+            for mode in ("warn", "off"):
+                outcome, calls = self.run_guard(bad, facts, [], mode=mode)
+                self.assertEqual((outcome.text, calls), (bad, []))
+            self.assertEqual(self.run_guard(bad, facts, [], mode="warn")[0].result, "error")
 
-    def test_a_checker_that_takes_too_long_is_cut_off(self):
+    def test_a_checker_that_takes_too_long_is_cut_off_and_rejects_in_enforce(self):
         facts, _, bad, _ = good_and_bad_text()
 
         def slow(*args, **kwargs):
             time.sleep(0.5)
             return []
         with mock.patch.object(text_check_module(), "check_text", slow), mock.patch.object(text_guard, "CHECK_TIMEOUT_SECONDS", 0.05):
-            outcome, calls = self.run_guard(bad, facts, [])
+            with self.assertRaises(text_guard.TextCheckError) as caught:
+                self.run_guard(bad, facts, [])
+            self.assertEqual(caught.exception.outcome.reason, "checker_error")
+            outcome, _ = self.run_guard(bad, facts, [], mode="warn")
         self.assertEqual((outcome.text, outcome.result), (bad, "error"))
+
+    def test_a_crash_of_the_checker_after_the_repair_rejects_too(self):
+        facts, fixed, bad, _ = good_and_bad_text()
+        real = text_check_module().check_text
+        state = {"n": 0}
+
+        def flaky(text, f):
+            state["n"] += 1
+            if state["n"] > 1:
+                raise ValueError("повреда след поправката")
+            return real(text, f)
+        with mock.patch.object(text_check_module(), "check_text", flaky):
+            with self.assertRaises(text_guard.TextCheckError) as caught:
+                self.run_guard(bad, facts, [fixed])
+        self.assertEqual(caught.exception.outcome.reason, "checker_error")
+
+    def test_the_reason_of_a_rejection_after_the_repair_is_recorded(self):
+        facts, _, bad, _ = good_and_bad_text()
+        with self.assertRaises(text_guard.TextCheckError) as caught:
+            self.run_guard(bad, facts, [bad, bad])                             # и двете поправки връщат същия текст
+        self.assertEqual(caught.exception.outcome.reason, "violations_remain")
+        with self.assertRaises(text_guard.TextCheckError) as caught:
+            self.run_guard(bad, facts, [RuntimeError("AI не отговаря")])
+        self.assertEqual(caught.exception.outcome.reason, "repair_unavailable")
 
     def test_the_repair_list_puts_hard_violations_first_and_drops_duplicates(self):
         v = [tc.Violation("percent", "soft", "а", "x"), tc.Violation("house", "hard", "б", "y"), tc.Violation("house", "hard", "в", "y")]
@@ -693,7 +734,7 @@ class PeriodGuardTest(unittest.TestCase):
             self.run_report({"2026-10": [self.BAD_OCT, self.BAD_OCT], "2026-11": [self.NOV]}, repair=repair)
         self.assertEqual(ctx.exception.stage, "month:2026-10")
         self.assertIsInstance(ctx.exception.cause, text_guard.TextCheckError)
-        self.assertEqual(repair.await_count, 2)                                                  # по една поправка на опит
+        self.assertEqual(repair.await_count, 4)                                                  # по две поправки на опит
         self.assertEqual([c["result"] for c in ctx.exception.checks], ["rejected", "rejected"])
 
     def test_the_second_attempt_can_save_the_month(self):
@@ -781,7 +822,7 @@ class EndpointTest(unittest.TestCase):
         with mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(side_effect=[bad, bad])):
             r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 502)
-        self.assertEqual(r.json()["detail"], text_guard.USER_MESSAGE)
+        self.assertRegex(r.json()["detail"], r"^" + re.escape(text_guard.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")
         self.assertNotIn("house", r.text)                                                     # без технически подробности
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
         self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], me["balance_cents"])
@@ -840,7 +881,8 @@ class EndpointTest(unittest.TestCase):
                 mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.BAD_OCT)):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
-        self.assertEqual(steps[-1], {"type": "error", "code": 502, "message": period_report.USER_MESSAGE})
+        self.assertEqual({k: v for k, v in steps[-1].items() if k != "message"}, {"type": "error", "code": 502})
+        self.assertRegex(steps[-1]["message"], r"^" + re.escape(period_report.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")
         self.assertNotIn("complete", [s["type"] for s in steps])
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
         self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], me["balance_cents"])

@@ -14,6 +14,7 @@ import asyncio
 import json
 import math
 import os
+import re
 import time
 import unittest
 from datetime import date, datetime, timedelta, timezone
@@ -377,7 +378,7 @@ class StructureTest(CalendarBase):
         self.assertEqual(before["closest_in_period"]["at"], "start_of_period")      # без час: не е събитие
         self.assertNotIn("when", before["closest_in_period"])
         self.assertAlmostEqual(before["closest_in_period"]["orb"], 0.41, delta=0.02)
-        self.assertNotIn("turns_back", before)
+        self.assertNotIn("no_exact_pass", before)
 
     def test_aspects_that_turn_back_are_active_but_never_exact(self):
         for target, planet, natal, aspect, orb in (("User", "Neptune", "Jupiter", "Square", 0.7),
@@ -385,12 +386,12 @@ class StructureTest(CalendarBase):
             with self.subTest(aspect=f"{planet} {aspect} {natal}"):
                 row = self.series(target, planet, natal, aspect)[0]
                 self.assertEqual(row["exact"], [])
-                self.assertTrue(row["turns_back"])
+                self.assertTrue(row["no_exact_pass"])
                 self.assertNotIn("exact_outside_period", row)
                 self.assertAlmostEqual(row["closest_in_period"]["orb"], orb, delta=0.05)
         far = self.series("User", "Pluto", "Mercury", "Conjunction")[0]             # активен, но точен чак след периода
         self.assertEqual(far["exact"], [])
-        self.assertNotIn("turns_back", far)
+        self.assertNotIn("no_exact_pass", far)
         self.assertTrue(far["exact_outside_period"])
 
     def test_aspect_that_is_not_in_orb_has_no_row(self):
@@ -416,10 +417,10 @@ class StructureTest(CalendarBase):
         october = {e["id"]: e for e in self.cal.month_events("2026-10")}
         november = {e["id"]: e for e in self.cal.month_events("2026-11")}
         for row in october.values():
-            if row["type"] != "TRANSIT":
+            if row["type"] != "TRANSIT" and not row.get("outside_period"):
                 self.assertTrue(row["when"].startswith("2026-10"), row["id"])
         for row in november.values():
-            if row["type"] != "TRANSIT":
+            if row["type"] != "TRANSIT" and not row.get("outside_period"):
                 self.assertTrue(row["when"].startswith("2026-11"), row["id"])
         short = "AS:Partner:Mars:Square:Pluto"                                       # точен 01.10, активен до 03.10
         self.assertEqual(october[short]["state_in_month"], "exact_in_month")
@@ -573,6 +574,8 @@ class PromptTest(CalendarBase):
                 if row["type"] == "TRANSIT":
                     self.assertIn("state_in_month", row)
                     self.assertIn("exact_this_month", row)
+                elif row.get("outside_period"):
+                    self.assertFalse(row["when"].startswith(month))              # контекстна станция извън периода (Фаза 17)
                 else:
                     self.assertTrue(row["when"].startswith(month))
         self.assertIn("Partner", {r["target"] for r in section_json(calls[0][1], "TIMELINE EVENTS FOR 2026-10")
@@ -594,7 +597,7 @@ class PromptTest(CalendarBase):
         self.assertIn("User Question: Общ проект", user)
         self.assertNotIn("NATAL CHART", user)
         calendar_rows = section_json(user, "PERIOD CALENDAR (CALCULATED)")
-        self.assertEqual(len(calendar_rows), len(self.cal.events))
+        self.assertEqual(len(calendar_rows), len(self.cal.events) + len(self.cal.context_events))
         neptune = next(r for r in calendar_rows if r["id"] == "AS:Partner:Neptune:Square:Neptune")
         self.assertEqual(len(neptune["exact"]), 1)
 
@@ -658,7 +661,8 @@ class EndpointTest(unittest.TestCase):
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
-        self.assertEqual(steps[-1], {"type": "error", "code": 502, "message": period_report.USER_MESSAGE})
+        self.assertEqual({k: v for k, v in steps[-1].items() if k != "message"}, {"type": "error", "code": 502})
+        self.assertRegex(steps[-1]["message"], r"^" + re.escape(period_report.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")
         self.assertNotIn("complete", [s["type"] for s in steps])
         self.assertNotIn("провайдърът", r.text)                                    # техническото съобщение не стига до клиента
         self.assertEqual(broken.await_count, 2)                                    # опит и един повторен опит
@@ -684,7 +688,7 @@ class EndpointTest(unittest.TestCase):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1]["type"], "error")
-        self.assertEqual(steps[-1]["message"], period_report.USER_MESSAGE)
+        self.assertRegex(steps[-1]["message"], r"^" + re.escape(period_report.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
         self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], before)
 
@@ -705,7 +709,7 @@ class EndpointTest(unittest.TestCase):
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
             r = analyze(self.client, h, self.body("2026-10-31"))
         self.assertEqual(r.status_code, 502)
-        self.assertEqual(r.json()["detail"], period_report.USER_MESSAGE)
+        self.assertRegex(r.json()["detail"], r"^" + re.escape(period_report.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
 
 

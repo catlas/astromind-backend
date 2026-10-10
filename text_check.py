@@ -61,7 +61,7 @@ HOUSE_WORDS = {"първ": 1, "втор": 2, "трет": 3, "четвърт": 4,
                "десет": 10, "единадесет": 11, "дванадесет": 12}
 
 _BOUND = r"(?<![\w])(?:%s)(?![\w])"
-PLANET_RE = {k: re.compile(_BOUND % v) for k, v in PLANET_FORMS.items()}
+PLANET_RE = {k: re.compile(_BOUND % v, re.IGNORECASE) for k, v in PLANET_FORMS.items()}      # „сатурн“ не заобикаля проверката
 SIGN_RE = {k: re.compile(_BOUND % v) for k, v in SIGN_FORMS.items()}
 ASPECT_RE = {k: re.compile(r"(?<![\w])(?:%s)(?![\w])" % v, re.IGNORECASE) for k, v in ASPECT_FORMS.items()}
 ANGLE_RE = {"ASC": re.compile(_BOUND % r"Асцендент(?:а|ът)?|ASC"), "MC": re.compile(_BOUND % r"MC|Среда на небето")}
@@ -92,7 +92,7 @@ USER_CUE_RE = re.compile(r"(?<![\w-])(?:твоя|твоята|твоето|тв�
 _PARTNER_WORD = r"партньор(?:ът|а|ка|ката|ски|ския|ският|ската|ското|ските)?"
 PARTNER_CUE_RE = re.compile(rf"(?<![\w])(?:{_PARTNER_WORD}|негов\w*|нейн\w*)(?![\w])", re.IGNORECASE)
 
-_FIELD_NAMES = (r"house_impact|exact_this_month|state_in_month|turns_back|closest_in_period|active_from|active_to|"
+_FIELD_NAMES = (r"house_impact|exact_this_month|state_in_month|turns_back|no_exact_pass|natal_house|closest_in_period|active_from|active_to|"
                 r"exact_outside_period|transit_planet_natal_house|natal_planet_natal_house|window_clipped|natal_position|"
                 r"eclipse_kind|factpack|timeline_events|first_person|second_person|angle_deg|formatted_pos|CALCULATED")
 _CAPS_WORD = r"[A-Z][A-Z'’]*"
@@ -386,6 +386,12 @@ def cue_before(seg: str, pos: int, facts: Facts, window: int = 30) -> Optional[s
 def cue_after(seg: str, pos: int, facts: Facts, window: int = 22) -> Optional[str]:
     """„... на Иван“, „... на партньора“, „... на теб“ веднага след позицията."""
     chunk = seg[pos:pos + window]
+    lead = re.match(r"\s*(?:на|у|за)\s+", chunk)
+    if lead:
+        for owner in ("user", "partner"):
+            rx = _name_re(facts.names.get(owner, ""))
+            if rx and rx.match(seg, pos + lead.end()):             # името може да е от няколко думи: „Тест А одит“
+                return owner
     m = re.match(r"\s*(?:(?:на|у|за)\s+(\w+)|\(\s*(\w+)\s*\))", chunk)
     if not m:
         return None
@@ -739,6 +745,12 @@ def _aspect_pairs(mentions: List[Mention], a: Mention, groups: List[Group], seg:
         if len(ga.planets) == 1:
             return [(sb, ga.planets[0]) for sb in gb.planets]
         return []
+    if ga and len(ga.planets) == 1 and not gb and re.search(r"(?<![\w])между(?![\w])", seg[a.end:ga.start]):
+        # „тригонът между Сатурн на А и Сатурн на Б“: втората планета е след „и“, собствениците са по средата
+        g2 = next((g for g in groups if g is not ga and 0 <= g.start - ga.end <= 60 and not re.search(r"[.!?;+·/|]", seg[ga.end:g.start])
+                   and gap_ok(_strip_names(seg[ga.end:g.start], facts), {"и"})), None)
+        if g2 and len(g2.planets) == 1:
+            return [(ga.planets[0], g2.planets[0])]
     if ga and len(ga.planets) >= 2 and not re.search(r"(?<![\w])(?:към|с|със|на|спрямо)(?![\w])", seg[a.end:ga.start]):
         return [(ga.planets[0], ga.planets[1])]                    # „тригонът Юпитер–Плутон“, не „квадратури към Луната и Сатурн“
     if ga and len(ga.planets) == 1 and not gb:
@@ -1241,6 +1253,7 @@ _EVENT_GAP_OK = {"от", "на", "до", "в", "във", "става", "став
                  "ретроградна", "директен", "директна", "влиза", "навлиза", "се", "си", "движение", "движението", "ход", "хода", "точен",
                  "точна", "пик", "кулминация", "кулминира", "активен", "активна", "период", "орб"}
 _NO_EVENT_PLANETS = ("ASC", "MC", "Node", "Moon", "Chiron")
+CONTEXT_HORIZON_DAYS = 150          # колкото CONTEXT_STATION_DAYS в scanner.py: толкова дни извън периода има контекстни станции
 
 
 @dataclass
@@ -1315,6 +1328,10 @@ def _bind(seg: str, item: DateItem, anchors: List[Anchor], mentions: List[Mentio
     if exact_span is not None:
         e0, e1 = exact_span
         aspects = [a for a in anchors if a.kind == "aspect"]
+        if e0 >= item.end and re.fullmatch(r"[\s,]*\(\s*", seg[item.end:e0]):
+            before_date = [a for a in aspects if 0 <= item.start - a.end <= 60 and not re.search(r"[.!?;]", seg[a.end:item.start])]
+            if before_date:
+                return max(before_date, key=lambda a: a.end)                  # „… на 12 октомври (точен)“ е за аспекта пред датата
         after_word = [a for a in aspects if 0 <= a.start - e1 <= 14 and not (e1 <= item.start <= a.start)]       # не отвъд самата дата
         if after_word:
             return min(after_word, key=lambda a: a.start - e1)
@@ -1377,6 +1394,13 @@ def check_dates(seg: str, mentions: List[Mention], groups: List[Group], facts: F
     def in_period(iso: str) -> bool:
         return start <= iso <= end
 
+    horizon_lo = (date.fromisoformat(start) - timedelta(days=CONTEXT_HORIZON_DAYS)).isoformat() if facts.period else "0000-00-00"
+    horizon_hi = (date.fromisoformat(end) + timedelta(days=CONTEXT_HORIZON_DAYS)).isoformat() if facts.period else "9999-99-99"
+
+    def in_horizon(iso: str) -> bool:
+        """Периодът и станциите малко преди и след него (календарът ги дава като контекст): датите на станции там се сверяват."""
+        return horizon_lo <= iso <= horizon_hi
+
     def mismatched(item: DateItem, real_dates: List[date], tol: int, endpoints_only: bool) -> List[str]:
         """Датите, които не съвпадат с реално събитие. Диапазонът е верен, когато покрива реална дата (влизания, лунации)
         или когато поне един негов край е реална дата (станции: „3 октомври – 14 ноември“)."""
@@ -1406,12 +1430,17 @@ def check_dates(seg: str, mentions: List[Mention], groups: List[Group], facts: F
                                         and min(abs(p.start - it.start), abs(p.end - it.end)) <= 40
                                         and not re.search(r"[.!?;]", seg[min(p.end, it.start):max(p.start, it.end)] if p.end <= it.start or p.start >= it.end else "")}
             real = [(dt, t, direction, p) for p, direction, dt, t in idx.stations if p in planets]
-            if not checked:
+            near = [d for d in it.dates if in_horizon(d.isoformat())]
+            if not near:
                 continue
             if not real:
                 out.append(Violation("event", "hard", excerpt, f"В периода няма станция на {_pl(a.planets[0])}."))
                 continue
-            bad = mismatched(it, [date.fromisoformat(r[0]) for r in real], tol, endpoints_only=True)
+            real_dates = [date.fromisoformat(r[0]) for r in real]
+            if it.is_range:
+                bad = [] if any(abs((d - rd).days) <= tol for d in it.dates for rd in real_dates) else [d.isoformat() for d in near]
+            else:
+                bad = [d.isoformat() for d in near if not any(abs((d - rd).days) <= tol for rd in real_dates)]
             if bad:
                 real_p = [r for r in real if r[3] == a.planets[0]] or real
                 out.append(Violation("event", "hard", excerpt, f"Датата на станцията на {_pl(a.planets[0])} не е вярна. Вярно: "
@@ -1552,6 +1581,67 @@ def name_collides(facts: Facts) -> bool:
     return False
 
 
+def _event_house_sets(facts: Facts) -> Dict[Tuple[str, str], Set[int]]:
+    """(вид, ключ) -> натални домове на събитието за всички хора: ("lunation:new", "Libra"), ("station", "Mercury"), ("ingress", "Mercury:Scorpio")."""
+    out: Dict[Tuple[str, str], Set[int]] = {}
+    for e in facts.calendar or []:
+        houses = set((e.get("natal_house") or {}).values())
+        if not houses:
+            continue
+        t = e.get("type")
+        if t in ("LUNATION", "ECLIPSE"):
+            kind = "eclipse" if t == "ECLIPSE" else ("new" if e["event"].startswith("New") else "full")
+            sign = next((k for k in SIGN_FORMS if e["event"].endswith(k) or f" in {k}" in e["event"]), "")
+            out.setdefault((f"lunation:{kind}", sign), set()).update(houses)
+        elif t == "RETROGRADE":
+            sign = next((k for k in SIGN_FORMS if e["event"].endswith(k) or f" in {k}" in e["event"]), "")
+            out.setdefault(("station", f"{e['planet']}:{sign}"), set()).update(houses)
+        elif t == "INGRESS":
+            out.setdefault(("ingress", f"{e['planet']}:{e['sign']}"), set()).update(houses)
+    return out
+
+
+def check_event_houses(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Violation]:
+    """Дом на новолуние, пълнолуние, затъмнение, станция или влизане в знак: името на събитието, знакът му и после „… в N-ти дом“.
+    Домът трябва да е един от изчислените домове на събитието (за двама души е допустим домът на кой да е от тях)."""
+    sets = _event_house_sets(facts)
+    if not sets:
+        return []
+    out: List[Violation] = []
+    houses = [m for m in mentions if m.kind == "house"]
+    if not houses:
+        return out
+    anchors = []                                               # (край на събитието, ключ, име за съобщението)
+    for m in LUNATION_WORD_RE.finditer(seg):
+        word = m.group(1).lower()
+        kind = "new" if word.startswith("новолуни") else ("full" if word.startswith("пълнолуни") else "eclipse")
+        sign = next((x for x in mentions if x.kind == "sign" and 0 <= x.start - m.end() <= 14), None)
+        if sign is not None:
+            anchors.append((sign.end, (f"lunation:{kind}", sign.key), f"{m.group(1).lower()} в {SIGN_BG[sign.key]}"))
+    for m in STATION_WORD_RE.finditer(seg):
+        planet = next((p for p in _planets_near(mentions, m.start()) if p.key not in ("Sun",) + _NO_EVENT_PLANETS), None)
+        sign = next((x for x in mentions if x.kind == "sign" and 0 <= x.start - m.end() <= 40 and not re.search(r"[.!?;]", seg[m.end():x.start])), None)
+        if planet is not None and sign is not None and (("station", f"{planet.key}:{sign.key}") in sets):
+            anchors.append((sign.end, ("station", f"{planet.key}:{sign.key}"), f"{_pl(planet.key)} в {SIGN_BG[sign.key]}"))
+    for end, key, label in anchors:
+        if key not in sets:
+            continue
+        nxt = [a[0] for a in anchors if a[0] > end]
+        limit = min([end + 70] + nxt)
+        for h in houses:
+            if not (0 <= h.start - end <= limit - end):
+                continue
+            between = seg[end:h.start]
+            if re.search(r"[.!?;]", between) or any(x.kind == "planet" and end <= x.start < h.start for x in mentions) \
+                    or re.search(r"(?<![\w])натал\w*", between, re.IGNORECASE):
+                continue
+            if h.key not in sets[key]:
+                out.append(Violation("house", "hard", _short(seg, max(0, end - 40), min(len(seg), h.end + 12)),
+                                     f"Домът на {label} не е верен. Вярно (натален дом на този момент): "
+                                     + ", ".join(str(x) for x in sorted(sets[key])) + "."))
+    return out
+
+
 def check_text(text: str, facts: Facts) -> List[Violation]:
     """Всички нарушения в текста. Редът е като в текста; повторенията се махат."""
     found: List[Violation] = list(check_leaks(text or ""))
@@ -1564,6 +1654,7 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
         found += check_signs(seg, mentions, groups, facts)
         found += check_aspects(seg, mentions, groups, facts)
         found += check_cusps_rulers(seg, mentions, facts)
+        found += check_event_houses(seg, mentions, groups, facts)
         found += check_unknown_time(seg, mentions, groups, facts)
         found += check_retro_count(seg, mentions, groups, facts)
         found += check_dates(seg, mentions, groups, facts)
@@ -1642,7 +1733,7 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
         if m:
             facts.snapshot_date, facts.snapshot_time = m.group(1), m.group(2)
     if calendar is not None:
-        facts.calendar = calendar.public_events()
+        facts.calendar = calendar.public_events_with_context()
         facts.period = (calendar.start, calendar.end)
         facts.report_date = report_date
     return facts

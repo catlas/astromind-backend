@@ -99,7 +99,7 @@ def calculate_synastry_aspects(
 ) -> List[Dict]:
     """
     Изчислява аспекти между две карти (Синастрия).
-    Всички аспекти са: User Planet ↔ Partner Planet.
+    Всички аспекти са: User точка ↔ Partner точка (планети и, при известен час, ASC/MC и на двамата).
     
     Args:
         user_chart: Натална карта на потребителя
@@ -125,12 +125,13 @@ def calculate_synastry_aspects(
         if data.get("longitude") is not None:
             partner_points[name] = data["longitude"]
 
-    # Добавяне на ASC/MC само от user (за релационна динамика)
-    angles = user_chart.get("angles", {})
-    if angles.get("Ascendant") is not None:
-        user_points["ASC"] = angles["Ascendant"]
-    if angles.get("MC") is not None:
-        user_points["MC"] = angles["MC"]
+    # ASC/MC от двете страни (когато часът е известен): аспектите между двамата са едни и същи при размяна на реда
+    for points, chart in ((user_points, user_chart), (partner_points, partner_chart)):
+        angles = chart.get("angles") or {}
+        if angles.get("Ascendant") is not None:
+            points["ASC"] = angles["Ascendant"]
+        if angles.get("MC") is not None:
+            points["MC"] = angles["MC"]
 
     aspects = []
     for p1_name, p1_lon in user_points.items():

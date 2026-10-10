@@ -298,11 +298,17 @@ def _failure_props(job: Job, failure: "generation.GenerationFailure") -> dict:
     props = {"type": (job.request or {}).get("report_type") or "general", "dynamic": job.kind == "forecast",
              "stage": failure.stage or failure.code, "sku": job.sku, "code": failure.code}
     cause = failure.cause
-    if failure.code == "text_check" or type(cause).__name__ == "TextCheckError":
+    outcome = getattr(cause, "outcome", None)
+    if failure.code == "text_check" or type(cause).__name__ == "TextCheckError" or outcome is not None:
         props["reason"] = "text_check"
-        outcome = getattr(cause, "outcome", None)
         if outcome is not None:
             props["codes"] = outcome.codes()
+            props["detail"] = outcome.reason or "violations_remain"          # checker_error | repair_unavailable | violations_remain
+    elif failure.code == "timeout":
+        props["reason"] = "timeout"
+    elif failure.code in ("internal", "forecast_failed", "interrupted", "stopped"):
+        props["reason"] = "provider_or_infrastructure"
+        props["cause"] = type(cause).__name__ if cause is not None else ""      # само името на типа, без текст
     return props
 
 

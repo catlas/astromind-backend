@@ -74,6 +74,13 @@ def _aspect(match: re.Match) -> str:
     return word.capitalize() if not before or before[-1] in ".!?:\n" else word
 
 
+# Английски заглавия от шаблоните, които AI понякога преписва (само целите изрази, без думи самостоятелно)
+HEADINGS = {"Ancestral Echoes": "Родови модели", "Retrograde Review": "Преглед на ретроградните",
+            "Healing Practice": "Практика за размисъл", "The Karmic Theme": "Кармична тема", "Karmic Theme": "Кармична тема"}
+_HEADINGS_RE = re.compile(r"(?<![\w-])(" + "|".join(re.escape(k) for k in sorted(HEADINGS, key=len, reverse=True)) + r")(?![\w-])", re.IGNORECASE)
+_HEADING_LOOKUP = {k.lower(): v for k, v in HEADINGS.items()}
+
+
 def bulgarianize(text: str) -> str:
     """Заменя английските имена на знаци и планети и „natal/transit“ с български. Защитените имена остават."""
     if not text:
@@ -84,6 +91,7 @@ def bulgarianize(text: str) -> str:
         marker = f"\u0000{index}\u0000"
         holders[marker] = name
         text = re.sub(_WORD % re.escape(name), marker, text)
+    text = _HEADINGS_RE.sub(lambda m: _HEADING_LOOKUP[m.group(1).lower()], text)
     text = _SIGN_RE.sub(lambda m: SIGNS[m.group(1)], text)
     text = _SIGN_UPPER_RE.sub(lambda m: SIGNS[next(k for k in SIGNS if k.upper() == m.group(1))].upper(), text)
     text = _PLANET_RE.sub(lambda m: PLANETS[m.group(1)], text)

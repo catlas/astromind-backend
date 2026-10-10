@@ -109,12 +109,11 @@ def decimal_to_dms(longitude: float) -> Dict[str, any]:
 
     # Корекция ако минутите са 60
     if min >= 60:
-        min = 0
-        deg += 1
-        if deg >= 30:
-            deg = 0
-            sign_index = (sign_index + 1) % 12
-            sign = signs[sign_index]
+        if deg + 1 >= 30:
+            min = 59                  # 29°59'30" и нагоре остава в същия знак: знакът (и управителят) са по суровата дължина
+        else:
+            min = 0
+            deg += 1
 
     # Форматиране на string
     formatted = f"{sign} {deg}°{min:02d}'"

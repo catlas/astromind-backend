@@ -26,7 +26,7 @@ import swisseph as swe  # type: ignore
 
 from engine import AstrologyEngine, decimal_to_dms, house_for_longitude
 
-CALENDAR_VERSION = "9.0"
+CALENDAR_VERSION = "9.1"
 CALC_FLAGS = swe.FLG_SWIEPH | swe.FLG_SPEED
 
 # Аспекти и техните ъгли
@@ -57,6 +57,8 @@ PASS_MARGIN_DAYS = {"Mars": 150, "Jupiter": 250, "Saturn": 420, "Uranus": 600, "
 # Стъпка на грубата мрежа (дни); станциите са отделни точки, затова между две съседни точки посоката е една
 GRID_STEP_DAYS = {"Mars": 1.0, "Jupiter": 2.0, "Saturn": 2.0, "Uranus": 3.0, "Neptune": 4.0, "Pluto": 4.0}
 POINT_EVENT_STEP_DAYS = 1.0
+CONTEXT_STATION_DAYS = 150.0         # колко дни преди и след периода се търсят станции (контекст)
+CONTEXT_MONTH_DAYS = 45               # контекстните станции до толкова дни от месеца отиват в подканата за месеца
 LUNATION_STEP_DAYS = 0.25
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -147,6 +149,24 @@ def _monotone_points(planet_id: int, a: float, b: float, step: float) -> List[Po
     return out
 
 
+def _add_event_houses(events: List[Dict], people: List[Tuple[str, Dict]]) -> None:
+    """Станция, влизане в знак, новолуние, пълнолуние и затъмнение получават натален дом на всеки човек с известен час
+    (поле natal_house: {"User": 4, "Partner": 9}); без куспиди (неизвестен час) няма дом за този човек."""
+    for ev in events:
+        lon = ev.get("_lon")
+        if lon is None or ev.get("type") not in ("RETROGRADE", "INGRESS", "LUNATION", "ECLIPSE"):
+            continue
+        houses = {}
+        for label, chart in people:
+            cusps = chart.get("houses") or {}
+            if cusps and chart.get("time_known") is not False:
+                house = house_for_longitude(lon, cusps)
+                if house:
+                    houses[label] = house
+        if houses:
+            ev["natal_house"] = houses
+
+
 def _sign_name(longitude: float) -> str:
     return SIGNS[int(longitude % 360.0 // 30) % 12]
 
@@ -154,11 +174,13 @@ def _sign_name(longitude: float) -> str:
 class PeriodCalendar:
     """Календарът на един период: хронологичен списък от събития и помощници за месеците."""
 
-    def __init__(self, timezone_name: str, start: str, end: str, events: List[Dict], planets_scanned: List[str]):
+    def __init__(self, timezone_name: str, start: str, end: str, events: List[Dict], planets_scanned: List[str],
+                 context_events: Optional[List[Dict]] = None):
         self.timezone = timezone_name
         self.start = start
         self.end = end
         self.events = events
+        self.context_events = list(context_events or [])      # станции малко преди и след периода: само контекст (outside_period)
         self.version = CALENDAR_VERSION
         self.planets_scanned = planets_scanned
 
@@ -169,6 +191,10 @@ class PeriodCalendar:
 
     def public_events(self) -> List[Dict]:
         return [self.public(e) for e in self.events]
+
+    def public_events_with_context(self) -> List[Dict]:
+        """Събитията на периода и накрая контекстните станции извън него (за подканите и за проверката на текста)."""
+        return self.public_events() + [self.public(e) for e in self.context_events]
 
     @property
     def months(self) -> List[str]:
@@ -183,7 +209,7 @@ class PeriodCalendar:
                 y, m = y + 1, 1
         return out
 
-    def month_events(self, month: str) -> List[Dict]:
+    def month_events(self, month: str, with_context: bool = True) -> List[Dict]:
         """Събитията за един месец (във вида за AI). Точкови събития: тези от месеца. Аспект: тези, които имат точен
         момент в месеца или са активни в него (state_in_month: exact_in_month, approaching, separating, active)."""
         rows: List[Dict] = []
@@ -213,10 +239,14 @@ class PeriodCalendar:
             row["state_in_month"] = state
             rows.append(row)
         rows.sort(key=lambda r: _row_sort_key(r, month_first))
+        if with_context:                       # контекстът не прави един месец „със събития“ (не се таксува и не се генерира)
+            lo = (date.fromisoformat(month_first) - timedelta(days=CONTEXT_MONTH_DAYS)).isoformat()
+            hi = (date.fromisoformat(month_last) + timedelta(days=CONTEXT_MONTH_DAYS)).isoformat()
+            rows += [self.public(e) for e in self.context_events if lo <= e["when"][:10] <= hi]
         return rows
 
     def months_with_events(self) -> List[str]:
-        return [m for m in self.months if self.month_events(m)]
+        return [m for m in self.months if self.month_events(m, with_context=False)]
 
 
 def _row_sort_key(row: Dict, month_first: str) -> str:
@@ -271,9 +301,13 @@ class TransitScanner:
         if partner_chart:
             events += self._aspect_series(ctx, tracks, partner_chart, "Partner")
 
+        context = self._context_stations(ctx)
+        people = [("User", natal_chart)] + ([("Partner", partner_chart)] if partner_chart else [])
+        _add_event_houses(events, people)
+        _add_event_houses(context, people)
         events.sort(key=_event_order_key)
         _number_series(events)
-        return PeriodCalendar(zone, start_date, end_date, events, list(TRANSIT_PLANETS))
+        return PeriodCalendar(zone, start_date, end_date, events, list(TRANSIT_PLANETS), context_events=context)
 
     # ------------------------------------------------------------------------------------------------------
     # Съвместимост със старите тестове
@@ -298,6 +332,7 @@ class TransitScanner:
                         "direction": tag,
                         "event": f"{name} turns {'Retrograde' if tag == 'retrograde' else 'Direct'} in {_sign_name(lon)}",
                         "position": decimal_to_dms(lon)["str"],
+                        "_lon": lon,
                     })
                     if ev:
                         ev["id"] = f"ST:{name}:{tag}:{ev['_utc'][:10]}"
@@ -313,11 +348,33 @@ class TransitScanner:
                 new_sign = SIGNS[idx_c % 12]
                 motion = "direct" if forward else "retrograde"
                 text = f"{name} enters {new_sign}" + ("" if forward else " (moving retrograde)")
-                ev = ctx.make_point(t, "INGRESS", name, {"sign": new_sign, "motion": motion, "event": text})
+                ev = ctx.make_point(t, "INGRESS", name, {"sign": new_sign, "motion": motion, "event": text,
+                                                         "_lon": (boundary + (0.001 if forward else -0.001)) % 360.0})
                 if ev:
                     ev["id"] = f"IN:{name}:{new_sign}:{ev['_utc'][:10]}"
                     events.append(ev)
         return events
+
+    def _context_stations(self, ctx: "_Context") -> List[Dict]:
+        """Станциите малко преди и след периода (outside_period): AI ги ползва за „ретрограден до ...“, вместо да ги познава от
+        паметта си. Не са събития на периода и не влизат в месеците."""
+        out: List[Dict] = []
+        for name, pid in STATION_PLANETS.items():
+            for a, b in ((ctx.p0 - CONTEXT_STATION_DAYS, ctx.p0), (ctx.p1, ctx.p1 + CONTEXT_STATION_DAYS)):
+                for jd, lon, _speed, tag in _monotone_points(pid, a, b, POINT_EVENT_STEP_DAYS):
+                    if not tag:
+                        continue
+                    local = ctx.local(jd)
+                    if ctx.start <= local.date() <= ctx.end:
+                        continue
+                    out.append({
+                        "id": f"CTX:{name}:{tag}:{_utc_text(jd)[:10]}", "type": "RETROGRADE", "planet": name,
+                        "when": local.strftime("%Y-%m-%d %H:%M"), "direction": tag,
+                        "event": f"{name} turns {'Retrograde' if tag == 'retrograde' else 'Direct'} in {_sign_name(lon)}",
+                        "position": decimal_to_dms(lon)["str"], "outside_period": True,
+                        "_lon": lon, "_utc": _utc_text(jd)})
+        out.sort(key=lambda r: r["when"])
+        return out
 
     # ------------------------------------------------------------------------------------------------------
     # Новолуния, пълнолуния и затъмнения
@@ -348,11 +405,11 @@ class TransitScanner:
             if eclipse:
                 label = f"{'Solar' if kind == 'New' else 'Lunar'} Eclipse in {sign}"
                 ev = ctx.make_point(t, "ECLIPSE", "Sun/Moon", {"event": label, "position": decimal_to_dms(lon)["str"],
-                                                                 "eclipse_kind": eclipse[2]})
+                                                                 "eclipse_kind": eclipse[2], "_lon": lon})
                 prefix = "EC"
             else:
                 label = f"{kind} Moon in {sign}"
-                ev = ctx.make_point(t, "LUNATION", "Sun/Moon", {"event": label, "position": decimal_to_dms(lon)["str"]})
+                ev = ctx.make_point(t, "LUNATION", "Sun/Moon", {"event": label, "position": decimal_to_dms(lon)["str"], "_lon": lon})
                 prefix = "LU"
             if ev:
                 ev["id"] = f"{prefix}:{kind.lower()}:{ev['_utc'][:10]}"
@@ -467,7 +524,7 @@ class TransitScanner:
         if natal.get("house") is not None:
             row["natal_planet_natal_house"] = natal["house"]
         if not passes:
-            row["turns_back"] = True
+            row["no_exact_pass"] = True                        # влиза в орб и се отдалечава без точен момент (не е станция)
         if outside:
             row["exact_outside_period"] = [x["when"] for x in outside]
         if series["clipped"]:

@@ -203,7 +203,7 @@ If yes → your analysis is **ethically sound and astrologically responsible**.
         **PLANETARY ANALYSIS (cover the planets that are present in the chart; do not print this label):**
         1. **Moon** → Maternal lineage, Inner Child, emotional safety. Always link to its house (especially if in 4th).
         2. **Saturn** → Paternal lineage, karmic duty, authority wounds. Always reference its sign + house.
-        3. **Pluto** → Deep transformation of family DNA. If in 4th house, explicitly address ancestral power dynamics.
+        3. **Pluto** → Deep transformation of deep family patterns. If in 4th house, explicitly address ancestral power dynamics.
         4. **Retrograde Planets** → Frame as soul-initiated revisitations. Avoid fate language; emphasize conscious choice.
         
         ⚠️ **Only analyze planets that appear in the chart data. Do not mention planets not provided.**
@@ -867,7 +867,7 @@ You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overla
 
 ### 🔑 FOCUS AREAS (KARMIC & ANCESTRAL)
 
-1. **4th House (Roots, Family DNA, Ancestral Home)**  
+1. **4th House (Roots, Family Patterns, Ancestral Home)**  
    - Planets here → inherited family dynamics, unspoken contracts, generational trauma.  
    - Partner's planets in 4th → they activate or heal your ancestral field.
 
@@ -961,7 +961,7 @@ You interpret ONLY the user's natal chart and the PRE-CALCULATED synastry overla
 
 ### 🔑 FOCUS AREAS (KARMIC & ANCESTRAL)
 
-1. **4th House (Roots, Family DNA, Ancestral Home)**  
+1. **4th House (Roots, Family Patterns, Ancestral Home)**  
    - Planets here → inherited family dynamics, unspoken contracts, generational trauma.  
    - Partner's planets in 4th → they activate or heal your ancestral field.
 
@@ -1263,7 +1263,7 @@ DYNAMIC_PROMPT_TEMPLATES = {
         
         3. **RETROGRADE PLANETS:** These are CRITICAL. Treat them as "Karmic Returns" – unfinished business from the past or past lives coming back for review.
         
-        4. **PLUTO:** Represents the deep subconscious and transformation of the family DNA.
+        4. **PLUTO:** Represents the deep subconscious and transformation of deep family patterns.
         
         **INTERPRETATION RULES:**
         
@@ -1274,10 +1274,11 @@ DYNAMIC_PROMPT_TEMPLATES = {
         
         **OUTPUT STRUCTURE (Per Month):**
         
-        1. **The Karmic Theme:** What is the soul trying to learn this month?
-        2. **Ancestral Echoes (Moon/Saturn):** Which family patterns are active? (e.g., "Healing the relationship with the mother figure").
-        3. **Retrograde Review:** Specific internal work required.
-        4. **Healing Practice:** A short psychological or spiritual advice (e.g., "Forgiveness ritual," "Inner child dialogue").
+        Use these Bulgarian bold headings exactly (never English headings):
+        1. **Кармична тема:** What is the soul trying to learn this month?
+        2. **Родови модели (Луна/Сатурн):** Which family patterns are active? (e.g., "Healing the relationship with the mother figure").
+        3. **Преглед на ретроградните:** Specific internal work required.
+        4. **Практика за размисъл:** A short psychological or reflective practice (e.g., writing a letter that is not sent, "Inner child dialogue"). Safe, symbolic and without fire or anything dangerous (tear the paper up and throw it away instead of burning it).
         
         If the user asks a specific question, answer it through the lens of Karma (e.g., "Why is this happening to me? -> Because you are repeating a family cycle").
         
@@ -1763,7 +1764,26 @@ class AIInterpreter:
             "8. **NO INTERNAL LABELS:** never print instruction labels, field names or section markers "
             "(for example \"задължителна секция\", \"само при Марс/Уран\", house_impact, JSON keys, factpack, CALCULATED).\n\n"
             "9. **GENDER:** use a person's gender only if the 'PEOPLE' section says male or female; otherwise write gender-neutrally "
-            "and never guess gender from a name.\n"
+            "and never guess gender from a name.\n\n"
+            "10. **HEALTH:** never diagnose, never recommend treatment or medication, never reassure that there is no illness, accident or danger "
+            "(forbidden: \"няма данни за заболявания или инциденти\"), and never present a bodily reaction as a fact derived from the chart. "
+            "Write tendencies and themes (\"картата подсказва тема за ...\") and practical routine advice: sleep, rest, load limits, boundaries, "
+            "and a medical check-up when the person is worried.\n\n"
+            "11. **DECISIONS (career, money, contracts):** do not give absolute orders based only on an aspect or a retrograde "
+            "(forbidden: \"не напускайте\", \"не приемайте оферта\", \"не инвестирайте\", \"не подписвайте\"). Keep the direct tone but give a "
+            "concrete action to check the real conditions: \"прегледайте условията, бюджета и алтернативите и си дайте време за обмисляне\".\n\n"
+            "12. **OTHER PEOPLE'S MOTIVES:** never state a person's real motive, loyalty or intention as an established fact; suggest a checkable "
+            "action instead (for example: ask what prevented the agreement and agree on a new deadline).\n\n"
+            "13. **WORDING:** do not call an aspect the \"most exact\" unless its orb is the smallest of the listed ones; prefer \"водещ за темата\". "
+            "\"родова ДНК\" and \"семейна ДНК\" are metaphors only; prefer \"родови модели\" and never present them as genetics.\n\n"
+            "14. **CONSISTENCY:** the answer to the question and the closing advice must never contradict the plan and the chronology written "
+            "earlier in the same text (do not recommend an action on a date and then forbid it). Every date and time in the answer is copied from "
+            "the same event rows as the chronology. Never add a date that is not in the calendar. The calendar covers only the listed planets and "
+            "targets: never claim that other aspects, to the Ascendant or to any point that is not listed, do not exist.\n\n"
+            "15. **TRANSIT OR NATAL:** every statement about the sign, house, retrograde or direct motion of a TRANSITING planet comes from the "
+            "transit or calendar data of that moment, never from the natal chart. Write \"транзитният Юпитер\" and \"наталният Юпитер\". "
+            "The aspect word always matches the 'aspect' field and the angle (0° съвпад, 60° секстил, 90° квадратура, 120° тригон, 180° опозиция); "
+            "when you name an aspect between two people, say whose planet is whose.\n"
         )
     
     def _calculate_health_ruler(self, natal_chart: Dict) -> Tuple[Optional[str], Optional[str]]:
@@ -2118,7 +2138,7 @@ class AIInterpreter:
             f"- You are an interpreter of RIGOROUS, PRE-CALCULATED ASTROLOGICAL EVENTS. Do NOT guess or invent aspects or events.\n"
             f"- The JSON 'timeline_events' is an EXACT calendar computed by the backend. Point events (INGRESS, RETROGRADE, LUNATION, ECLIPSE) have one 'when': local time in the stated zone, daylight saving included. Aspect rows (type TRANSIT) are ONE row per aspect, not one per day; each has the aspect name and 'angle_deg'.\n"
             f"- For an aspect row: 'exact' lists the exact moments inside the period (a slow planet that turns retrograde can reach the aspect more than once; 'motion' says whether it moves direct or retrograde); 'exact_this_month' are the exact moments in the month you analyse; 'active_from' and 'active_to' are the dates between which the aspect is within orb (it is strongest near the exact moment); 'state_in_month' is exact_in_month, approaching (exact later), separating (exact earlier) or active (no exact moment in the period).\n"
-            f"- When 'exact' is empty the aspect does NOT become exact in this period: describe it only as active or approaching, using 'active_from', 'active_to' and 'closest_in_period' (the smallest orb inside the period; 'when' is given only when it is a turning point of the planet, and 'at' says that it is the start or the end of the period, which is not an event). If 'turns_back' is true the planet changes direction before reaching the exact aspect, so it never becomes exact in this approach. NEVER write that such an aspect is exact.\n"
+            f"- When 'exact' is empty the aspect does NOT become exact in this period: describe it only as active or approaching, using 'active_from', 'active_to' and 'closest_in_period' (the smallest orb inside the period; 'when' is given only when it is a turning point of the planet, and 'at' says that it is the start or the end of the period, which is not an event). If 'no_exact_pass' is true the aspect comes within orb and separates WITHOUT ever becoming exact. Do NOT explain this as the planet turning back, reversing or changing direction: a station (change of direction) is an event only when the calendar has a RETROGRADE row for that planet, with its own date. NEVER write that such an aspect is exact.\n"
             f"- 'exact_outside_period' are exact moments before or after the period: mention them only as context, never as events of this month.\n"
             f"- Use dates and times exactly as given in 'when' and 'exact' (local time, one zone for the whole report). Never shift a date, never convert to UTC, never invent a time. Write dates in Bulgarian, for example \"21 ноември, 16:27\".\n"
             f"- Events dated before REPORT DATE are already in the past; later ones are upcoming. Never describe a future event as if it had already happened.\n"
@@ -2126,7 +2146,8 @@ class AIInterpreter:
             f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context and how transits interact with existing natal patterns. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
             f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes. The Moon's passages through the signs are not part of the calendar.\n"
             f"- **IMPORTANT: RE-INGRESS EVENTS ARE VALID**: If a planet enters a sign, becomes retrograde and returns to the previous sign, then becomes direct and enters the new sign again (re-ingress), this is a REAL and VALID astrological event. Both the first ingress and any re-ingress events are significant and should be mentioned. Mention each such ingress only with the dates that are listed in the events.\n"
-            f"- **CRITICAL: LUNATION EVENTS (Full Moon, New Moon) DO NOT INCLUDE HOUSE INFORMATION**: Events with type 'LUNATION' (Full Moon, New Moon) or 'ECLIPSE' contain only the sign position of the lunation, but do NOT include house placement data. DO NOT guess or calculate house placements for these events. You may mention the sign and its general meaning, but DO NOT claim which house the lunation activates unless house information is explicitly provided in the event data.\n"
+            f"- Rows with 'outside_period': true are RETROGRADE rows just before or after the period: CONTEXT ONLY. Use them only to say when a planet's retrograde or direct motion began or will end, with exactly the date given. They are not events of the period. Never quote a station date that is neither in the calendar nor in such a row.\n"
+            f"- **HOUSES OF POINT EVENTS**: Events of type LUNATION, ECLIPSE, RETROGRADE (station) and INGRESS carry 'natal_house': the NATAL house of each person in which the event position falls ('User' = the first person, 'Partner' = the second person; a person with unknown birth time has none). Use ONLY these numbers when you name a house for such an event, say whose house it is, and never confuse it with the house of a natal planet. If 'natal_house' is missing for a person, do NOT name a house for that person.\n"
             f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
             f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
             f"- House facts in monthly events are PRE-CALCULATED and are TWO DIFFERENT things: 'transit_planet_natal_house' is the house of the target person's NATAL chart in which the transiting planet stands at the exact aspect; 'natal_planet_natal_house' is the natal house of the natal planet that is aspected. Never swap them and never invent a house.\n"
@@ -2358,10 +2379,12 @@ class AIInterpreter:
             f"- All times are local time in {zone}, daylight saving included. Write dates in Bulgarian, for example "
             "\"21 ноември, 16:27\".\n"
             "- 'exact' are the exact moments inside the period; 'active_from' and 'active_to' are the dates between "
-            "which the aspect is within orb; 'closest_in_period' (smallest orb inside the period) and 'turns_back' appear when the "
-            "aspect never becomes exact; 'exact_outside_period' may be mentioned only as context.\n"
+            "which the aspect is within orb; 'closest_in_period' (smallest orb inside the period) and 'no_exact_pass' appear when the "
+            "aspect never becomes exact (never explain it as the planet turning back); 'exact_outside_period' may be mentioned only as context.\n"
             "- Events dated before REPORT DATE are already in the past; later ones are upcoming. Never describe a "
             "future event as if it had already happened.\n"
+            "- Rows with 'outside_period': true are RETROGRADE rows just before or after the period: context only, to say when a planet's "
+            "retrograde or direct motion began or will end, with exactly the date given. Never quote a station date that is neither in the calendar nor in such a row.\n"
             "- Do not introduce any event or aspect that is in neither the calendar nor the monthly analyses.\n"
             "- The monthly analyses may be imperfect. Where one of them contradicts the calendar, follow the calendar. "
             "Where the months seem to disagree with each other, resolve it with the calendar and say in one sentence "

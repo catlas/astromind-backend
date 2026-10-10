@@ -1,9 +1,9 @@
 """
 Проверка на готовия текст преди показване (Фаза 10).
 
-Готовият AI текст се сверява с изчислените факти (text_check.py). При тежко нарушение се прави най-много един опит за
-поправка: втори AI вик получава текста и списък от грешки с верните стойности. Ако и след него остане тежко нарушение,
-текстът се отхвърля (TextCheckError): извикващият не записва отчета и не взема средства от баланса.
+Готовият AI текст се сверява с изчислените факти (text_check.py). При тежко нарушение се правят най-много два опита за
+поправка: AI получава текста и списък от грешки с верните стойности, а вторият опит - останалите грешки. Ако и след тях
+остане тежко нарушение, текстът се отхвърля (TextCheckError): извикващият не записва отчета и не взема средства от баланса.
 
 Настройки (променливи на средата, четат се при всяка проверка):
 - TEXT_CHECK_MODE: "enforce" (по подразбиране) | "warn" (само отчита, нищо не поправя и не отхвърля) | "off" (само маха
@@ -11,8 +11,9 @@
 - TEXT_CHECK_IGNORE: кодове на нарушения, които се пренебрегват, например "date,event" (бърза спасителна ръчка, ако
   някой вид проверка дава фалшиви тревоги, без нов деплой на кода).
 
-Грешка в самия проверител никога не спира отчета: текстът минава непроверен и се записва в телеметрията (fail-open).
-В телеметрията влизат само етап, кодове и броеве, никога текст на анализа.
+Грешка или забавяне на самия проверител: в "enforce" текстът се отхвърля (нищо не се записва и не се таксува, код "checker"),
+защото непроверен текст не се доставя като проверен; в "warn" и "off" текстът минава и грешката се записва в телеметрията.
+В телеметрията влизат само етап, причина, кодове и броеве, никога текст на анализа.
 """
 import asyncio
 import os
@@ -26,6 +27,7 @@ from text_check import Facts, Violation
 MODE_ENFORCE, MODE_WARN, MODE_OFF = "enforce", "warn", "off"
 CHECK_TIMEOUT_SECONDS = 30.0       # дълга обработка се прекъсва и текстът минава непроверен (обичайно под 0,2 секунди)
 MAX_ITEMS_IN_REPAIR = 20           # най-много толкова грешки отиват към поправката (тежките първи)
+MAX_REPAIR_ATTEMPTS = 2          # втори опит, когато след първата поправка са останали тежки нарушения (проверката остава същата)
 MIN_REPAIRED_RATIO = 0.6           # поправеният текст по-къс от 60% от оригинала е отрязан или обобщен, не поправен
 REPAIR_TEMPERATURE = 0.2
 
@@ -54,7 +56,8 @@ class GuardOutcome:
     after: List[Violation] = field(default_factory=list)
     repaired: bool = False
     rejected: bool = False
-    error: Optional[str] = None                        # грешка в проверителя (текстът е минал непроверен)
+    error: Optional[str] = None                        # грешка в проверителя (в enforce текстът се отхвърля, иначе минава непроверен)
+    reason: str = ""                                   # защо е отхвърлен: checker_error | repair_unavailable | violations_remain
 
     @property
     def hard_before(self) -> List[Violation]:
@@ -67,6 +70,8 @@ class GuardOutcome:
     def codes(self) -> str:
         """Кодовете на тежките нарушения (при отхвърляне: тези, които са останали след поправката), най-много 60 знака
         (границата на свойствата на събитие)."""
+        if self.error and self.rejected:
+            return "checker"
         seen: List[str] = []
         for v in ((self.hard_after if self.rejected else self.hard_before) or self.before):
             if v.code not in seen:
@@ -75,10 +80,10 @@ class GuardOutcome:
 
     @property
     def result(self) -> str:
-        if self.error:
-            return "error"
         if self.rejected:
             return "rejected"
+        if self.error:
+            return "error"
         if self.repaired:
             return "repaired"
         if self.mode == MODE_WARN and self.hard_before:
@@ -89,7 +94,8 @@ class GuardOutcome:
 
     def summary(self) -> Dict[str, Any]:
         return {"stage": self.stage[:40], "mode": self.mode, "result": self.result, "cleaned": self.cleaned,
-                "hard_before": len(self.hard_before), "hard_after": len(self.hard_after), "codes": self.codes()}
+                "hard_before": len(self.hard_before), "hard_after": len(self.hard_after), "codes": self.codes(),
+                "reason": self.reason}
 
 
 class TextCheckError(Exception):
@@ -165,8 +171,12 @@ async def guard_text(text: str, facts: Optional[Facts], *, stage: str, repair_ca
     ignore = ignored_codes()
     try:
         outcome.before = outcome.after = await _check(cleaned_text, facts, ignore)
-    except Exception as exc:               # проверителят не бива да спира отчета
+    except Exception as exc:
         outcome.error = f"{type(exc).__name__}: {str(exc)[:80]}"
+        if mode == MODE_ENFORCE:               # непроверен текст не се доставя като проверен
+            outcome.rejected, outcome.reason = True, "checker_error"
+            print(f"❌ Проверка на текста ({stage}): грешка в проверителя, анализът се отхвърля ({outcome.error})")
+            raise TextCheckError(stage, outcome)
         print(f"⚠️ Проверка на текста ({stage}): грешка в проверителя, текстът минава непроверен ({outcome.error})")
         return outcome
     if not outcome.hard_before:
@@ -176,31 +186,36 @@ async def guard_text(text: str, facts: Optional[Facts], *, stage: str, repair_ca
     if mode == MODE_WARN:
         return outcome
 
-    # enforce: най-много един опит за поправка
-    fixed = ""
-    try:
-        system_prompt, user_prompt = build_repair_prompts(cleaned_text, outcome.before, language_rules)
-        fixed = _strip_fences(await repair_call(system_prompt, user_prompt))
-    except Exception as exc:
-        print(f"⚠️ Проверка на текста ({stage}): поправката не успя ({type(exc).__name__}: {str(exc)[:120]})")
-    if fixed and len(fixed) >= MIN_REPAIRED_RATIO * len(cleaned_text):
+    # enforce: най-много MAX_REPAIR_ATTEMPTS опита за поправка; всеки следващ получава последния текст и грешките, които са останали
+    current_text, current_violations = cleaned_text, outcome.before
+    for attempt in range(1, MAX_REPAIR_ATTEMPTS + 1):
+        fixed = ""
+        try:
+            system_prompt, user_prompt = build_repair_prompts(current_text, current_violations, language_rules)
+            fixed = _strip_fences(await repair_call(system_prompt, user_prompt))
+        except Exception as exc:
+            print(f"⚠️ Проверка на текста ({stage}): поправката не успя ({type(exc).__name__}: {str(exc)[:120]})")
+        if not (fixed and len(fixed) >= MIN_REPAIRED_RATIO * len(cleaned_text)):
+            outcome.reason = "repair_unavailable"
+            print(f"❌ Проверка на текста ({stage}): поправката е празна или твърде къса")
+            break
         fixed, more = text_check.clean_labels(fixed)
         outcome.cleaned += more
         try:
             after = await _check(fixed, facts, ignore)
         except Exception as exc:
             outcome.error = f"{type(exc).__name__}: {str(exc)[:80]}"
-            print(f"⚠️ Проверка на текста ({stage}): грешка в проверителя след поправката ({outcome.error})")
-            outcome.text = fixed                 # поправеният текст е по-добър от оригинала с известните грешки
-            return outcome
+            print(f"❌ Проверка на текста ({stage}): грешка в проверителя след поправката, анализът се отхвърля ({outcome.error})")
+            outcome.rejected, outcome.reason = True, "checker_error"
+            raise TextCheckError(stage, outcome)
         outcome.after = after
         if not text_check.hard(after):
             outcome.text = fixed
             outcome.repaired = True
-            print(f"✅ Проверка на текста ({stage}): поправен текст, тежки нарушения 0")
+            print(f"✅ Проверка на текста ({stage}): поправен текст след {attempt}. опит, тежки нарушения 0")
             return outcome
-        print(f"❌ Проверка на текста ({stage}): след поправката остават {len(text_check.hard(after))} тежки нарушения")
-    else:
-        print(f"❌ Проверка на текста ({stage}): поправката е празна или твърде къса")
+        outcome.reason = "violations_remain"
+        print(f"❌ Проверка на текста ({stage}): след {attempt}. поправка остават {len(text_check.hard(after))} тежки нарушения")
+        current_text, current_violations = fixed, after
     outcome.rejected = True
     raise TextCheckError(stage, outcome)

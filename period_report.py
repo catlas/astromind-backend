@@ -150,7 +150,7 @@ async def run_period_report(
 
         async def overview_call() -> str:
             raw = await interpreter.compose_period_overview(
-                calendar_rows=calendar.public_events(),
+                calendar_rows=calendar.public_events_with_context(),
                 month_texts=month_texts,
                 report_type=report_type,
                 user_display_name=user_display,

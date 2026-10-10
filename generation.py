@@ -168,6 +168,20 @@ def _activate_memory(user_id: int, name: Optional[str], partner_name: Optional[s
         db.close()
 
 
+def _failure_with_id(code: str, message: str, line: str, **kwargs) -> GenerationFailure:
+    """Отказ с кратък код за търсене в логовете: редът в логовете съдържа само етап, причина и кодове, никога текст на анализа."""
+    error_id = uuid.uuid4().hex[:8]
+    print(f"❌ [{error_id}] {line}")
+    return GenerationFailure(code, f"{message} (код: {error_id})", **kwargs)
+
+
+def text_check_failure(failure: "text_guard.TextCheckError", checks: List[Dict]) -> GenerationFailure:
+    outcome = failure.outcome
+    return _failure_with_id("text_check", text_guard.USER_MESSAGE,
+                            f"text_check: етап {failure.stage}, причина {outcome.reason or 'violations_remain'}, кодове {outcome.codes()}",
+                            stage=failure.stage, cause=failure, checks=checks)
+
+
 def internal_failure(context: str, exc: Exception, user_message: str) -> GenerationFailure:
     """Пълната грешка се логва само на сървъра; потребителят получава общо съобщение с код за търсене в логовете."""
     error_id = uuid.uuid4().hex[:8]
@@ -197,8 +211,7 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         raise
     except text_guard.TextCheckError as failure:
         # Текстът не мина проверката и след поправката: нищо не се записва и не се таксува
-        raise GenerationFailure("text_check", text_guard.USER_MESSAGE, stage=failure.stage, cause=failure,
-                                checks=[failure.outcome.summary()]) from failure
+        raise text_check_failure(failure, [failure.outcome.summary()]) from failure
     except ai_budget.BudgetExceeded as exc:
         # Анализите са спрени (аварийно или от бюджета) по време на изпълнение: задачата пропада и сумата се връща
         raise GenerationFailure("stopped", ai_budget.STOPPED_MESSAGE, cause=exc) from exc
@@ -267,8 +280,7 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
             checks=checks,
         )
     except text_guard.TextCheckError as failure:
-        raise GenerationFailure("text_check", text_guard.USER_MESSAGE, stage=failure.stage, cause=failure,
-                                checks=checks) from failure
+        raise text_check_failure(failure, checks) from failure
     finally:
         progress.unbind(token)
     interpretation, flags = safety.check_output(interpretation, request.report_type or "general")
@@ -336,9 +348,12 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
                 step = {**step, "text": f"{time_note}\n\n{step['text']}"}
             emit(step)
     except period_report.ForecastGenerationError as failure:
-        print(f"⚠️ Прогнозата не завърши ({failure})")
-        raise GenerationFailure("forecast_failed", period_report.USER_MESSAGE, stage=failure.stage, cause=failure.cause,
-                                checks=failure.checks) from failure
+        cause = failure.cause
+        reason = getattr(getattr(cause, "outcome", None), "reason", "") or type(cause).__name__
+        codes = getattr(getattr(cause, "outcome", None), "codes", lambda: "")()
+        raise _failure_with_id("forecast_failed", period_report.USER_MESSAGE,
+                               f"forecast: етап {failure.stage}, причина {reason}, кодове {codes}",
+                               stage=failure.stage, cause=cause, checks=failure.checks) from failure
     if final is None:
         raise GenerationFailure("forecast_failed", period_report.USER_MESSAGE, stage="period")
 
