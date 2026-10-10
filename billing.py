@@ -112,8 +112,27 @@ def signup_gift_cents() -> int:
     return _int_env("SIGNUP_GIFT_CENTS", 500)
 
 
+def stripe_mode() -> Optional[str]:
+    """"test" или "live" по ключа (sk_test_/rk_test_ срещу sk_live_/rk_live_); None, ако няма ключ или не е познат."""
+    key = os.getenv("STRIPE_SECRET_KEY") or ""
+    if key.startswith(("sk_test_", "rk_test_")):
+        return "test"
+    if key.startswith(("sk_live_", "rk_live_")):
+        return "live"
+    return None
+
+
 def payments_enabled() -> bool:
-    return bool(os.getenv("STRIPE_SECRET_KEY") and os.getenv("STRIPE_WEBHOOK_SECRET"))
+    """
+    Плащанията са включени, когато има ключ и тайна за webhook. Ключ за ЖИВО (sk_live_) работи само след изрично одобрение:
+    STRIPE_ALLOW_LIVE=1. Без него истински пари не се вземат, дори ако такъв ключ е сложен по погрешка.
+    """
+    if not (os.getenv("STRIPE_SECRET_KEY") and os.getenv("STRIPE_WEBHOOK_SECRET")):
+        return False
+    if stripe_mode() == "live" and os.getenv("STRIPE_ALLOW_LIVE") != "1":
+        print("⛔ Ключът на Stripe е за ЖИВО, но STRIPE_ALLOW_LIVE не е 1: плащанията остават изключени")
+        return False
+    return True
 
 
 def balance_enforced() -> bool:

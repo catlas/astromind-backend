@@ -184,7 +184,7 @@ class Purchase(Base):
     credit_cents = Column(Integer, nullable=False)
     amount_cents = Column(Integer, nullable=False)
     currency = Column(String(3), nullable=False, default="eur")
-    status = Column(String(20), nullable=False, default="pending")  # pending, paid, refunded, expired
+    status = Column(String(20), nullable=False, default="pending")  # pending, paid, refunded, disputed, failed, expired
     stripe_session_id = Column(String(255), nullable=True, unique=True)
     stripe_payment_intent = Column(String(255), nullable=True, index=True)
     receipt_url = Column(String(500), nullable=True)

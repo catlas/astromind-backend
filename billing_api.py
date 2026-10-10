@@ -51,6 +51,8 @@ def billing_config(user: Optional[User] = Depends(get_optional_user)):
     user_id = user.id if user else None
     return {
         "payments_enabled": billing.payments_enabled(),
+        # "test": плащанията не са истински (тестови карти); "live": истински; None: изключени
+        "payments_mode": billing.stripe_mode() if billing.payments_enabled() else None,
         "balance_enforced": billing.balance_enforced(),
         "currency": "eur",
         "topups": [{**t, "bonus_cents": int(t["credit_cents"]) - int(t["amount_cents"])} for t in billing.topups_for(user_id)],
@@ -173,6 +175,7 @@ async def _fulfil(db: Session, session_obj: dict):
         return
     if session_obj.get("amount_total") is not None and int(session_obj["amount_total"]) != purchase.amount_cents:
         print(f"❌ Сумата не съвпада за покупка {purchase.id}: {session_obj.get('amount_total')} != {purchase.amount_cents}")
+        _track(db, "payment_mismatch", purchase.user_id, {"purchase_id": purchase.id})
         return
     if (session_obj.get("currency") or "eur").lower() != purchase.currency:
         print(f"❌ Валутата не съвпада за покупка {purchase.id}")
@@ -183,11 +186,15 @@ async def _fulfil(db: Session, session_obj: dict):
                                    description=f"Зареждане на баланса: {billing.format_eur(purchase.credit_cents)}")
     if tx is None:
         return  # вече е обработена
+    already_refunded = purchase.refunded_cents or 0            # връщане, дошло преди плащането (събитията не са по ред)
     purchase.status = "paid"
     purchase.paid_at = datetime.utcnow()
     purchase.stripe_session_id = purchase.stripe_session_id or session_obj.get("id")
     purchase.stripe_payment_intent = session_obj.get("payment_intent")
     db.commit()
+    if already_refunded:
+        purchase.refunded_cents = 0
+        _claw_back(db, purchase, already_refunded, "refund", "refunded")
     _track(db, "purchase_completed", purchase.user_id,
            {"package": purchase.package_id, "amount_cents": purchase.amount_cents})
 
@@ -200,26 +207,58 @@ async def _fulfil(db: Session, session_obj: dict):
             db.commit()
 
 
-def _refund(db: Session, charge: dict):
-    purchase = db.query(Purchase).filter(Purchase.stripe_payment_intent == charge.get("payment_intent")).first()
+def _purchase_for_charge(db: Session, charge: dict) -> Optional[Purchase]:
+    """Покупката на таксата: по платежното намерение, а ако още не е записано (събитията идват не по ред), по метаданните."""
+    intent = charge.get("payment_intent")
+    purchase = db.query(Purchase).filter(Purchase.stripe_payment_intent == intent).first() if intent else None
     if purchase is None:
+        purchase_id = str((charge.get("metadata") or {}).get("purchase_id") or "")
+        purchase = db.get(Purchase, int(purchase_id)) if purchase_id.isdigit() else None
+    return purchase
+
+
+def _claw_back(db: Session, purchase: Purchase, total_cents: int, reason: str, status: str) -> None:
+    """
+    Отнема кредита, съответстващ на върнатата или оспорената сума (total_cents е общата сума до момента).
+    Кредитът се отнема пропорционално, само от внесените средства и не повече от тях. Покупка, която още не е платена, само
+    запомня сумата: когато плащането дойде, кредитът се нетира (виж _fulfil).
+    """
+    if total_cents <= purchase.refunded_cents:
         return
-    refunded = int(charge.get("amount_refunded") or 0)
-    if refunded <= purchase.refunded_cents:
-        return
-    # Кредитът се отнема пропорционално на върнатата сума, но само от внесените средства и не повече от тях
-    newly_refunded = refunded - purchase.refunded_cents
-    credit_back = round(purchase.credit_cents * newly_refunded / purchase.amount_cents)
-    user = db.get(User, purchase.user_id)
-    credit_back = min(credit_back, user.paid_cents or 0) if user else 0
-    if credit_back > 0:
-        billing.apply_transaction(db, purchase.user_id, "refund", paid=-credit_back,
-                                  ref=f"refund:{purchase.id}:{refunded}",
-                                  description=f"Възстановена сума за зареждане #{purchase.id}")
-    purchase.refunded_cents = refunded
-    if refunded >= purchase.amount_cents:
-        purchase.status = "refunded"
+    newly = total_cents - purchase.refunded_cents
+    purchase.refunded_cents = total_cents
+    if purchase.status == "paid" or purchase.status in ("refunded", "disputed"):
+        credit_back = round(purchase.credit_cents * newly / purchase.amount_cents)
+        user = db.get(User, purchase.user_id)
+        credit_back = min(credit_back, user.paid_cents or 0) if user else 0
+        if credit_back > 0:
+            billing.apply_transaction(db, purchase.user_id, "refund", paid=-credit_back,
+                                      ref=f"{reason}:{purchase.id}:{total_cents}",
+                                      description=f"Възстановена сума за зареждане #{purchase.id}")
+        if status == "disputed":
+            purchase.status = "disputed"
+        elif total_cents >= purchase.amount_cents:
+            purchase.status = "refunded"
     db.commit()
+
+
+def _refund(db: Session, charge: dict):
+    purchase = _purchase_for_charge(db, charge)
+    if purchase is None:
+        print(f"⚠️ Връщане за непозната покупка: {charge.get('payment_intent')}")
+        return
+    _claw_back(db, purchase, int(charge.get("amount_refunded") or 0), "refund", "refunded")
+
+
+def _dispute(db: Session, dispute: dict):
+    """Оспорване от картодържателя: кредитът за оспорената сума се отнема веднага; покупката става „disputed“."""
+    purchase = _purchase_for_charge(db, {"payment_intent": dispute.get("payment_intent"),
+                                         "metadata": dispute.get("metadata")})
+    if purchase is None:
+        print(f"⚠️ Оспорване за непозната покупка: {dispute.get('payment_intent')}")
+        return
+    _claw_back(db, purchase, max(int(dispute.get("amount") or 0), purchase.refunded_cents), "dispute", "disputed")
+    _track(db, "payment_disputed", purchase.user_id, {"purchase_id": purchase.id})
 
 
 @router.post("/webhook")
@@ -233,6 +272,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     event = json.loads(payload)
     obj = (event.get("data") or {}).get("object") or {}
     kind = event.get("type")
+    mode = billing.stripe_mode()
+    if mode and event.get("livemode") is not None and bool(event["livemode"]) != (mode == "live"):
+        # Събитие от другия режим (тестово при ключ за живо или обратно): грешна настройка, нищо не се записва
+        print(f"⛔ Webhook от друг режим: livemode={event.get('livemode')}, ключът е за {mode}")
+        raise HTTPException(status_code=400, detail="Режимът на събитието не съвпада с настройката")
 
     if kind in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         await _fulfil(db, obj)
@@ -241,8 +285,15 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if purchase and purchase.status == "pending":
             purchase.status = "expired"
             db.commit()
+    elif kind == "checkout.session.async_payment_failed":
+        purchase = db.query(Purchase).filter(Purchase.stripe_session_id == obj.get("id")).first()
+        if purchase and purchase.status == "pending":
+            purchase.status = "failed"
+            db.commit()
     elif kind == "charge.refunded":
         _refund(db, obj)
+    elif kind == "charge.dispute.created":
+        _dispute(db, obj)
     return {"received": True}
 
 
