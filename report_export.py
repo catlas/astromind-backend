@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
+import bg_text
 import engine
 import relationship
 import report_text
@@ -81,7 +82,8 @@ def context(report: Report) -> Dict:
         "people": people, "charts": charts, "period": period,
         "relationship": relationship.LABELS.get(params.get("relationship", ""), "") if second else "",
         "zone": zone,
-        "sections": [{"title": title, "text": text} for title, text in report_text.split_sections(report.content)],
+        "sections": [{"title": title, "text": text} for title, text in report_text.split_sections(
+            bg_text.for_report(report.content, params, report.profile_name or ""))],
     }
 
 

@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 import ai_budget
+import bg_text
 import billing
 import birthtime
 import data_api
@@ -187,6 +188,7 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
     if has_partner(request) and not request.partner_time_known:
         unknown_names.append(factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT))
     time_token = birthtime.bind(unknown_names) if unknown_names else None
+    names_token = bg_text.bind([request.name, request.partner_name])         # имената на хората не се превеждат
     try:
         if request.is_dynamic:
             return await run_period(request, user_id, emit)
@@ -206,6 +208,7 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         what = "прогнозата" if request.is_dynamic else "анализа"
         raise internal_failure("generation", exc, f"Не успяхме да генерираме {what}. Опитайте отново след малко.") from exc
     finally:
+        bg_text.unbind(names_token)
         if time_token is not None:
             birthtime.unbind(time_token)
         if context_token is not None:

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import bg_text
 import report_export
 from database import Profile, Report, User, get_db
 from deps import get_current_user
@@ -260,7 +261,7 @@ def get_report(report_id: int, current_user: User = Depends(get_current_user), d
     r = db.query(Report).filter(Report.id == report_id, Report.user_id == current_user.id).first()
     if not r:
         raise HTTPException(status_code=404, detail="Отчетът не е намерен")
-    return {**report_summary(r), "content": r.content, "params": r.params or {}}
+    return {**report_summary(r), "content": bg_text.for_report(r.content, r.params, r.profile_name or ""), "params": r.params or {}}
 
 
 @router.get("/reports/{report_id}/export")

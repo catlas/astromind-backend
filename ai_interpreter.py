@@ -16,6 +16,7 @@ import factpack
 import period_report
 import progress
 import ai_budget
+import bg_text
 import birthtime
 import relationship
 import text_check
@@ -1583,7 +1584,7 @@ class AIInterpreter:
                                 if finish_reason == "length":
                                     print(f"⚠️ Отговорът е отрязан от max_tokens={max_tokens} — вдигнете AI_MAX_OUTPUT_TOKENS.")
                                 self._record_usage(resp_json, system_prompt + user_prompt, content)
-                                return content.strip()
+                                return self._finish_text(content.strip(), add_context)
                             choice = resp_json.get("choices", [{}])[0]
                             print(
                                 f"⚠️ Ollama върна празен content (model={self.ollama_model}, "
@@ -1642,13 +1643,18 @@ class AIInterpreter:
                 
                 if content and content.strip():
                     self._record_usage(resp_json, system_prompt + user_prompt, content)
-                    return content.strip()
+                    return self._finish_text(content.strip(), add_context)
                 
                 raise RuntimeError("Together.ai върна празен отговор")
                 
         except Exception as e:
             raise RuntimeError(f"Грешка при комуникация с AI провайдърите: {e}")
     
+    @staticmethod
+    def _finish_text(text: str, analysis: bool) -> str:
+        """Текстът на анализ минава през замяната на английските думи с български; техническите отговори (JSON за места) не."""
+        return bg_text.bulgarianize(text) if analysis else text
+
     @staticmethod
     def _record_usage(resp_json: Dict, prompt_text: str, content: str) -> None:
         """Записва токените на отговора за бюджета; без usage от доставчика се оценяват по дължината на текста."""
@@ -1733,7 +1739,14 @@ class AIInterpreter:
             "   - \"Sextile\" -> \"Секстил\"\n"
             "   - \"Retrograde\" -> \"Ретрограден\"\n"
             "   - \"Direct\" -> \"Директен\"\n"
-            "   - \"Ingress\" -> \"Навлизане\" / \"Ингрес\"\n\n"
+            "   - \"Ingress\" -> \"Навлизане\" / \"Ингрес\"\n"
+            "   - \"natal\" -> \"натален / натална / натално\" (по рода на думата след него), \"transit\" -> \"транзитен\"\n"
+            "   - ZODIAC SIGNS in Bulgarian ALWAYS, even when the data gives them in English: Aries=Овен, Taurus=Телец, "
+            "Gemini=Близнаци, Cancer=Рак, Leo=Лъв, Virgo=Дева, Libra=Везни, Scorpio=Скорпион, Sagittarius=Стрелец, "
+            "Capricorn=Козирог, Aquarius=Водолей, Pisces=Риби. Planets too: Sun=Слънце, Moon=Луна, Mercury=Меркурий, "
+            "Venus=Венера, Mars=Марс, Jupiter=Юпитер, Saturn=Сатурн, Uranus=Уран, Neptune=Нептун, Pluto=Плутон.\n"
+            "   - The data below is in English: never copy its English words or event labels into the text. Latin letters are "
+            "allowed only for a person's own name and for degrees such as 17°22'.\n\n"
             "3. **Terminology:** Use professional Bulgarian astrological terminology.\n\n"
             "4. **🚨 CRITICAL: HOUSES TERMINOLOGY (STRICTLY ENFORCED):**\n"
             "   - ALWAYS use \"дом\" (house), NEVER \"поле\" (field)\n"
