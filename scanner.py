@@ -24,7 +24,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import pytz
 import swisseph as swe  # type: ignore
 
-from engine import AstrologyEngine, decimal_to_dms, house_for_longitude
+from engine import AstrologyEngine, decimal_to_dms, ensure_ephemeris, house_for_longitude
 
 CALENDAR_VERSION = "9.1"
 CALC_FLAGS = swe.FLG_SWIEPH | swe.FLG_SPEED
@@ -280,6 +280,7 @@ class TransitScanner:
 
     def build_calendar(self, natal_chart: Dict, start_date: str, end_date: str, lat: float, lon: float,
                        partner_chart: Optional[Dict] = None, tz_name: Optional[str] = None) -> PeriodCalendar:
+        ensure_ephemeris()                                    # Swiss Ephemeris държи пътя до файловете за всяка нишка отделно
         start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
         if end_d < start_d:

@@ -5,6 +5,7 @@
 
 import os
 import swisseph as swe  # type: ignore
+import threading
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional, List
 from pathlib import Path
@@ -184,8 +185,11 @@ class AstrologyEngine:
         
         ephe_path = str(base_dir / "ephe")
         
-        # Задаване на пътя към ефемеридите
-        swe.set_ephe_path(ephe_path)
+        # Задаване на пътя към ефемеридите (за тази и, при нужда, за всяка следваща нишка: виж ensure_ephemeris)
+        global _EPHE_PATH
+        _EPHE_PATH = ephe_path
+        _ephe_thread.path = None
+        ensure_ephemeris()
         
         # Проверка дали директорията съществува
         if not os.path.exists(ephe_path):
@@ -490,6 +494,7 @@ class AstrologyEngine:
         FIX: Pyswisseph връща (списък_данни, флаг), а не обратното.
         """
         try:
+            ensure_ephemeris()
             # result е tuple: (списък_с_координати, статус_флаг)
             result = swe.calc_ut(jd, planet_id, self.CALC_FLAGS)
             
@@ -564,6 +569,16 @@ class AstrologyEngine:
             print(f"DEBUG info: cusps type: {type(result[0])}, len: {len(result[0])}")
             raise RuntimeError(f"Грешка при изчисляване на домове: {e}")
     
+    def _ephemeris_info(self, jd: float, planets: Dict[str, Dict], intentional=()) -> Dict:
+        """Откъде са данните: swiss (файловете .se1) или moshier (резервен режим), и кои тела липсват (тих частичен успех е грешка)."""
+        try:
+            ensure_ephemeris()
+            flag = swe.calc_ut(jd, swe.SUN, self.CALC_FLAGS)[1]
+            source = "moshier" if flag & swe.FLG_MOSEPH else "swiss"
+        except Exception:
+            source = "unknown"
+        return {"source": source, "missing": sorted(n for n, d in planets.items() if d.get("longitude") is None and n not in intentional)}
+
     def _planet_positions(self, jd: float) -> Dict[str, Dict]:
         """Позиции на всички тела за един момент: дължина, скорост, разстояние, знак и форматирана позиция."""
         planets = {}
@@ -639,6 +654,7 @@ class AstrologyEngine:
             "houses": {},
             "angles": {},
             "time_known": False,
+            "ephemeris": self._ephemeris_info(jd, planets, intentional=set(sign_ranges)),   # Луната без час няма дължина нарочно
             "sign_ranges": sign_ranges,
             "julian_day": jd,
             "datetime_utc": noon_utc.isoformat(),
@@ -709,6 +725,7 @@ class AstrologyEngine:
             "planets": planets,
             "houses": house_cusps,
             "time_known": True,
+            "ephemeris": self._ephemeris_info(jd, planets),
             "angles": {
                 "Ascendant": house_data["Ascendant"],
                 "MC": house_data["MC"],
@@ -733,6 +750,21 @@ class AstrologyEngine:
 _shared_engine: Optional["AstrologyEngine"] = None
 
 
+_EPHE_PATH: Optional[str] = None
+_ephe_thread = threading.local()
+
+
+def ensure_ephemeris() -> None:
+    """
+    Swiss Ephemeris помни пътя до файловете за всяка нишка поотделно (на Linux). В нова работна нишка без него Хирон липсва, а
+    изчисленията тихо минават към Moshier. Затова всяка входна точка (двигателят, скенерът, износът) го задава за текущата
+    нишка; проверката е една стойност в thread-local, а не извикване при всяко изчисление.
+    """
+    if _EPHE_PATH and getattr(_ephe_thread, "path", None) != _EPHE_PATH:
+        swe.set_ephe_path(_EPHE_PATH)
+        _ephe_thread.path = _EPHE_PATH
+
+
 def get_engine() -> "AstrologyEngine":
     """
     Общата инстанция на двигателя. Зареждането на двигателя взема над 0,6 секунди (TimezoneFinder), затова се прави веднъж, а не при
@@ -741,6 +773,7 @@ def get_engine() -> "AstrologyEngine":
     global _shared_engine
     if _shared_engine is None:
         _shared_engine = AstrologyEngine()
+    ensure_ephemeris()
     return _shared_engine
 
 

@@ -9,11 +9,12 @@ from typing import Dict, List, Optional
 
 import bg_text
 import engine
+import factpack
 import relationship
 import report_text
 from aspects_engine import calculate_natal_aspects
 from database import Report
-from docx_generator import DOCXGenerator
+from docx_generator import DOCXGenerator, PLANET_NAMES
 
 KIND_LABELS = {
     "general": "Общ анализ", "health": "Здраве", "career": "Кариера", "money": "Пари и успех", "love": "Любов",
@@ -36,6 +37,30 @@ def _chart(params: Dict, partner: bool = False) -> Optional[Dict]:
                                                    time_known=known)
     except Exception:
         return None
+
+
+def _transit_entry(params: Dict, natal: Optional[Dict]) -> Optional[Dict]:
+    """Небето на избрания момент (анализ за дата), както е ползвано при генерирането: същите дата, час и координати.
+    Без запазен час (стар отчет) не се измисля карта."""
+    if params.get("is_dynamic") or not params.get("target_date") or not params.get("target_time"):
+        return None
+    lat = params.get("target_lat") if params.get("target_lat") is not None else params.get("lat")
+    lon = params.get("target_lon") if params.get("target_lon") is not None else params.get("lon")
+    if lat is None or lon is None:
+        return None
+    try:
+        sky = engine.get_engine().calculate_chart(params["target_date"], params["target_time"], float(lat), float(lon))
+    except Exception:
+        return None
+    rows = []
+    if natal:
+        names = PLANET_NAMES
+        for a in factpack.transit_aspects(natal, sky):
+            rows.append({"planet1": f"транзитен {names.get(a['transit_planet'], a['transit_planet'])}",
+                         "planet2": f"натален {names.get(a['natal_planet'], a['natal_planet'])}",
+                         "aspect": a["aspect"], "orb": a["orb"]})
+    when = f"{'.'.join(reversed(str(params['target_date']).split('-')))} {str(params['target_time'])[:5]}"
+    return {"title": f"Небе на {when} (транзити)", "chart": sky, "aspects": rows}
 
 
 def _person(params: Dict, prefix: str, fallback_name: str) -> Optional[Dict]:
@@ -72,6 +97,9 @@ def context(report: Report) -> Dict:
     if partner:
         charts.append({"title": f"Карта: {second['name']}", "chart": partner,
                        "aspects": calculate_natal_aspects(partner, use_wider_orbs=False)})
+    transit = _transit_entry(params, natal)
+    if transit:
+        charts.append(transit)
     period = ""
     if params.get("is_dynamic") and params.get("target_date") and params.get("end_date"):
         period = f"{'.'.join(reversed(params['target_date'].split('-')))} – {'.'.join(reversed(params['end_date'].split('-')))}"
