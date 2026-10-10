@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -77,13 +77,13 @@ def queue_verification(background: BackgroundTasks, user: User):
 # ---------------------------------------------------------------------------
 
 class UpdateMe(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
+    full_name: Optional[str] = Field(default=None, max_length=100)
+    email: Optional[str] = Field(default=None, max_length=254)
 
 
 class ChangePassword(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: str = Field(..., max_length=128)
+    new_password: str = Field(..., max_length=128)
 
 
 @router.get("/me")
@@ -190,7 +190,7 @@ def accept_terms(current_user: User = Depends(get_current_user), db: Session = D
 # ---------------------------------------------------------------------------
 
 class TokenIn(BaseModel):
-    token: str
+    token: str = Field(..., max_length=2000)
 
 
 @router.post("/verify-email")
@@ -225,12 +225,12 @@ async def resend_verification(current_user: User = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 class ForgotPassword(BaseModel):
-    email: str
+    email: str = Field(..., max_length=254)
 
 
 class ResetPassword(BaseModel):
-    token: str
-    new_password: str
+    token: str = Field(..., max_length=2000)
+    new_password: str = Field(..., max_length=128)
 
 
 @router.post("/forgot-password")

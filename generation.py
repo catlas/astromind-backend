@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
+import ai_budget
 import billing
 import birthtime
 import data_api
@@ -39,7 +40,7 @@ Emit = Callable[[Dict[str, Any]], None]
 
 class GenerationFailure(Exception):
     """
-    Анализът не може да се завърши. code: invalid_input, no_events, forecast_failed, text_check, internal.
+    Анализът не може да се завърши. code: invalid_input, no_events, forecast_failed, text_check, stopped, internal.
     message е текстът за потребителя. cause и checks остават за телеметрията (без текст на анализа).
     """
 
@@ -196,6 +197,9 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         # Текстът не мина проверката и след поправката: нищо не се записва и не се таксува
         raise GenerationFailure("text_check", text_guard.USER_MESSAGE, stage=failure.stage, cause=failure,
                                 checks=[failure.outcome.summary()]) from failure
+    except ai_budget.BudgetExceeded as exc:
+        # Анализите са спрени (аварийно или от бюджета) по време на изпълнение: задачата пропада и сумата се връща
+        raise GenerationFailure("stopped", ai_budget.STOPPED_MESSAGE, cause=exc) from exc
     except ValueError as exc:
         raise GenerationFailure("invalid_input", f"Невалидни входни данни: {exc}") from exc
     except Exception as exc:

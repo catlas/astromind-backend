@@ -15,6 +15,7 @@ from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB, calculate_natal_aspects
 import factpack
 import period_report
 import progress
+import ai_budget
 import birthtime
 import relationship
 import text_check
@@ -1525,6 +1526,9 @@ class AIInterpreter:
         if temperature is None:
             temperature = self.default_temperature
 
+        # Аварийно спиране и бюджет: без заявка към доставчика, когато анализите са спрени (хвърля ai_budget.BudgetExceeded)
+        ai_budget.check()
+
         if add_context:
             # Правилата за безопасност важат за всеки анализ, независимо от режима
             system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
@@ -1578,6 +1582,7 @@ class AIInterpreter:
                                 print(f"✅ Ollama успешно отговори (опит {attempt}, finish_reason={finish_reason}, usage={resp_json.get('usage')})")
                                 if finish_reason == "length":
                                     print(f"⚠️ Отговорът е отрязан от max_tokens={max_tokens} — вдигнете AI_MAX_OUTPUT_TOKENS.")
+                                self._record_usage(resp_json, system_prompt + user_prompt, content)
                                 return content.strip()
                             choice = resp_json.get("choices", [{}])[0]
                             print(
@@ -1636,6 +1641,7 @@ class AIInterpreter:
                 content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
                 
                 if content and content.strip():
+                    self._record_usage(resp_json, system_prompt + user_prompt, content)
                     return content.strip()
                 
                 raise RuntimeError("Together.ai върна празен отговор")
@@ -1643,6 +1649,15 @@ class AIInterpreter:
         except Exception as e:
             raise RuntimeError(f"Грешка при комуникация с AI провайдърите: {e}")
     
+    @staticmethod
+    def _record_usage(resp_json: Dict, prompt_text: str, content: str) -> None:
+        """Записва токените на отговора за бюджета; без usage от доставчика се оценяват по дължината на текста."""
+        usage = resp_json.get("usage") or {}
+        prompt = usage.get("prompt_tokens")
+        completion = usage.get("completion_tokens")
+        ai_budget.record(prompt if isinstance(prompt, int) else ai_budget.estimate_tokens(prompt_text),
+                         completion if isinstance(completion, int) else ai_budget.estimate_tokens(content))
+
     @staticmethod
     def _get_synastry_type_focus(report_type: str) -> str:
         """Връща type-specific focus инструкции за synastry анализ"""

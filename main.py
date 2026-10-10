@@ -37,6 +37,7 @@ from auth import (
     hash_password, verify_password, create_user_token,
     normalize_email, validate_email, validate_password,
 )
+from http_security import SecurityMiddleware
 from rate_limit import client_ip, enforce
 
 load_dotenv()
@@ -45,10 +46,16 @@ load_dotenv()
 run_migrations()
 
 # Инициализация на FastAPI приложението
+# Документацията на API-то (/docs, /redoc, /openapi.json) е изключена: изброява всички крайни точки на всеки посетител.
+# За локална работа: ENABLE_API_DOCS=1.
+_docs_on = os.getenv("ENABLE_API_DOCS", "") == "1"
 app = FastAPI(
     title="Astrology API",
     description="API за изчисляване и интерпретация на астрологични карти",
-    version="3.0.0"
+    version="3.0.0",
+    docs_url="/docs" if _docs_on else None,
+    redoc_url="/redoc" if _docs_on else None,
+    openapi_url="/openapi.json" if _docs_on else None,
 )
 
 # CORS Middleware - чете allowlist от CORS_ORIGINS (comma-separated)
@@ -66,6 +73,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Content-Disposition", "Retry-After"],      # името на файла при износ и паузата при лимит
 )
+
+# Заглавия за сигурност и таван на заявката (най-отвън, за да важат и за отговорите на CORS и за грешките)
+app.add_middleware(SecurityMiddleware)
 
 app.include_router(account_api.router)
 app.include_router(data_api.router)
@@ -181,14 +191,14 @@ async def calculate_chart(request: ChartRequest, http_request: Request):
 # ============================================================================
 
 class UserRegister(BaseModel):
-    email: str
-    password: str
-    full_name: str
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+    full_name: str = Field(..., max_length=100)
     accept_terms: bool = False
 
 class UserLogin(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
 
 @app.post("/register")
 async def register(user_data: UserRegister, http_request: Request, background_tasks: BackgroundTasks,

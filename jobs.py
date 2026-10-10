@@ -33,6 +33,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import ai_budget
 import billing
 import data_api
 import events
@@ -196,6 +197,12 @@ def create_job(db: Session, user: User, request: ChartRequest, key: Optional[str
         generation.validate(request)
     except generation.GenerationFailure as failure:
         raise HTTPException(status_code=400, detail=failure.message)
+
+    try:
+        ai_budget.check()
+    except ai_budget.BudgetExceeded as stop:
+        print(f"⛔ Анализите са спрени ({stop.reason}): няма нова задача")
+        raise HTTPException(status_code=503, detail=ai_budget.STOPPED_MESSAGE)
 
     quote = generation.quote_for(request)
     billing.require_balance(user, quote)            # бърз отказ с обяснение, преди да броим заявката към лимита

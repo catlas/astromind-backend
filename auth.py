@@ -6,7 +6,8 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 load_dotenv()
 

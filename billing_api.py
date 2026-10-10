@@ -18,7 +18,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import billing
@@ -72,7 +72,7 @@ def billing_config(user: Optional[User] = Depends(get_optional_user)):
 # ---------------------------------------------------------------------------
 
 class CheckoutIn(BaseModel):
-    package_id: str   # id на пакета за зареждане (topup5, topup10, topup20)
+    package_id: str = Field(..., max_length=40)   # id на пакета за зареждане (topup5, topup10, topup20)
     # Потребителят се съгласява доставката на дигиталното съдържание да започне
     # веднага и приема, че губи правото на отказ (чл. 16, буква м от Директива 2011/83/ЕС)
     accept_immediate_delivery: bool = False

@@ -18,13 +18,13 @@ router = APIRouter()
 
 class OnboardingIn(BaseModel):
     name: str = Field(..., max_length=100)
-    birth_date: str
-    birth_time: Optional[str] = None
+    birth_date: str = Field(..., max_length=10)
+    birth_time: Optional[str] = Field(default=None, max_length=8)
     unknown_time: bool = False
     birth_place: Optional[str] = Field(default=None, max_length=200)
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
-    gender: Optional[str] = None
+    gender: Optional[str] = Field(default=None, max_length=20)
 
 
 def _insight_for(profile: Profile) -> dict:

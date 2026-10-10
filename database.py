@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 
 from sqlalchemy import (
-    create_engine, Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text,
+    BigInteger, create_engine, Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
@@ -122,6 +122,17 @@ class CoinTransaction(Base):
     ref = Column(String(120), nullable=True, unique=True)
     description = Column(String(200), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class AIUsage(Base):
+    """Разходът за AI по дни (UTC): вика, токени и приблизителна цена. Основа на дневния и месечния бюджет (ai_budget.py)."""
+    __tablename__ = "ai_usage"
+
+    day = Column(String(10), primary_key=True)
+    calls = Column(Integer, nullable=False, default=0, server_default="0")
+    prompt_tokens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    completion_tokens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    cost_millicents = Column(BigInteger, nullable=False, default=0, server_default="0")
 
 
 class Job(Base):

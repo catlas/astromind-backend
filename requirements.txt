@@ -7,9 +7,9 @@ uvicorn==0.54.0
 pydantic==2.11.10
 
 # Env / HTTP
-python-dotenv==1.1.0
+python-dotenv==1.2.2
 httpx==0.28.1
-requests==2.32.3
+requests==2.33.0
 
 # Astrology / timezone
 pyswisseph==2.10.3.2
@@ -30,5 +30,5 @@ sqlalchemy==2.0.54
 psycopg2-binary==2.9.13
 passlib[bcrypt]==1.7.4
 bcrypt==4.3.0
-python-jose[cryptography]==3.5.0
+PyJWT==2.15.0                 # вместо python-jose (CVE без поправка; ползваме само HS256), без cryptography/ecdsa/rsa
 alembic==1.18.5

@@ -1,0 +1,4 @@
+# Само за тестовете (не се инсталира в Render): самоподписан сертификат за пробния SMTP сървър в tests/smtp_testserver.py.
+# 46.0.0 е най-новата версия, съвместима с timezonefinder 7.0.2 (cffi<2); в продукцията cryptography не се ползва.
+-r requirements.txt
+cryptography==46.0.0

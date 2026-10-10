@@ -39,10 +39,10 @@ TIME_RE = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
 
 class ProfileIn(BaseModel):
     name: str = Field(..., max_length=100)
-    relation: str = "self"
+    relation: str = Field(default="self", max_length=20)
     gender: Optional[str] = Field(default=None, max_length=20)
-    birth_date: str
-    birth_time: Optional[str] = None
+    birth_date: str = Field(..., max_length=10)
+    birth_time: Optional[str] = Field(default=None, max_length=8)
     unknown_time: bool = False
     birth_place: Optional[str] = Field(default=None, max_length=200)
     lat: Optional[float] = Field(default=None, ge=-90, le=90)

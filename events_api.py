@@ -3,9 +3,10 @@ import os
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import ai_budget
 import events
 from database import User, get_db
 from deps import get_current_user
@@ -26,7 +27,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 class EventIn(BaseModel):
-    name: str
+    name: str = Field(..., max_length=60)
     props: Optional[Dict[str, Any]] = None
 
 
@@ -45,4 +46,4 @@ def client_event(data: EventIn, current_user: User = Depends(get_current_user), 
 
 @router.get("/admin/metrics")
 def admin_metrics(days: int = 30, _: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return events.funnel(db, days=max(1, min(days, 365)))
+    return {**events.funnel(db, days=max(1, min(days, 365))), "ai_budget": ai_budget.status()}
