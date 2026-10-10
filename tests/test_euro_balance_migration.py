@@ -1,5 +1,6 @@
 """
 Миграция 0008: монетите стават евроценти (1 монета = 0,10 €) и балансът се дели на подарък и внесени средства.
+Подаръкът за старите акаунти (0009) има свой тест: test_legacy_gift_topup.py.
 
 Тестът създава база с реалната структура от ревизия 0007, слага стари данни (покупки, харчене, възстановяване, баланс,
 който не съвпада с регистъра), мигрира до последната ревизия и сверява всеки потребител. После връща назад.
@@ -79,7 +80,7 @@ class EuroBalanceMigrationTest(unittest.TestCase):
                                  "VALUES (1, 2, 'general', 'Анализ', '<p>x</p>', 8, 'completed')"))
             conn.execute(sa.text("INSERT INTO reports (id, user_id, report_type, label, content, coins, status) "
                                  "VALUES (2, 3, 'love', 'Анализ', '<p>y</p>', 0, 'completed')"))
-            command.upgrade(alembic_config(conn), "head")
+            command.upgrade(alembic_config(conn), "0008_euro_balance")
 
     def row(self, sql, **params):
         with self.engine.connect() as conn:
@@ -139,7 +140,7 @@ class EuroBalanceMigrationTest(unittest.TestCase):
                                  "VALUES (1, 34, 34, 'purchase', 'legacy:1')"))
             conn.execute(sa.text("INSERT INTO reports (id, user_id, report_type, label, content, coins, status) "
                                  "VALUES (1, 1, 'general', 'А', 'x', 8, 'completed')"))
-            command.upgrade(alembic_config(conn), "head")
+            command.upgrade(alembic_config(conn), "0008_euro_balance")
             command.downgrade(alembic_config(conn), "0007_terms")
             self.assertEqual(conn.execute(sa.text("SELECT coins FROM users WHERE id = 1")).scalar(), 34)
             self.assertEqual(conn.execute(sa.text("SELECT delta, balance_after FROM coin_transactions")).fetchall(), [(34, 34)])
