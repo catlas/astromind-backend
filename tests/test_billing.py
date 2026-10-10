@@ -26,7 +26,7 @@ import main  # noqa: E402
 from billing_api import verify_signature  # noqa: E402
 from database import CoinTransaction, Purchase, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, register_and_login  # noqa: E402
+from testenv import CHART, register_and_login, analyze  # noqa: E402
 
 WEBHOOK_SECRET = "whsec_test"
 STRIPE_ENV = {"STRIPE_SECRET_KEY": "sk_test_x", "STRIPE_WEBHOOK_SECRET": WEBHOOK_SECRET}
@@ -211,9 +211,9 @@ class BillingTest(unittest.TestCase):
     def test_everything_is_free_and_unlocked_while_payments_are_off(self):
         h = register_and_login(self.client, "free@test.bg")
         with self.ok_ai():
-            basic = self.client.post("/interpret", json=CHART, headers=h)
+            basic = analyze(self.client, h, CHART)
             limiter.reset()
-            pair = self.client.post("/interpret", json={**CHART, **PAIR}, headers=h)
+            pair = analyze(self.client, h, {**CHART, **PAIR})
         for r in (basic, pair):
             self.assertEqual(r.status_code, 200, r.text)
             self.assertEqual(r.json()["charged_cents"], 0)
@@ -228,12 +228,12 @@ class BillingTest(unittest.TestCase):
         uid = user_id("basic@test.bg")
         failing = mock.AsyncMock(side_effect=RuntimeError("AI down"))
         with mock.patch.object(main.ai_interpreter, "interpret_chart", failing):
-            r = self.client.post("/interpret", json=CHART, headers=h)
+            r = analyze(self.client, h, CHART)
         self.assertEqual(r.status_code, 500)
         self.assertEqual(me(self.client, h)["balance_cents"], 500)                 # без дебит при грешка
 
         with self.ok_ai():
-            r = self.client.post("/interpret", json=CHART, headers=h)
+            r = analyze(self.client, h, CHART)
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual((body["charged_cents"], body["balance_cents"], body["gift_cents"], body["paid_cents"]), (160, 340, 340, 0))
@@ -248,12 +248,12 @@ class BillingTest(unittest.TestCase):
         for _ in range(3):
             limiter.reset()
             with self.ok_ai():
-                self.assertEqual(self.client.post("/interpret", json=CHART, headers=h).status_code, 200)
+                self.assertEqual(analyze(self.client, h, CHART).status_code, 200)
         self.assertEqual(balances(uid), (0, 20))
         limiter.reset()
         never = mock.AsyncMock(return_value="<p>no</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", never):
-            r = self.client.post("/interpret", json=CHART, headers=h)
+            r = analyze(self.client, h, CHART)
         self.assertEqual(r.status_code, 402)
         self.assertIn("Заредете баланса", r.json()["detail"])
         self.assertIn("1,60 €", r.json()["detail"])
@@ -266,7 +266,7 @@ class BillingTest(unittest.TestCase):
         uid = user_id("order@test.bg")
         set_balances(uid, paid=1000, gift=100)
         with self.ok_ai():
-            r = self.client.post("/interpret", json=CHART, headers=h)
+            r = analyze(self.client, h, CHART)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(balances(uid), (940, 0))                                   # подаръкът 100 + внесени 60
         db = SessionLocal()
@@ -284,9 +284,9 @@ class BillingTest(unittest.TestCase):
         uid = user_id("locked@test.bg")
         never = mock.AsyncMock(return_value="<p>no</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", never):
-            pair = self.client.post("/interpret", json={**CHART, **PAIR}, headers=h)
+            pair = analyze(self.client, h, {**CHART, **PAIR})
             limiter.reset()
-            plain_forecast = self.client.post("/interpret", json={**CHART, **FORECAST}, headers=h)
+            plain_forecast = analyze(self.client, h, {**CHART, **FORECAST})
         for r in (pair, plain_forecast):
             self.assertEqual(r.status_code, 402, r.text)
             self.assertIn("Премиум услугите се плащат с внесени средства", r.json()["detail"])
@@ -295,7 +295,7 @@ class BillingTest(unittest.TestCase):
         limiter.reset()
         monthly = mock.AsyncMock(return_value="<p>m</p>")
         with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly):
-            stream = self.client.post("/interpret-stream", json={**CHART, **FORECAST}, headers=h)
+            stream = analyze(self.client, h, {**CHART, **FORECAST}, stream=True)
         self.assertIn('"code": 402', stream.text)
         self.assertIn("Премиум услугите", stream.text)
         monthly.assert_not_called()
@@ -308,7 +308,7 @@ class BillingTest(unittest.TestCase):
         uid = user_id("unlock@test.bg")
         set_balances(uid, paid=500, gift=500)
         with self.ok_ai():
-            r = self.client.post("/interpret", json={**CHART, **PAIR}, headers=h)
+            r = analyze(self.client, h, {**CHART, **PAIR})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["charged_cents"], 180)
         self.assertEqual(balances(uid), (320, 500))                                 # подаръкът не е пипнат
@@ -321,7 +321,7 @@ class BillingTest(unittest.TestCase):
         set_balances(uid, paid=100, gift=5000)
         never = mock.AsyncMock(return_value="<p>no</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", never):
-            r = self.client.post("/interpret", json={**CHART, **PAIR}, headers=h)
+            r = analyze(self.client, h, {**CHART, **PAIR})
         self.assertEqual(r.status_code, 402)
         self.assertIn("1,80 €", r.json()["detail"])
         self.assertIn("1,00 €", r.json()["detail"])                                  # колко са внесените
@@ -334,13 +334,13 @@ class BillingTest(unittest.TestCase):
         set_balances(uid, paid=1000, gift=0)
         month, overview = self.stream_ai()
         with month, overview:
-            r = self.client.post("/interpret-stream", json={**CHART, **FORECAST}, headers=h)
+            r = analyze(self.client, h, {**CHART, **FORECAST}, stream=True)
         self.assertIn('"charged_cents": 75', r.text)
         self.assertEqual(balances(uid), (925, 0))
         limiter.reset()
         month, overview = self.stream_ai()
         with month, overview:
-            r = self.client.post("/interpret-stream", json={**CHART, **FORECAST, **PAIR, "end_date": "2026-02-28"}, headers=h)
+            r = analyze(self.client, h, {**CHART, **FORECAST, **PAIR, "end_date": "2026-02-28"}, stream=True)
         self.assertIn('"charged_cents": 210', r.text)                                # 2 месеца x 0,75 + 0,60
         self.assertEqual(balances(uid), (715, 0))
         assert_ledger_matches(self, uid)
@@ -352,7 +352,7 @@ class BillingTest(unittest.TestCase):
         set_balances(uid, paid=1000, gift=0)
         month, overview = self.stream_ai()
         with month, overview:
-            r = self.client.post("/interpret", json={**CHART, **FORECAST, "end_date": "2026-03-31"}, headers=h)
+            r = analyze(self.client, h, {**CHART, **FORECAST, "end_date": "2026-03-31"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["charged_cents"], 225)                             # 3 месеца x 0,75
         self.assertEqual(balances(uid), (775, 0))
@@ -365,7 +365,7 @@ class BillingTest(unittest.TestCase):
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch("period_report.RETRY_PAUSE_SECONDS", 0.0), \
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken):
-            r = self.client.post("/interpret-stream", json={**CHART, **FORECAST}, headers=h)
+            r = analyze(self.client, h, {**CHART, **FORECAST}, stream=True)
         self.assertIn('"code": 502', r.text)
         self.assertEqual(balances(uid), (1000, 0))
 
@@ -485,7 +485,7 @@ class BillingTest(unittest.TestCase):
         with mock.patch("billing_api._stripe_get", mock.AsyncMock(return_value=None)):
             self.client.post("/billing/webhook", content=payload, headers={"stripe-signature": sign(payload)})
         with mock.patch.dict(os.environ, ENFORCED), self.ok_ai():
-            self.assertEqual(self.client.post("/interpret", json={**CHART, **PAIR}, headers=h).status_code, 200)   # 1,80 € премиум
+            self.assertEqual(analyze(self.client, h, {**CHART, **PAIR}).status_code, 200)   # 1,80 € премиум
         self.assertEqual(balances(uid), (870, 500))
         rp = self._refund_event("cs_test_6", 1000)
         self.client.post("/billing/webhook", content=rp, headers={"stripe-signature": sign(rp)})

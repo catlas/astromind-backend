@@ -14,7 +14,7 @@ import main  # noqa: E402
 from auth import create_purpose_token  # noqa: E402
 from database import Profile, Report, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, PASSWORD, register_and_login  # noqa: E402
+from testenv import CHART, PASSWORD, register_and_login, analyze  # noqa: E402
 
 
 def _user(email):
@@ -180,7 +180,7 @@ class ProfilesReportsTest(unittest.TestCase):
         h = register_and_login(self.client, "report@test.bg")
         fake = mock.AsyncMock(return_value="<p>Тестов анализ</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", fake):
-            r = self.client.post("/interpret", json={**CHART, "name": "Аз", "report_type": "career"}, headers=h)
+            r = analyze(self.client, h, {**CHART, "name": "Аз", "report_type": "career"})
         self.assertEqual(r.status_code, 200, r.text)
         report_id = r.json()["report_id"]
         listed = self.client.get("/reports", headers=h).json()
@@ -202,7 +202,7 @@ class ProfilesReportsTest(unittest.TestCase):
         body = {**CHART, "name": "Аз", "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-02-28"}
         with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", fake), \
                 mock.patch.object(main.ai_interpreter, "compose_period_overview", overview):
-            r = self.client.post("/interpret-stream", json=body, headers=h)
+            r = analyze(self.client, h, body, stream=True)
         self.assertEqual(r.status_code, 200)
         self.assertIn('"type": "complete"', r.text)
         self.assertIn('"type": "overview_complete"', r.text)

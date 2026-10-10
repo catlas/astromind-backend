@@ -5,6 +5,7 @@
 Пускане: python -m unittest discover -s tests
 """
 import unittest
+from unittest import mock
 
 import testenv  # noqa: F401  (трябва да е преди main)
 from fastapi.testclient import TestClient  # noqa: E402
@@ -14,7 +15,7 @@ from auth import validate_password  # noqa: E402
 from database import SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 
-from testenv import CHART, PASSWORD  # noqa: E402
+from testenv import CHART, PASSWORD, analyze  # noqa: E402
 
 
 class SecurityTest(unittest.TestCase):
@@ -35,19 +36,23 @@ class SecurityTest(unittest.TestCase):
         return r.json()["access_token"]
 
     def test_ai_endpoints_require_login(self):
-        self.assertEqual(self.client.post("/interpret", json=CHART).status_code, 401)
-        self.assertEqual(self.client.post("/interpret-stream", json={**CHART, "is_dynamic": True}).status_code, 401)
+        self.assertEqual(analyze(self.client, None, CHART).status_code, 401)
+        self.assertEqual(analyze(self.client, None, {**CHART, "is_dynamic": True}, stream=True).status_code, 401)
         self.assertEqual(self.client.post("/generate-docx", json={}).status_code, 401)
 
     def test_ai_rate_limit_per_user(self):
         headers = {"Authorization": f"Bearer {self.token_for('limit@test.bg')}"}
-        # is_dynamic без end_date прекъсва веднага, без да вика AI модела
-        body = {**CHART, "is_dynamic": True}
-        for _ in range(2):
-            self.assertEqual(self.client.post("/interpret-stream", json=body, headers=headers).status_code, 200)
-        r = self.client.post("/interpret-stream", json=body, headers=headers)
-        self.assertEqual(r.status_code, 429)
+        # Лимитът е 2 анализа на час (testenv). Всяка създадена задача се брои; невалидните заявки не се броят
+        with mock.patch.object(main.ai_interpreter, "interpret_chart", mock.AsyncMock(return_value="<p>текст</p>")):
+            for _ in range(2):
+                self.assertEqual(analyze(self.client, headers, CHART).status_code, 200)
+            self.assertEqual(self.client.post("/jobs", json={**CHART, "is_dynamic": True}, headers=headers).status_code, 400)
+            r = self.client.post("/jobs", json=CHART, headers=headers)
+        self.assertEqual(r.status_code, 429, r.text)
         self.assertIn("Retry-After", r.headers)
+        limits = self.client.get("/jobs/limits", headers=headers).json()
+        self.assertEqual((limits["hour_remaining"], limits["can_start"]), (0, False))
+        self.assertGreater(limits["retry_after_seconds"], 0)
 
     def test_login_rate_limit(self):
         self.register("brute@test.bg")

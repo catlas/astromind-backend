@@ -14,6 +14,7 @@ from engine import AstrologyEngine
 from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB, calculate_natal_aspects
 import factpack
 import period_report
+import progress
 import text_check
 import text_guard
 from scanner import PeriodCalendar
@@ -2353,6 +2354,8 @@ class AIInterpreter:
         Връща текста (поправен при нужда). Хвърля text_guard.TextCheckError, ако и след поправката има тежко нарушение.
         checks получава кратко описание на проверката (без текст на анализа) и при успех, и при провал.
         """
+        progress.stage("checking")      # етапът на задачата за екрана (виж progress.py)
+
         async def repair_call(system_prompt: str, user_prompt: str) -> str:
             return await self._call_api(system_prompt=system_prompt, user_prompt=user_prompt,
                                         max_tokens=max_tokens or self.max_output_tokens,

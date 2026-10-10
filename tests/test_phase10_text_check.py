@@ -33,7 +33,7 @@ import text_guard  # noqa: E402
 from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import TransitScanner  # noqa: E402
-from testenv import CHART, give_deposit, register_and_login  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)          # София
@@ -762,7 +762,7 @@ class EndpointTest(unittest.TestCase):
         uid = self.client.get("/me", headers=h).json()["id"]
         bad, good = self.bad_and_good()
         with mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(side_effect=[bad, good])):
-            r = self.client.post("/interpret", json={**CHART, "name": "Аз"}, headers=h)
+            r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["interpretation"], good)
         saved = self.client.get("/reports", headers=h).json()
@@ -779,7 +779,7 @@ class EndpointTest(unittest.TestCase):
         me = self.client.get("/me", headers=h).json()
         bad, _ = self.bad_and_good()
         with mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(side_effect=[bad, bad])):
-            r = self.client.post("/interpret", json={**CHART, "name": "Аз"}, headers=h)
+            r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 502)
         self.assertEqual(r.json()["detail"], text_guard.USER_MESSAGE)
         self.assertNotIn("house", r.text)                                                     # без технически подробности
@@ -795,7 +795,7 @@ class EndpointTest(unittest.TestCase):
         bad, _ = self.bad_and_good()
         fake = mock.AsyncMock(return_value=bad)
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "warn"}), mock.patch.object(main.ai_interpreter, "_call_api", fake):
-            r = self.client.post("/interpret", json={**CHART, "name": "Аз"}, headers=h)
+            r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["interpretation"], bad)
         self.assertEqual(fake.await_count, 1)
@@ -815,7 +815,7 @@ class EndpointTest(unittest.TestCase):
         with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly), \
                 mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value="<p>Преглед</p>")), \
                 mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.GOOD_OCT)):
-            r = self.client.post("/interpret-stream", json=self.body(), headers=h)
+            r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1]["type"], "complete")
         self.assertEqual(steps[2]["text"], self.GOOD_OCT)
@@ -838,7 +838,7 @@ class EndpointTest(unittest.TestCase):
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly), \
                 mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value="<p>Преглед</p>")), \
                 mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.BAD_OCT)):
-            r = self.client.post("/interpret-stream", json=self.body(), headers=h)
+            r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1], {"type": "error", "code": 502, "message": period_report.USER_MESSAGE})
         self.assertNotIn("complete", [s["type"] for s in steps])

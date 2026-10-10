@@ -16,7 +16,7 @@ import safety  # noqa: E402
 from auth import create_purpose_token  # noqa: E402
 from database import Event, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, register_and_login  # noqa: E402
+from testenv import CHART, register_and_login, analyze  # noqa: E402
 
 
 def events_for(email):
@@ -73,7 +73,7 @@ class SafetyApiTest(unittest.TestCase):
         h = register_and_login(self.client, "crisis@test.bg")
         never = mock.AsyncMock(return_value="<p>no</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", never):
-            r = self.client.post("/interpret", json={**CHART, "question": "Не искам да живея вече"}, headers=h)
+            r = analyze(self.client, h, {**CHART, "question": "Не искам да живея вече"})
         self.assertEqual(r.status_code, 200, r.text)  # дори с нулев баланс
         self.assertIn("112", r.json()["interpretation"])
         self.assertEqual(r.json()["charged_cents"], 0)
@@ -84,14 +84,14 @@ class SafetyApiTest(unittest.TestCase):
     def test_crisis_in_stream(self):
         h = register_and_login(self.client, "crisis-stream@test.bg")
         body = {**CHART, "is_dynamic": True, "end_date": "2026-03-01", "question": "мисля за самоубийство"}
-        r = self.client.post("/interpret-stream", json=body, headers=h)
+        r = analyze(self.client, h, body, stream=True)
         self.assertIn('"type": "crisis"', r.text)
 
     def test_ai_output_is_filtered(self):
         h = register_and_login(self.client, "filter@test.bg")
         bad = mock.AsyncMock(return_value="<p>Добър период. Ще умре ваш близък през май.</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", bad):
-            r = self.client.post("/interpret", json=CHART, headers=h)
+            r = analyze(self.client, h, CHART)
         self.assertNotIn("умре", r.json()["interpretation"])
         names = [n for n, _ in events_for("filter@test.bg")]
         self.assertIn("ai_output_flagged", names)
@@ -99,8 +99,8 @@ class SafetyApiTest(unittest.TestCase):
     def test_funnel_events(self):
         h = register_and_login(self.client, "funnel@test.bg")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", mock.AsyncMock(return_value="<p>ok</p>")):
-            self.client.post("/interpret", json=CHART, headers=h)
-            self.client.post("/interpret", json=CHART, headers=h)
+            analyze(self.client, h, CHART)
+            analyze(self.client, h, CHART)
         ev = events_for("funnel@test.bg")
         names = [n for n, _ in ev]
         self.assertEqual(names[:2], ["register", "login"])

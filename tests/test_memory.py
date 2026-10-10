@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 import main  # noqa: E402
 import memory  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, register_and_login  # noqa: E402
+from testenv import CHART, register_and_login, analyze  # noqa: E402
 
 
 class MemoryTest(unittest.TestCase):
@@ -72,14 +72,14 @@ class MemoryTest(unittest.TestCase):
             return "<p>ok</p>"
 
         with mock.patch.object(main.ai_interpreter, "interpret_chart", side_effect=fake_interpret):
-            r = self.client.post("/interpret", json={**CHART, "name": "Аз"}, headers=h)
+            r = analyze(self.client, h, {**CHART, "name": "Аз"})
             self.assertIn("пекарна", seen[-1])
             report = self.client.get(f"/reports/{r.json()['report_id']}", headers=h).json()
             self.assertTrue(report["params"]["memory_used"])
 
             self.client.put("/memory/settings", json={"enabled": False}, headers=h)
             limiter.reset()
-            self.client.post("/interpret", json={**CHART, "name": "Аз"}, headers=h)
+            analyze(self.client, h, {**CHART, "name": "Аз"})
             self.assertEqual(seen[-1], "")
         self.assertFalse(self.client.get("/me", headers=h).json()["memory_enabled"])
 
@@ -97,7 +97,7 @@ class MemoryTest(unittest.TestCase):
         with mock.patch.object(main.ai_interpreter, "interpret_chart", side_effect=fake_interpret):
             def ask(**extra):
                 limiter.reset()
-                self.client.post("/interpret", json={**CHART, **extra}, headers=h)
+                analyze(self.client, h, {**CHART, **extra})
                 return seen[-1]
 
             owner_only = ask(name="Аз")

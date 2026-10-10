@@ -31,6 +31,23 @@ class RateLimiter:
             hits.append(now)
             return 0
 
+    def peek(self, key: str, limit: int, window_seconds: int) -> tuple:
+        """
+        Състоянието на ограничението, без да отбелязва заявка: (колко заявки остават, след колко секунди ще е позволена нова).
+        Втората стойност е 0, докато има оставащи заявки.
+        """
+        now = time.monotonic()
+        with self._lock:
+            hits = self._hits.get(key)
+            if not hits:
+                return limit, 0
+            while hits and hits[0] <= now - window_seconds:
+                hits.popleft()
+            remaining = max(0, limit - len(hits))
+            if remaining > 0:
+                return remaining, 0
+            return 0, max(1, int(hits[0] + window_seconds - now) + 1)
+
     def reset(self):
         with self._lock:
             self._hits.clear()

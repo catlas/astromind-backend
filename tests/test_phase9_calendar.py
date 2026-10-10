@@ -33,7 +33,7 @@ from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import (APPLYING_ORB, ASPECTS, NATAL_TARGETS, SEPARATING_ORB, TRANSIT_PLANETS,  # noqa: E402
                      TransitScanner, utc_to_jd)
-from testenv import CHART, give_deposit, register_and_login  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "phase9_control")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)
@@ -632,7 +632,7 @@ class EndpointTest(unittest.TestCase):
     def test_stream_sends_months_then_overview_and_saves_it_first(self):
         h = register_and_login(self.client, "p9-stream@test.bg")
         with self.month_ok(), self.overview_ok():
-            r = self.client.post("/interpret-stream", json=self.body(), headers=h)
+            r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual([s["type"] for s in steps], ["start", "month_start", "month_complete", "month_start",
                                                       "month_complete", "overview_start", "overview_complete", "complete"])
@@ -656,7 +656,7 @@ class EndpointTest(unittest.TestCase):
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
-            r = self.client.post("/interpret-stream", json=self.body(), headers=h)
+            r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1], {"type": "error", "code": 502, "message": period_report.USER_MESSAGE})
         self.assertNotIn("complete", [s["type"] for s in steps])
@@ -681,21 +681,21 @@ class EndpointTest(unittest.TestCase):
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), self.month_ok(), \
                 mock.patch.object(main.ai_interpreter, "compose_period_overview", broken):
-            r = self.client.post("/interpret-stream", json=self.body(), headers=h)
+            r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1]["type"], "error")
         self.assertEqual(steps[-1]["message"], period_report.USER_MESSAGE)
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
         self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], before)
 
-    def test_plain_endpoint_returns_one_text_with_the_overview(self):
+    def test_forecast_job_saves_one_text_with_the_overview_first(self):
         h = register_and_login(self.client, "p9-plain@test.bg")
         with self.month_ok(), self.overview_ok():
-            r = self.client.post("/interpret", json=self.body("2026-10-31"), headers=h)
+            r = analyze(self.client, h, self.body("2026-10-31"))
         self.assertEqual(r.status_code, 200, r.text)
-        text = r.json()["interpretation"]
-        self.assertTrue(text.startswith("# Астрологична Прогноза (Октомври 2026 - Октомври 2026)"))
-        self.assertLess(text.index("## Общ преглед на периода"), text.index("## Прогноза за Октомври 2026"))
+        text = r.json()["interpretation"]          # текстът на запазения отчет: общият преглед е първи, после месеците
+        self.assertTrue(text.startswith("<h2>Общ преглед на периода</h2>"))
+        self.assertLess(text.index("Общ преглед на периода"), text.index("Октомври 2026"))
         self.assertEqual(len(self.client.get("/reports", headers=h).json()), 1)
 
     def test_plain_endpoint_failure_is_502_and_saves_nothing(self):
@@ -703,7 +703,7 @@ class EndpointTest(unittest.TestCase):
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
-            r = self.client.post("/interpret", json=self.body("2026-10-31"), headers=h)
+            r = analyze(self.client, h, self.body("2026-10-31"))
         self.assertEqual(r.status_code, 502)
         self.assertEqual(r.json()["detail"], period_report.USER_MESSAGE)
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])

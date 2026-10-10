@@ -147,6 +147,10 @@ def delete_me(current_user: User = Depends(get_current_user), db: Session = Depe
     return {"message": "Акаунтът и всички данни са изтрити"}
 
 
+# Тези таблици се трият с акаунта, но не влизат в експорта: задачите са преходни записи, а текстовете им са в отчетите
+EXPORT_SKIPPED_TABLES = {"jobs"}
+
+
 def _user_owned_models():
     """Всички таблици с user_id. Нови модели се добавят тук, за да се трият с акаунта."""
     import database
@@ -167,6 +171,8 @@ def export_me(current_user: User = Depends(get_current_user), db: Session = Depe
 
     data = {"user": row(current_user), "exported_at": datetime.utcnow().isoformat()}
     for model in _user_owned_models():
+        if model.__tablename__ in EXPORT_SKIPPED_TABLES:
+            continue
         data[model.__tablename__] = [row(o) for o in db.query(model).filter(model.user_id == current_user.id).all()]
     return data
 

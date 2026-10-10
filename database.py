@@ -124,6 +124,45 @@ class CoinTransaction(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class Job(Base):
+    """
+    Задача за генериране на анализ (Фаза 11). Генерацията върви на сървъра независимо от браузъра: клиентът създава
+    задача, чете състоянието и събитията на задачата и може да затвори страницата.
+
+    status: queued, running, succeeded, failed, cancelled. stage е етапът за екрана: queued, calculating, analyzing,
+    checking, finishing, done. Сумата на услугата се резервира (дебитира) при създаването; при неуспех или отказ се
+    връща. reserved_paid и reserved_gift са частите, взети от двата дяла на баланса, за да се върнат в същите.
+    events е хронологичният списък със събития (start, month_complete, ... complete), който екранът чете през after.
+    Свободният текст на въпроса се изтрива от заявката, когато задачата приключи.
+    """
+    __tablename__ = "jobs"
+    __table_args__ = (UniqueConstraint("user_id", "idempotency_key", name="uq_jobs_user_key"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    idempotency_key = Column(String(80), nullable=True)
+    kind = Column(String(20), nullable=False)                      # analysis | forecast
+    sku = Column(String(40), nullable=False, default="")
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    stage = Column(String(30), nullable=False, default="queued")
+    request = Column(JSON, nullable=False)
+    tier = Column(String(10), nullable=False, default="basic")
+    quote_cents = Column(Integer, nullable=False, default=0)
+    reserved_paid = Column(Integer, nullable=False, default=0)
+    reserved_gift = Column(Integer, nullable=False, default=0)
+    charged_cents = Column(Integer, nullable=False, default=0)
+    report_id = Column(Integer, ForeignKey("reports.id", ondelete="SET NULL"), nullable=True)
+    error_code = Column(String(40), nullable=True)
+    error_message = Column(String(500), nullable=True)
+    events = Column(JSON, nullable=False, default=list)
+    event_count = Column(Integer, nullable=False, default=0)
+    attempts = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    lease_until = Column(DateTime, nullable=True)
+
+
 class Purchase(Base):
     """Зареждане на баланса през Stripe Checkout: amount_cents е платената сума, credit_cents е кредитът в баланса."""
     __tablename__ = "purchases"
@@ -171,7 +210,7 @@ class MemoryNote(Base):
 
 
 # Модели с колона user_id: трият се и се експортират заедно с акаунта
-USER_OWNED_MODELS = ["Profile", "Report", "CoinTransaction", "Purchase", "Event", "MemoryNote"]
+USER_OWNED_MODELS = ["Profile", "Job", "Report", "CoinTransaction", "Purchase", "Event", "MemoryNote"]
 
 
 def get_db():

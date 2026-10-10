@@ -15,7 +15,7 @@
 """
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Tuple
 
@@ -135,19 +135,23 @@ def format_eur(cents: int) -> str:
 
 @dataclass(frozen=True)
 class Quote:
-    """Цената на една услуга: сума в евроценти и ниво (basic | premium)."""
+    """Цената на една услуга: сума в евроценти, ниво (basic | premium) и код на продукта (не участва в сравнението)."""
     cents: int
     tier: str
+    sku: str = field(default="", compare=False)
 
 
 def analysis_quote(has_partner: bool = False) -> Quote:
     p = prices()
-    return Quote(p["pair_analysis"], PREMIUM) if has_partner else Quote(p["basic_analysis"], BASIC)
+    if has_partner:
+        return Quote(p["pair_analysis"], PREMIUM, "analysis.pair")
+    return Quote(p["basic_analysis"], BASIC, "analysis.basic")
 
 
 def forecast_quote(months: int, has_partner: bool = False) -> Quote:
     p = prices()
-    return Quote(max(1, months) * p["forecast_month"] + (p["forecast_partner_extra"] if has_partner else 0), PREMIUM)
+    cents = max(1, months) * p["forecast_month"] + (p["forecast_partner_extra"] if has_partner else 0)
+    return Quote(cents, PREMIUM, "forecast.pair" if has_partner else "forecast.single")
 
 
 def balance_of(user: User) -> Tuple[int, int]:
@@ -255,11 +259,23 @@ def charge(db: Session, user_id: int, quote: Quote, reason: str, ref: str, descr
     return None
 
 
-def charge_for_report(db: Session, user: User, report, quote: Quote, description: str) -> int:
-    """Дебит след успешен анализ. Връща реално взетата сума в евроценти."""
-    if not balance_enforced() or quote.cents <= 0:
-        return 0
-    tx = charge(db, user.id, quote, "analysis", f"report:{report.id}", description)
-    charged = quote.cents if tx else 0
-    report.cost_cents = charged
-    return charged
+def reserve(db: Session, user_id: int, quote: Quote, ref: str, description: str) -> Optional[Tuple[int, int]]:
+    """
+    Резервира цената на задача: взема я от баланса по правилата за нивото (като charge) преди генерацията.
+    Връща (от внесени средства, от подарък) или None при недостиг. Частите се пазят в задачата, за да се върнат в същите
+    дялове при неуспех или отказ (release). Без commit: извиква се в транзакцията, която създава задачата.
+    """
+    tx = charge(db, user_id, quote, "analysis", ref, description)
+    if tx is None:
+        return None
+    gift = -int(tx.delta_gift or 0)
+    return -int(tx.delta) - gift, gift
+
+
+def release(db: Session, user_id: int, paid: int, gift: int, ref: str,
+            description: str = "Върната сума: анализът не успя") -> Optional[CoinTransaction]:
+    """Връща резервирана сума в дяловете, от които е взета. Идемпотентно (по ref). Без commit."""
+    if paid <= 0 and gift <= 0:
+        return None
+    return apply_transaction(db, user_id, "job_refund", paid=max(0, paid), gift=max(0, gift), ref=ref,
+                             description=description)

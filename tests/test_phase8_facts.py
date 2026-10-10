@@ -25,7 +25,7 @@ import main  # noqa: E402
 from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import TransitScanner  # noqa: E402
-from testenv import register_and_login  # noqa: E402
+from testenv import register_and_login, analyze  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "phase8_reference.json")
 REF = json.load(open(FIXTURE, encoding="utf-8"))
@@ -477,17 +477,17 @@ class PeriodLimitEndpointsTest(unittest.TestCase):
     def test_stream_rejects_too_long_periods_without_calling_ai(self):
         h = register_and_login(self.client, "period-stream@test.bg")
         with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk") as chunk:
-            r = self.client.post("/interpret-stream", json=self.payload("2027-12-31"), headers=h)
+            r = analyze(self.client, h, self.payload("2027-12-31"), stream=True)
             self.assertIn("най-много 3 месеца за един човек", r.text)
             limiter.reset()
-            r = self.client.post("/interpret-stream", json=self.payload("2026-12-31", partner=True), headers=h)
+            r = analyze(self.client, h, self.payload("2026-12-31", partner=True), stream=True)
             self.assertIn("най-много 2 месеца за двама души", r.text)
             chunk.assert_not_called()
 
     def test_non_stream_endpoint_returns_400(self):
         h = register_and_login(self.client, "period-plain@test.bg")
         with mock.patch.object(main.ai_interpreter, "interpret_chart") as interpret:
-            r = self.client.post("/interpret", json=self.payload("2028-01-31"), headers=h)
+            r = analyze(self.client, h, self.payload("2028-01-31"))
             self.assertEqual(r.status_code, 400)
             self.assertIn("най-много 3 месеца", r.json()["detail"])
             interpret.assert_not_called()
