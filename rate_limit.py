@@ -31,6 +31,13 @@ class RateLimiter:
             hits.append(now)
             return 0
 
+    def refund(self, key: str) -> None:
+        """Връща последната отбелязана заявка за key (неуспешен анализ не се брои към лимита)."""
+        with self._lock:
+            hits = self._hits.get(key)
+            if hits:
+                hits.pop()
+
     def peek(self, key: str, limit: int, window_seconds: int) -> tuple:
         """
         Състоянието на ограничението, без да отбелязва заявка: (колко заявки остават, след колко секунди ще е позволена нова).

@@ -60,7 +60,7 @@ SWEEP_SECONDS = 60
 MAX_WAIT_SECONDS = 120
 
 # Лимити на AI заявките на потребител. Стойностите могат да се сменят през environment в Render.
-AI_LIMIT_PER_HOUR = int(os.getenv("AI_RATE_LIMIT_PER_HOUR", "20"))
+AI_LIMIT_PER_HOUR = int(os.getenv("AI_RATE_LIMIT_PER_HOUR", "100"))
 AI_LIMIT_PER_DAY = int(os.getenv("AI_RATE_LIMIT_PER_DAY", "60"))
 LIMIT_MESSAGE = "Достигнахте лимита за AI анализи."
 JOB_CREATE_LIMIT_PER_10_MIN = int(os.getenv("JOB_CREATE_RATE_LIMIT_PER_10_MIN", "60"))   # опити за създаване, включително невалидните
@@ -359,6 +359,12 @@ def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome")
     return True
 
 
+def _refund_limit(user_id: int) -> None:
+    """Неуспешен анализ (грешка на системата, отхвърлен от проверката, прекъсване) не се брои към лимита на заявките."""
+    limiter.refund(f"ai-hour:{user_id}")
+    limiter.refund(f"ai-day:{user_id}")
+
+
 def _fail(job_id: int, failure: "generation.GenerationFailure") -> bool:
     """Неуспех: статусът "failed", сумата се връща. Връща False, ако задачата вече е приключила или отказана."""
     with session_scope() as db:
@@ -376,6 +382,7 @@ def _fail(job_id: int, failure: "generation.GenerationFailure") -> bool:
         user_id, props = job.user_id, _failure_props(job, failure)
         report_type = props["type"]
     if failure.code != "invalid_input":
+        _refund_limit(user_id)
         _track("analysis_failed", user_id, props)
     _track_checks(user_id, report_type, failure.checks)
     return True
@@ -466,6 +473,7 @@ def recover_stale() -> List[int]:
                 job.lease_until = _now() + timedelta(seconds=LEASE_SECONDS)
                 relaunch.append(job.id)
     for user_id, props in failed:
+        _refund_limit(user_id)
         _track("analysis_failed", user_id, props)
     return relaunch
 

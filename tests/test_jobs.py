@@ -348,6 +348,33 @@ class SyncJobsTest(unittest.TestCase):
             self.assertEqual(self.client.post("/jobs?wait=60", json=CHART, headers=h).status_code, 200)
             self.assertEqual(self.client.post("/jobs?wait=60", json=CHART, headers=h).status_code, 429)
 
+    def test_a_failed_analysis_is_given_back_to_the_ai_limit(self):
+        h = register_and_login(self.client, "j-refund-limit@test.bg")      # лимитът в тестовете е 2 анализа на час
+        broken = mock.AsyncMock(side_effect=RuntimeError("AI не отговаря"))
+        with mock.patch.object(main.ai_interpreter, "interpret_chart", broken):
+            for _ in range(4):                                                  # повече опити от лимита, всички неуспешни
+                job = self.post(h).json()["job"]
+                self.assertEqual(job["status"], "failed")
+        after = self.client.get("/jobs/limits", headers=h).json()
+        self.assertEqual((after["hour_remaining"], after["day_remaining"], after["can_start"]), (2, after["day_limit"], True))
+
+    def test_successful_analyses_still_count_against_the_limit(self):
+        h = register_and_login(self.client, "j-count-limit@test.bg")
+        with ok_ai():
+            self.post(h)
+            self.post(h)
+        blocked = self.client.get("/jobs/limits", headers=h).json()
+        self.assertEqual((blocked["hour_remaining"], blocked["can_start"]), (0, False))
+
+    def test_the_default_hourly_limit_is_one_hundred(self):
+        import subprocess, sys, tempfile
+        env = {k: v for k, v in os.environ.items() if k not in ("AI_RATE_LIMIT_PER_HOUR", "AI_RATE_LIMIT_PER_DAY")}
+        env["DATABASE_URL"] = "sqlite:///" + os.path.join(tempfile.mkdtemp(), "limit.db")
+        out = subprocess.run([sys.executable, "-c", "import jobs; print(jobs.AI_LIMIT_PER_HOUR, jobs.AI_LIMIT_PER_DAY)"],
+                             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), env=env, capture_output=True,
+                             text=True, timeout=120)
+        self.assertEqual(out.stdout.split()[-2:], ["100", "60"], out.stderr[-500:])
+
     def test_limits_show_what_is_left_before_the_start(self):
         h = register_and_login(self.client, "j-limits@test.bg")
         start = self.client.get("/jobs/limits", headers=h).json()
