@@ -1,8 +1,10 @@
 """
-Търсене на координати на населено място с AI.
+Търсене на координати на населено място (Фаза 12).
 
-Потребителят въвежда град и държава, AI връща приблизителните координати на
-центъра. Резултатът винаги се показва на потребителя за проверка и корекция,
+Потребителят въвежда град и държава. AI само нормализира изписването (име на латиница и код на държавата), а
+координатите идват от проверим източник: GeoNames cities15000 (виж places.py, CC BY 4.0). Ако в базата има точно едно
+съвпадение, резултатът е „проверен“; ако са няколко, потребителят избира; ако мястото го няма (под 15 000 жители),
+остава резултатът на AI, маркиран „непроверен“. Резултатът винаги се показва на потребителя за проверка и корекция,
 преди да бъде записан. Изискват се вход и има лимит на заявките.
 """
 import json
@@ -15,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+import places
 from ai_interpreter import get_interpreter
 from database import User
 from deps import get_current_user
@@ -35,6 +38,8 @@ SYSTEM_PROMPT = (
     "Rules:\n"
     "- Reply with ONE JSON object and nothing else: no markdown, no explanation.\n"
     '- Success: {"found": true, "city": "<city name in Bulgarian>", "country": "<country name in Bulgarian>", '
+    '"city_latin": "<official city name in Latin letters, e.g. Wien or Vienna>", '
+    '"country_code": "<ISO 3166-1 alpha-2 code of the country, e.g. AT>", '
     '"lat": <number>, "lon": <number>}\n'
     "- lat is positive north and negative south (-90..90). lon is positive east and negative west (-180..180).\n"
     '- If the place does not exist, is ambiguous without more context, or you are not confident of its '
@@ -114,11 +119,14 @@ def parse_ai_location(text: str) -> Optional[dict]:
         return None
     if abs(lat) < 1e-6 and abs(lon) < 1e-6:
         return None
+    code = data.get("country_code")
     return {
         "lat": round(lat, 4),
         "lon": round(lon, 4),
         "city": _clean_name(data.get("city")),
         "country": _clean_name(data.get("country")),
+        "city_latin": _clean_name(data.get("city_latin")),
+        "country_code": code.strip().upper() if isinstance(code, str) and re.fullmatch(r"[A-Za-z]{2}", code.strip()) else "",
     }
 
 
@@ -128,6 +136,44 @@ def is_bulgaria(country: str) -> bool:
 
 def within_bulgaria(lat: float, lon: float) -> bool:
     return BULGARIA_LAT[0] <= lat <= BULGARIA_LAT[1] and BULGARIA_LON[0] <= lon <= BULGARIA_LON[1]
+
+
+AMBIGUOUS_MESSAGE = "Има няколко места с това име. Изберете вашето."
+NEAR_KM = 30            # AI-координатите разрешават двусмислие само когато едно съвпадение е на това разстояние
+FAR_KM = 150            # съвпадение по-далече от посоченото от AI се отхвърля: най-вероятно друго място със същото име
+
+
+def verified_candidates(typed_city: str, ai: Optional[dict], typed_country: str = "") -> list:
+    """Съвпаденията в базата за мястото: по името на латиница от AI, по въведеното име и по българското име."""
+    names = [typed_city]
+    country = ""
+    if ai:
+        names = [ai["city_latin"], typed_city, ai["city"]]
+        country = ai["country_code"]
+    found: dict = {}
+    for name in names:
+        if name:
+            for place in places.search(name, country or None):
+                found.setdefault(place.id, place)
+    candidates = list(found.values())
+    if is_bulgaria(typed_country):                       # „България“ в полето не приема място от друга държава
+        candidates = [c for c in candidates if c.country == "BG"]
+    if ai and candidates:
+        near = [c for c in candidates if places.distance_km(ai["lat"], ai["lon"], c.lat, c.lon) <= FAR_KM]
+        candidates = near if near else []
+    return sorted(candidates, key=lambda c: -c.population)
+
+
+def verified_answer(place, typed_city: str, typed_country: str, ai: Optional[dict]) -> dict:
+    return {"status": "resolved", "verified": True, "source": "geonames", "lat": round(place.lat, 4),
+            "lon": round(place.lon, 4), "city": (ai or {}).get("city") or typed_city,
+            "country": (ai or {}).get("country") or typed_country, "country_code": place.country,
+            "timezone": place.timezone, "attribution": places.ATTRIBUTION}
+
+
+def ambiguous_answer(typed_city: str, typed_country: str, candidates: list) -> dict:
+    return {"status": "ambiguous", "verified": False, "message": AMBIGUOUS_MESSAGE, "city": typed_city,
+            "country": typed_country, "candidates": [c.public() for c in candidates[:6]], "attribution": places.ATTRIBUTION}
 
 
 @router.post("/geocode")
@@ -153,18 +199,30 @@ async def geocode(data: GeocodeIn, current_user: User = Depends(get_current_user
         # Заявката към AI не успя: пълната грешка е само в логовете, без въведения текст
         error_id = uuid.uuid4().hex[:8]
         print(f"❌ [{error_id}] /geocode: {type(exc).__name__}: {exc}")
+        # Без AI пак може да се намери място, което е еднозначно в базата
+        only = verified_candidates(city, None, country)
+        if len(only) == 1:
+            return verified_answer(only[0], city, country, None)
+        if len(only) > 1:
+            return ambiguous_answer(city, country, only)
         raise HTTPException(
             status_code=502,
             detail=f"Търсенето с AI не е достъпно в момента. Въведете ширината и дължината ръчно. (код: {error_id})",
         )
 
-    place = parse_ai_location(reply)
-    if place is None or (is_bulgaria(country) and not within_bulgaria(place["lat"], place["lon"])):
-        raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
+    ai = parse_ai_location(reply)
+    candidates = verified_candidates(city, ai, country)
+    if len(candidates) > 1 and ai:
+        nearest = min(candidates, key=lambda c: places.distance_km(ai["lat"], ai["lon"], c.lat, c.lon))
+        if places.distance_km(ai["lat"], ai["lon"], nearest.lat, nearest.lon) <= NEAR_KM:
+            candidates = [nearest]
+    if len(candidates) == 1:
+        return verified_answer(candidates[0], city, country, ai)
+    if len(candidates) > 1:
+        return ambiguous_answer(city, country, candidates)
 
-    return {
-        "lat": place["lat"],
-        "lon": place["lon"],
-        "city": place["city"] or city,
-        "country": place["country"] or country,
-    }
+    # Мястото го няма в базата: резултатът на AI, но непроверен
+    if ai is None or (is_bulgaria(country) and not within_bulgaria(ai["lat"], ai["lon"])):
+        raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
+    return {"status": "resolved", "verified": False, "source": "ai", "lat": ai["lat"], "lon": ai["lon"],
+            "city": ai["city"] or city, "country": ai["country"] or country}

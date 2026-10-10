@@ -27,7 +27,15 @@ VIENNA = {"found": True, "city": "Виена", "country": "Австрия", "lat
 class ParseAiLocationTest(unittest.TestCase):
     def test_valid_json(self):
         r = geocode_api.parse_ai_location(json.dumps(VIENNA, ensure_ascii=False))
-        self.assertEqual(r, {"lat": 48.2082, "lon": 16.3738, "city": "Виена", "country": "Австрия"})
+        self.assertEqual(r, {"lat": 48.2082, "lon": 16.3738, "city": "Виена", "country": "Австрия", "city_latin": "",
+                             "country_code": ""})
+
+    def test_latin_name_and_country_code(self):
+        r = geocode_api.parse_ai_location(json.dumps({**VIENNA, "city_latin": " Wien ", "country_code": "at"}, ensure_ascii=False))
+        self.assertEqual((r["city_latin"], r["country_code"]), ("Wien", "AT"))
+        for bad in ("AUT", "A", "1", "", None, 5):
+            r = geocode_api.parse_ai_location(json.dumps({**VIENNA, "country_code": bad}, ensure_ascii=False))
+            self.assertEqual(r["country_code"], "")
 
     def test_code_fence_and_surrounding_text(self):
         text = 'Ето резултата:\n```json\n{"found": true, "lat": "42,6977", "lon": 23.3219}\n```'
@@ -89,7 +97,12 @@ class GeocodeEndpointTest(unittest.TestCase):
         with mock.patch.object(main.ai_interpreter, "_call_api", fake):
             r = self.call(h)
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json(), {"lat": 48.2082, "lon": 16.3738, "city": "Виена", "country": "Австрия"})
+        # Координатите идват от GeoNames, не от AI (виж places.py)
+        body = r.json()
+        self.assertEqual((body["lat"], body["lon"], body["city"], body["country"]), (48.2085, 16.3721, "Виена", "Австрия"))
+        self.assertEqual((body["status"], body["verified"], body["source"], body["country_code"], body["timezone"]),
+                         ("resolved", True, "geonames", "AT", "Europe/Vienna"))
+        self.assertIn("GeoNames", body["attribution"])
 
         # Технически заявка: без правила за безопасност и памет, нулева температура, един опит
         args, kwargs = fake.call_args
@@ -118,7 +131,10 @@ class GeocodeEndpointTest(unittest.TestCase):
     def test_garbage_reply_is_not_found(self):
         h = register_and_login(self.client, "geo-garbage@test.bg")
         with mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value="Не знам, съжалявам.")):
-            self.assertEqual(self.call(h).status_code, 404)
+            self.assertEqual(self.call(h, city="Нищоград", country="Нищоландия").status_code, 404)
+            # името се намира и в базата, затова отговорът на AI не е нужен
+            r = self.call(h)
+        self.assertEqual((r.status_code, r.json()["verified"]), (200, True))
 
     def test_bulgaria_result_must_be_in_bulgaria(self):
         h = register_and_login(self.client, "geo-bg@test.bg")
@@ -145,7 +161,7 @@ class GeocodeEndpointTest(unittest.TestCase):
         h = register_and_login(self.client, "geo-502@test.bg")
         boom = mock.AsyncMock(side_effect=RuntimeError("secret-provider-detail"))
         with mock.patch.object(main.ai_interpreter, "_call_api", boom):
-            r = self.call(h)
+            r = self.call(h, city="Нищоград", country="Нищоландия")
         self.assertEqual(r.status_code, 502)
         self.assertNotIn("secret-provider-detail", r.text)
         self.assertIn("ръчно", r.json()["detail"])
