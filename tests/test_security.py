@@ -38,7 +38,8 @@ class SecurityTest(unittest.TestCase):
     def test_ai_endpoints_require_login(self):
         self.assertEqual(analyze(self.client, None, CHART).status_code, 401)
         self.assertEqual(analyze(self.client, None, {**CHART, "is_dynamic": True}, stream=True).status_code, 401)
-        self.assertEqual(self.client.post("/generate-docx", json={}).status_code, 401)
+        self.assertEqual(self.client.get("/reports/1/export?format=docx").status_code, 401)
+        self.assertEqual(self.client.post("/generate-docx", json={}).status_code, 404)        # старата крайна точка е махната
 
     def test_ai_rate_limit_per_user(self):
         headers = {"Authorization": f"Bearer {self.token_for('limit@test.bg')}"}

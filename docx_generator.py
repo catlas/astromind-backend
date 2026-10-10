@@ -1,433 +1,239 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DOCX Generator for Astrology Reports
-Generates professional DOCX documents for periods > 6 months
+DOCX на отчет (Фаза 13). Строи се само от запазения отчет (виж report_export.py): същият текст, същите карти и дата като на
+екрана. Без нова AI генерация и без такса. Страница A4, шрифт 11 pt (Arial поддържа кирилица), заглавия, съдържание,
+номера на страниците; без домове и Асцендент, когато часът на раждане е неизвестен.
 """
+import re
+from datetime import datetime
+from io import BytesIO
+from typing import Dict, List, Optional
 
 from docx import Document
-from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from io import BytesIO
-from datetime import datetime
-import re
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt, RGBColor
+
+import report_text
+
+PURPLE = RGBColor(0x5B, 0x21, 0xB6)
+LIGHT_PURPLE = RGBColor(0x7C, 0x3A, 0xED)
+GREY = RGBColor(0x66, 0x66, 0x66)
+BODY_PT = 11
+
+PLANET_NAMES = {
+    "Sun": "Слънце", "Moon": "Луна", "Mercury": "Меркурий", "Venus": "Венера", "Mars": "Марс", "Jupiter": "Юпитер",
+    "Saturn": "Сатурн", "Uranus": "Уран", "Neptune": "Нептун", "Pluto": "Плутон", "Node": "Възходящ възел",
+    "Chiron": "Хирон", "ASC": "Асцендент", "MC": "MC",
+}
+SIGN_NAMES = {
+    "Aries": "Овен", "Taurus": "Телец", "Gemini": "Близнаци", "Cancer": "Рак", "Leo": "Лъв", "Virgo": "Дева",
+    "Libra": "Везни", "Scorpio": "Скорпион", "Sagittarius": "Стрелец", "Capricorn": "Козирог", "Aquarius": "Водолей",
+    "Pisces": "Риби",
+}
+HOUSE_SUFFIX = {1: "ви", 2: "ри", 3: "ти", 4: "ти", 5: "ти", 6: "ти", 7: "ми", 8: "ми", 9: "ти", 10: "ти", 11: "и", 12: "ти"}
+ASPECT_NAMES = {"conjunction": "съвпад", "sextile": "секстил", "square": "квадратура", "trine": "тригон",
+                "opposition": "опозиция"}
+
+
+def _sign_bg(text: Optional[str]) -> str:
+    out = text or ""
+    for english, bulgarian in SIGN_NAMES.items():
+        out = re.sub(english, bulgarian, out, flags=re.IGNORECASE)
+    return out
 
 
 class DOCXGenerator:
-    def __init__(self):
-        self.planet_names = {
-            'Sun': 'Слънце', 'Moon': 'Луна', 'Mercury': 'Меркурий',
-            'Venus': 'Венера', 'Mars': 'Марс', 'Jupiter': 'Юпитер',
-            'Saturn': 'Сатурн', 'Uranus': 'Уран', 'Neptune': 'Нептун',
-            'Pluto': 'Плутон', 'Node': 'Възходящ Възел', 'Chiron': 'Хирон'
-        }
-        
-        self.sign_names = {
-            'Aries': 'Овен', 'Taurus': 'Телец', 'Gemini': 'Близнаци',
-            'Cancer': 'Рак', 'Leo': 'Лъв', 'Virgo': 'Дева',
-            'Libra': 'Везни', 'Scorpio': 'Скорпион', 'Sagittarius': 'Стрелец',
-            'Capricorn': 'Козирог', 'Aquarius': 'Водолей', 'Pisces': 'Риби'
-        }
-        
-        self.aspect_names = {
-            'conjunction': 'съвпад', 'sextile': 'секстил',
-            'square': 'квадратура', 'trine': 'тригон', 'opposition': 'опозиция'
-        }
-    
-    def generate_docx(self, data: dict) -> bytes:
-        """
-        Generate DOCX report from chart data
-        
-        Args:
-            data: Dictionary containing:
-                - user_name: str
-                - birth_date: str
-                - birth_time: str
-                - birth_city: str
-                - report_type: str
-                - natal_chart: dict
-                - natal_aspects: list
-                - monthly_results: list[dict{month: str, text: str}]
-        
-        Returns:
-            bytes: DOCX file content
-        """
+    """Данни (виж report_export.docx_data): title, kind, created, people, relationship, period, charts, sections."""
+
+    def generate_docx(self, data: Dict) -> bytes:
         doc = Document()
-        
-        # Set default font and spacing (for content pages)
-        style = doc.styles['Normal']
-        font = style.font
-        font.name = 'Arial'
-        font.size = Pt(9)  # Reduced from 13 to 9
-        
-        # Set paragraph spacing - reduced
-        paragraph_format = style.paragraph_format
-        paragraph_format.space_after = Pt(4)  # Reduced from 12
-        paragraph_format.line_spacing = 1.3  # Reduced from 1.8
-        
-        # 1. Cover Page
-        self._add_cover_page(doc, data)
-        doc.add_page_break()
-        
-        # 2. Chart Summary
-        if data.get('natal_chart'):
-            self._add_chart_summary(doc, data)
-            doc.add_page_break()
-        
-        # 3. Monthly Interpretations
-        monthly_results = data.get('monthly_results', [])
-        for idx, month_data in enumerate(monthly_results):
-            self._add_month_section(doc, month_data)
-            # Only add page break if NOT the last month
-            if idx < len(monthly_results) - 1:
+        self._setup(doc)
+        self._cover(doc, data)
+        for chart in data.get("charts", []):
+            if chart.get("chart"):
                 doc.add_page_break()
-        
-        # Add footer to all sections
-        self._add_footer(doc, data)
-        
-        # Save to BytesIO
+                self._chart_summary(doc, chart)
+        sections = [s for s in data.get("sections", []) if (s.get("text") or "").strip()]
+        for section in sections:
+            doc.add_page_break()
+            self._section(doc, section)
+        self._footer(doc)
         buffer = BytesIO()
         doc.save(buffer)
-        buffer.seek(0)
         return buffer.getvalue()
-    
-    def _add_cover_page(self, doc, data):
-        """Create professional cover page"""
-        # Main title
-        title = doc.add_heading('АСТРОЛОГИЧЕН ДОКЛАД', 0)
-        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title_run = title.runs[0]
-        title_run.font.size = Pt(28)
-        title_run.font.bold = True
-        
-        # Subtitle - ensure UTF-8 string (no spacer)
-        user_name = str(data.get("user_name", "Неизвестен"))
-        subtitle = doc.add_heading(f'Подготвен за: {user_name}', level=2)
-        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        subtitle_run = subtitle.runs[0]
-        subtitle_run.font.size = Pt(18)
-        
-        # Birth info - ensure UTF-8 strings (no spacer)
-        birth_para = doc.add_paragraph()
-        birth_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        birth_date = str(data.get("birth_date", ""))
-        birth_time = str(data.get("birth_time", ""))
-        birth_city = str(data.get("birth_city", ""))
-        birth_para.add_run(f'Дата на раждане: {birth_date} в {birth_time}\n')
-        birth_para.add_run(f'Място: {birth_city}')
-        
-        # Separator (no spacers)
-        doc.add_paragraph('_' * 60).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Report type - ensure UTF-8 string (no spacer)
-        type_para = doc.add_paragraph()
-        type_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        report_type = str(data.get("report_type", "Астрологичен Анализ"))
-        type_run = type_para.add_run(f'Тип анализ: {report_type}')
-        type_run.font.size = Pt(14)
-        type_run.font.color.rgb = RGBColor(100, 100, 100)
-    
-    def _add_chart_summary(self, doc, data):
-        """Add chart summary section"""
-        natal_chart = data.get('natal_chart', {})
-        natal_aspects = data.get('natal_aspects', [])
-        
-        # Section title - reduced size
-        heading = doc.add_heading('Обобщена информация за картата', level=2)
-        heading_run = heading.runs[0]
-        heading_run.font.size = Pt(14)  # Reduced from 20 to 14
-        heading.paragraph_format.space_before = Pt(4)
-        heading.paragraph_format.space_after = Pt(2)
-        
-        # 1. Planetary positions
-        planets_heading = doc.add_heading('1. ПЛАНЕТАРНИ ПОЗИЦИИ', level=3)
-        planets_heading.runs[0].font.size = Pt(11)  # Increased from 10 to 11 (+10%)
-        planets_heading.runs[0].font.color.rgb = RGBColor(100, 150, 200)  # Blue color instead of black
-        planets_heading.paragraph_format.space_before = Pt(2)
-        planets_heading.paragraph_format.space_after = Pt(2)
-        
-        # Create two-column layout using table
-        planets = natal_chart.get('planets', {})
-        # Без час на раждане няма домове и Асцендент, а Луната (и тяло, сменило знак през деня) е с възможни знаци
-        time_known = natal_chart.get('time_known') is not False
-        sign_ranges = natal_chart.get('sign_ranges') or {}
-        position_rows = []
-        for planet_name, planet_data in planets.items():
-            if planet_name in sign_ranges and not time_known:
-                signs = [self._translate_sign(sign) for sign in sign_ranges[planet_name].get('signs', [])]
-                position_rows.append((planet_name, ' или '.join(signs) + ' (според часа)'))
-            elif planet_data and planet_data.get('formatted_pos'):
-                position_rows.append((planet_name, self._translate_sign(planet_data['formatted_pos'])))
-        if planets:
-            table = doc.add_table(rows=(len(position_rows) + 2) // 2, cols=2)
-            table.style = 'Table Grid'  # White background for all rows
-            
-            planet_items = position_rows
-            for idx, (planet_name, position) in enumerate(planet_items):
-                row_idx = idx // 2
-                col_idx = idx % 2
-                cell = table.rows[row_idx].cells[col_idx]
-                
-                planet_bg = self.planet_names.get(planet_name, planet_name)
-                
-                # Add text without bold for planet name
-                para = cell.paragraphs[0]
-                para.paragraph_format.space_after = Pt(0)
-                para.paragraph_format.space_before = Pt(0)
-                
-                name_run = para.add_run(f'{planet_bg}: ')
-                name_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                name_run.font.bold = False  # NOT bold
-                
-                pos_run = para.add_run(position)
-                pos_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-            
-            # Add Ascendant if available
-            angles = natal_chart.get('angles', {})
-            if time_known and angles and angles.get('Ascendant') is not None:
-                asc_formatted = angles.get('Ascendant_formatted', f"{int(angles.get('Ascendant', 0))}°")
-                asc_translated = self._translate_sign(asc_formatted)
-                
-                # Add to last cell
-                last_row = len(planet_items) // 2
-                last_col = len(planet_items) % 2
-                if last_col == 0:
-                    table.add_row()
-                    last_row += 1
-                    last_col = 0
-                
-                cell = table.rows[last_row].cells[last_col]
-                para = cell.paragraphs[0]
-                para.paragraph_format.space_after = Pt(0)
-                para.paragraph_format.space_before = Pt(0)
-                
-                name_run = para.add_run('Асцендент: ')
-                name_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                name_run.font.bold = False
-                
-                pos_run = para.add_run(asc_translated)
-                pos_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-        
-        # 2. Houses (no spacer); без час на раждане домове няма
-        if time_known:
-            houses_heading = doc.add_heading('2. ДОМОВЕ', level=3)
-            houses_heading.runs[0].font.size = Pt(11)  # Increased from 10 to 11 (+10%)
-            houses_heading.runs[0].font.color.rgb = RGBColor(100, 150, 200)  # Blue color instead of black
-            houses_heading.paragraph_format.space_before = Pt(2)
-            houses_heading.paragraph_format.space_after = Pt(2)
-        
-        # Group planets by house
-        planets_by_house = {}
-        for planet_name, planet_data in planets.items():
-            if time_known and planet_data and planet_data.get('longitude') is not None:
-                house_num = planet_data.get('house', 1)
-                if house_num not in planets_by_house:
-                    planets_by_house[house_num] = []
-                planets_by_house[house_num].append(self.planet_names.get(planet_name, planet_name))
-        
-        # Create two-column table for houses
-        if planets_by_house:
-            table = doc.add_table(rows=(12 + 1) // 2, cols=2)
-            table.style = 'Table Grid'  # White background for all rows
-            
-            for house_num in range(1, 13):
-                row_idx = (house_num - 1) // 2
-                col_idx = (house_num - 1) % 2
-                cell = table.rows[row_idx].cells[col_idx]
-                
-                planets_list = planets_by_house.get(house_num, [])
-                if planets_list:
-                    suffix = self._get_house_suffix(house_num)
-                    planets_str = ', '.join(planets_list)
-                    
-                    # Add text without bold for house number
-                    para = cell.paragraphs[0]
-                    para.paragraph_format.space_after = Pt(0)
-                    para.paragraph_format.space_before = Pt(0)
-                    
-                    house_run = para.add_run(f'{house_num}-{suffix} дом: ')
-                    house_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                    house_run.font.bold = False  # NOT bold
-                    
-                    planets_run = para.add_run(planets_str)
-                    planets_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                else:
-                    # Empty house - show as "празен"
-                    suffix = self._get_house_suffix(house_num)
-                    para = cell.paragraphs[0]
-                    para.paragraph_format.space_after = Pt(0)
-                    para.paragraph_format.space_before = Pt(0)
-                    
-                    house_run = para.add_run(f'{house_num}-{suffix} дом: ')
-                    house_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                    house_run.font.bold = False
-                    
-                    empty_run = para.add_run('празен')
-                    empty_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                    empty_run.font.italic = True
-                    empty_run.font.color.rgb = RGBColor(150, 150, 150)
-        
-        # 3. Aspects (no spacer)
-        if natal_aspects:
-            aspects_heading = doc.add_heading('3. АСПЕКТИ' if time_known else '2. АСПЕКТИ', level=3)
-            aspects_heading.runs[0].font.size = Pt(11)  # Increased from 10 to 11 (+10%)
-            aspects_heading.runs[0].font.color.rgb = RGBColor(100, 150, 200)  # Blue color instead of black
-            aspects_heading.paragraph_format.space_before = Pt(2)
-            aspects_heading.paragraph_format.space_after = Pt(2)
-            
-            # Create three-column table for aspects
-            rows_needed = (len(natal_aspects) + 2) // 3
-            table = doc.add_table(rows=rows_needed, cols=3)
-            table.style = 'Table Grid'  # White background for all rows
-            
-            for idx, aspect in enumerate(natal_aspects):
-                row_idx = idx // 3
-                col_idx = idx % 3
-                cell = table.rows[row_idx].cells[col_idx]
-                
-                planet1 = self.planet_names.get(aspect.get('planet1', ''), aspect.get('planet1', ''))
-                planet2 = self.planet_names.get(aspect.get('planet2', ''), aspect.get('planet2', ''))
-                aspect_name = self.aspect_names.get(aspect.get('aspect', ''), aspect.get('aspect', ''))
-                
-                # Add text without bold for first planet
-                para = cell.paragraphs[0]
-                para.paragraph_format.space_after = Pt(0)
-                para.paragraph_format.space_before = Pt(0)
-                
-                planet1_run = para.add_run(f'{planet1} – {planet2} ')
-                planet1_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-                planet1_run.font.bold = False  # NOT bold
-                
-                aspect_run = para.add_run(aspect_name)
-                aspect_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
-    
-    def _add_month_section(self, doc, month_data):
-        """Add monthly interpretation section"""
-        # Ensure UTF-8 strings
-        month_name = str(month_data.get('month', 'Месец'))
-        month_text = str(month_data.get('text', ''))
-        
-        # Month title (without emoji for encoding safety)
-        # Skip adding month title if it's "Анализ" (static mode - text already has title)
-        if month_name != 'Анализ':
-            heading = doc.add_heading(month_name, level=1)
-            heading_run = heading.runs[0]
-            heading_run.font.size = Pt(14)  # Reduced from 22 to 14
-            heading_run.font.color.rgb = RGBColor(139, 92, 246)  # Purple
-            heading.paragraph_format.space_before = Pt(6)
-            heading.paragraph_format.space_after = Pt(4)
-        
-        # Process and add text with formatting
-        self._add_formatted_text(doc, month_text)
-    
-    def _add_formatted_text(self, doc, text):
-        """Add text with markdown-style formatting converted to DOCX"""
-        lines = text.split('\n')
-        current_paragraph = None
-        
-        for line in lines:
-            line = line.strip()
-            
-            # Skip empty lines (no extra spacing)
-            if not line:
-                current_paragraph = None
-                continue
-            
-            # H2 headers (##)
-            if line.startswith('## '):
-                heading_text = line[3:].strip()
-                heading = doc.add_heading(heading_text, level=2)
-                heading_run = heading.runs[0]
-                heading_run.font.size = Pt(11)  # Reduced from 19 to 11
-                heading_run.font.color.rgb = RGBColor(139, 92, 246)
-                heading.paragraph_format.space_before = Pt(4)
-                heading.paragraph_format.space_after = Pt(2)
-                current_paragraph = None
-                continue
-            
-            # H3 headers (###)
-            if line.startswith('### '):
-                heading_text = line[4:].strip()
-                heading = doc.add_heading(heading_text, level=3)
-                heading_run = heading.runs[0]
-                heading_run.font.size = Pt(10)  # Reduced from 15 to 10
-                heading_run.font.color.rgb = RGBColor(167, 139, 250)
-                heading.paragraph_format.space_before = Pt(3)
-                heading.paragraph_format.space_after = Pt(2)
-                current_paragraph = None
-                continue
-            
-            # Horizontal rule (---)
-            if line.startswith('---'):
-                doc.add_paragraph('_' * 60)
-                current_paragraph = None
-                continue
-            
-            # Bullet points (-)
-            if line.startswith('- '):
-                bullet_text = line[2:].strip()
-                para = doc.add_paragraph(style='List Bullet')
-                self._add_styled_run(para, bullet_text)
-                current_paragraph = None
-                continue
-            
-            # Regular paragraph
-            if not current_paragraph:
-                current_paragraph = doc.add_paragraph()
-            else:
-                current_paragraph.add_run(' ')
-            
-            self._add_styled_run(current_paragraph, line)
-    
-    def _add_styled_run(self, paragraph, text):
-        """Add text run with bold formatting (**text**)"""
-        # Split by bold markers
-        parts = re.split(r'(\*\*.*?\*\*)', text)
-        
-        for part in parts:
-            if part.startswith('**') and part.endswith('**'):
-                # Bold text
-                bold_text = part[2:-2]
-                run = paragraph.add_run(bold_text)
-                run.bold = True
-            else:
-                # Normal text
-                paragraph.add_run(part)
-    
-    def _add_footer(self, doc, data):
-        """Add footer to all pages"""
-        section = doc.sections[0]
-        footer = section.footer
-        footer_para = footer.paragraphs[0]
-        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Ensure UTF-8 string
-        today = datetime.now().strftime('%d.%m.%Y')
-        footer_text = f'AstroMind AI - Генерирано на {today} г. - Само за занимателна цел!'
-        footer_run = footer_para.add_run(footer_text)
-        footer_run.font.size = Pt(9)
-        footer_run.font.color.rgb = RGBColor(136, 136, 136)
-    
-    def _translate_sign(self, formatted_pos: str) -> str:
-        """Translate English sign names to Bulgarian"""
-        translated = formatted_pos
-        for eng_sign, bg_sign in self.sign_names.items():
-            translated = re.sub(eng_sign, bg_sign, translated, flags=re.IGNORECASE)
-        return translated
-    
-    def _get_house_suffix(self, num: int) -> str:
-        """Get Bulgarian house suffix"""
-        if num == 1:
-            return 'ви'
-        elif num == 2:
-            return 'ри'
-        elif num == 3:
-            return 'ти'
-        elif num >= 4 and num <= 10:
-            return 'ти'
-        elif num == 11:
-            return 'и'
-        return 'ти'
 
+    # ------------------------------------------------------------------ страница и стилове
+    def _setup(self, doc) -> None:
+        section = doc.sections[0]
+        section.page_width, section.page_height = Cm(21.0), Cm(29.7)            # A4
+        section.left_margin = section.right_margin = Cm(2.2)
+        section.top_margin, section.bottom_margin = Cm(2.2), Cm(2.0)
+        normal = doc.styles["Normal"]
+        normal.font.name = "Arial"
+        normal.font.size = Pt(BODY_PT)
+        normal.element.rPr.rFonts.set(qn("w:cs"), "Arial")
+        normal.element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+        normal.paragraph_format.space_after = Pt(6)
+        normal.paragraph_format.line_spacing = 1.25
+        for name, size, color in (("Title", 26, PURPLE), ("Heading 1", 18, PURPLE), ("Heading 2", 14, LIGHT_PURPLE),
+                                  ("Heading 3", 12, LIGHT_PURPLE)):
+            style = doc.styles[name]
+            style.font.name = "Arial"
+            style.font.size = Pt(size)
+            style.font.bold = True
+            style.font.color.rgb = color
+            style.element.rPr.rFonts.set(qn("w:cs"), "Arial")
+            style.element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+            style.element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+            style.element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+            for theme in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):    # темата иначе слага друг шрифт
+                style.element.rPr.rFonts.attrib.pop(qn(theme), None)
+            style.paragraph_format.space_before = Pt(12 if name != "Title" else 0)
+            style.paragraph_format.space_after = Pt(6)
+            style.paragraph_format.keep_with_next = True
+
+    # ------------------------------------------------------------------ корица
+    def _cover(self, doc, data: Dict) -> None:
+        title = doc.add_heading("Астрологичен доклад", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        label = doc.add_paragraph()
+        label.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = label.add_run(str(data.get("title") or ""))
+        run.font.size = Pt(15)
+        run.bold = True
+        for person in data.get("people", []):
+            block = doc.add_paragraph()
+            block.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            block.add_run(str(person.get("name") or "")).bold = True
+            for line in (person.get("birth"), person.get("place")):
+                if line:
+                    block.add_run("\n" + str(line))
+        facts = [("Вид анализ", data.get("kind")), ("Отношения", data.get("relationship")), ("Период", data.get("period")),
+                 ("Създаден на", data.get("created"))]
+        facts = [(name, value) for name, value in facts if value]
+        if facts:
+            table = doc.add_table(rows=len(facts), cols=2)
+            table.style = "Table Grid"
+            for row, (name, value) in zip(table.rows, facts):
+                row.cells[0].text = name
+                row.cells[1].text = str(value)
+                for paragraph in row.cells[0].paragraphs:
+                    for r in paragraph.runs:
+                        r.bold = True
+        titles = [s["title"] for s in data.get("sections", []) if s.get("title") and (s.get("text") or "").strip()]
+        if len(titles) > 1:
+            doc.add_heading("Съдържание", level=2)
+            for number, name in enumerate(titles, 1):
+                doc.add_paragraph(f"{number}. {name}").paragraph_format.space_after = Pt(2)
+
+    # ------------------------------------------------------------------ карта
+    def _chart_summary(self, doc, chart_data: Dict) -> None:
+        chart = chart_data["chart"]
+        aspects = chart_data.get("aspects") or []
+        known = chart.get("time_known") is not False
+        ranges = chart.get("sign_ranges") or {}
+        doc.add_heading(chart_data.get("title") or "Обобщена информация за картата", level=1)
+        if not known:
+            doc.add_paragraph("Часът на раждане е неизвестен: няма Асцендент, MC и домове. Планетите са за 12:00 местно "
+                              "време на датата на раждане; Луната и всяко тяло, което сменя знак през деня, са с възможните знаци.")
+        doc.add_heading("Планетарни позиции", level=2)
+        rows = []
+        for name, planet in (chart.get("planets") or {}).items():
+            if not known and name in ranges and (name == "Moon" or len(ranges[name].get("signs", [])) > 1):
+                signs = [SIGN_NAMES.get(s, s) for s in ranges[name].get("signs", [])]
+                rows.append((PLANET_NAMES.get(name, name), " или ".join(signs) + " (според часа)" if len(signs) > 1
+                             else f"{signs[0]} (градусът не е известен)"))
+            elif planet and planet.get("formatted_pos"):
+                rows.append((PLANET_NAMES.get(name, name), _sign_bg(planet["formatted_pos"])))
+        angles = chart.get("angles") or {}
+        if known and angles.get("Ascendant") is not None:
+            rows.append(("Асцендент", _sign_bg(angles.get("Ascendant_formatted", ""))))
+        if known and angles.get("MC") is not None:
+            rows.append(("MC", _sign_bg(angles.get("MC_formatted", ""))))
+        self._two_column(doc, rows)
+        if known:
+            doc.add_heading("Домове", level=2)
+            by_house: Dict[int, List[str]] = {}
+            for name, planet in (chart.get("planets") or {}).items():
+                if planet and planet.get("longitude") is not None and planet.get("house"):
+                    by_house.setdefault(int(planet["house"]), []).append(PLANET_NAMES.get(name, name))
+            self._two_column(doc, [(f"{n}-{HOUSE_SUFFIX[n]} дом", ", ".join(by_house.get(n, [])) or "празен")
+                                   for n in range(1, 13)])
+        if aspects:
+            doc.add_heading("Аспекти", level=2)
+            self._two_column(doc, [(f"{PLANET_NAMES.get(a['planet1'], a['planet1'])} – {PLANET_NAMES.get(a['planet2'], a['planet2'])}",
+                                    f"{ASPECT_NAMES.get(a['aspect'], a['aspect'])} (орбис {a['orb']:.2f}°)") for a in aspects])
+
+    def _two_column(self, doc, rows) -> None:
+        if not rows:
+            return
+        table = doc.add_table(rows=len(rows), cols=2)
+        table.style = "Table Grid"
+        for row, (left, right) in zip(table.rows, rows):
+            row.cells[0].text = str(left)
+            row.cells[1].text = str(right)
+            for paragraph in row.cells[0].paragraphs + row.cells[1].paragraphs:
+                paragraph.paragraph_format.space_after = Pt(0)
+                for r in paragraph.runs:
+                    r.font.size = Pt(10)
+
+    # ------------------------------------------------------------------ текст
+    def _section(self, doc, section: Dict) -> None:
+        if section.get("title"):
+            doc.add_heading(section["title"], level=1)
+        for block in report_text.parse(section.get("text") or ""):
+            if block.kind == "h":
+                doc.add_heading(report_text.plain(block.items[0]), level=min(3, max(2, block.level)))
+            elif block.kind == "p":
+                self._runs(doc.add_paragraph(), block.items[0])
+            elif block.kind == "ul":
+                for item in block.items:
+                    self._runs(doc.add_paragraph(style="List Bullet"), item)
+            elif block.kind == "ol":
+                # Номерата са част от текста: стилът „List Number“ продължава номерацията през всички списъци на документа
+                for number, item in enumerate(block.items, 1):
+                    paragraph = doc.add_paragraph()
+                    paragraph.paragraph_format.left_indent = Cm(0.9)
+                    paragraph.paragraph_format.first_line_indent = Cm(-0.6)
+                    paragraph.paragraph_format.space_after = Pt(3)
+                    paragraph.add_run(f"{number}. ")
+                    self._runs(paragraph, item)
+            else:
+                rule = doc.add_paragraph()
+                rule.paragraph_format.space_after = Pt(4)
+                border = OxmlElement("w:pBdr")
+                line = OxmlElement("w:bottom")
+                for key, value in (("w:val", "single"), ("w:sz", "6"), ("w:space", "1"), ("w:color", "AAAAAA")):
+                    line.set(qn(key), value)
+                border.append(line)
+                rule._p.get_or_add_pPr().append(border)
+
+    @staticmethod
+    def _runs(paragraph, text: str) -> None:
+        for chunk, bold, italic in report_text.inline_runs(text):
+            run = paragraph.add_run(chunk)
+            run.bold = bold or None
+            run.italic = italic or None
+
+    # ------------------------------------------------------------------ долен колонтитул с номер на страницата
+    def _footer(self, doc) -> None:
+        doc.styles["Footer"].font.size = Pt(9)
+        footer = doc.sections[0].footer.paragraphs[0]
+        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = footer.add_run(f"AstroMind · {datetime.now().strftime('%d.%m.%Y')} · Само за занимателна цел · стр. ")
+        run.font.size = Pt(9)
+        run.font.color.rgb = GREY
+        page = footer.add_run()
+        page.font.size = Pt(9)
+        page.font.color.rgb = GREY
+        for kind, text in (("begin", None), (None, "PAGE"), ("end", None)):
+            if kind:
+                element = OxmlElement("w:fldChar")
+                element.set(qn("w:fldCharType"), kind)
+            else:
+                element = OxmlElement("w:instrText")
+                element.set(qn("xml:space"), "preserve")
+                element.text = text
+            page._r.append(element)

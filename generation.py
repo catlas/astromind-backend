@@ -91,7 +91,8 @@ def quote_for(request: ChartRequest) -> billing.Quote:
 def report_params(request: ChartRequest) -> dict:
     """Параметрите на анализа, без свободния текст на въпроса."""
     keys = ("name", "date", "time", "lat", "lon", "birth_fold", "report_type", "is_dynamic", "end_date",
-            "target_date", "target_time", "partner_name", "partner_date", "partner_time", "partner_fold")
+            "target_date", "target_time", "partner_name", "partner_date", "partner_time", "partner_lat", "partner_lon",
+            "partner_fold")
     params = {k: getattr(request, k, None) for k in keys if getattr(request, k, None) not in (None, "")}
     if not request.birth_time_known:
         params.pop("time", None)                      # служебният пладне не е час на раждане

@@ -2,18 +2,23 @@
 Профили и отчети на потребителя, пазени на сървъра (вместо в браузъра).
 """
 import json
+import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import report_export
 from database import Profile, Report, User, get_db
 from deps import get_current_user
+from rate_limit import enforce
 
 router = APIRouter()
+
+EXPORT_LIMIT_PER_HOUR = int(os.getenv("EXPORT_RATE_LIMIT_PER_HOUR", "30"))
 
 MAX_PROFILES = 50
 MAX_REPORT_CHARS = 400_000
@@ -256,6 +261,28 @@ def get_report(report_id: int, current_user: User = Depends(get_current_user), d
     if not r:
         raise HTTPException(status_code=404, detail="Отчетът не е намерен")
     return {**report_summary(r), "content": r.content, "params": r.params or {}}
+
+
+@router.get("/reports/{report_id}/export")
+def export_report(report_id: int, format: str = "docx", current_user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    """
+    DOCX или Markdown на запазен отчет на собственика. Без AI и без такса: същият текст като в Историята.
+    Името на файла е безопасно (без имена и имейл); няма публичен адрес за изтегляне.
+    """
+    if format not in ("docx", "md"):
+        raise HTTPException(status_code=400, detail="Непознат формат. Възможни: docx, md.")
+    enforce(f"export:{current_user.id}", EXPORT_LIMIT_PER_HOUR, 3600, "Достигнахте лимита за износ на отчети.")
+    r = db.query(Report).filter(Report.id == report_id, Report.user_id == current_user.id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Отчетът не е намерен")
+    if format == "md":
+        body, media = report_export.markdown_text(r).encode("utf-8"), report_export.MARKDOWN_TYPE
+    else:
+        body, media = report_export.docx_bytes(r), report_export.DOCX_TYPE
+    return Response(content=body, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="{report_export.filename(r, format)}"',
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.delete("/reports/{report_id}")

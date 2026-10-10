@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 import engine
 from ai_interpreter import get_interpreter
 from schemas import ChartRequest, ChartResponse
-from docx_generator import DOCXGenerator
 from database import User, get_db
 from db_migrate import run_migrations
 from deps import get_current_user
@@ -65,6 +64,7 @@ app.add_middleware(
     allow_credentials=not allow_all_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Retry-After"],      # името на файла при износ и паузата при лимит
 )
 
 app.include_router(account_api.router)
@@ -103,16 +103,9 @@ def _internal_error(context: str, exc: Exception, user_message: str) -> HTTPExce
 
 
 # Лимити на заявките. Стойностите могат да се сменят през environment в Render.
-DOCX_LIMIT_PER_HOUR = int(os.getenv("DOCX_RATE_LIMIT_PER_HOUR", "30"))
 CALCULATE_LIMIT_PER_MINUTE = int(os.getenv("CALCULATE_RATE_LIMIT_PER_MINUTE", "60"))
 LOGIN_LIMIT_PER_15_MIN = int(os.getenv("LOGIN_RATE_LIMIT_PER_15_MIN", "10"))
 REGISTER_LIMIT_PER_HOUR = int(os.getenv("REGISTER_RATE_LIMIT_PER_HOUR", "5"))
-
-
-def require_docx_quota(current_user: User = Depends(get_current_user)) -> User:
-    """Изисква вход и ограничава генерирането на DOCX файлове."""
-    enforce(f"docx:{current_user.id}", DOCX_LIMIT_PER_HOUR, 3600, "Достигнахте лимита за DOCX файлове.")
-    return current_user
 
 
 @app.get("/")
@@ -181,59 +174,6 @@ async def calculate_chart(request: ChartRequest, http_request: Request):
         raise HTTPException(status_code=400, detail=f"Невалидни входни данни: {str(e)}")
     except Exception as e:
         raise _internal_error("/calculate", e, "Не успяхме да изчислим картата. Опитайте отново след малко.")
-
-
-class DOCXRequest(BaseModel):
-    """Request model for DOCX generation"""
-    user_name: str
-    birth_date: str
-    birth_time: str
-    birth_city: str
-    report_type: str
-    natal_chart: Optional[Dict] = None
-    natal_aspects: Optional[List] = None
-    monthly_results: List[Dict] = Field(default_factory=list)
-
-
-@app.post("/generate-docx")
-async def generate_docx(request: DOCXRequest, current_user: User = Depends(require_docx_quota)):
-    """
-    Generate DOCX report for periods > 6 months
-    """
-    try:
-        generator = DOCXGenerator()
-        
-        # Prepare data for DOCX generation
-        docx_data = {
-            'user_name': request.user_name,
-            'birth_date': request.birth_date,
-            'birth_time': request.birth_time,
-            'birth_city': request.birth_city,
-            'report_type': request.report_type,
-            'natal_chart': request.natal_chart,
-            'natal_aspects': request.natal_aspects,
-            'monthly_results': request.monthly_results
-        }
-        
-        # Generate DOCX
-        docx_bytes = generator.generate_docx(docx_data)
-        
-        # Return DOCX file - URL encode filename for Cyrillic support
-        from urllib.parse import quote
-        user_name_safe = docx_data.get('user_name', 'Report').replace(' ', '_')
-        filename = f"Astrology_Report_{user_name_safe}_{datetime.now().strftime('%Y-%m-%d')}.docx"
-        filename_encoded = quote(filename)
-        
-        return Response(
-            content=docx_bytes,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
-            }
-        )
-        
-    except Exception as e:
-        raise _internal_error("/generate-docx", e, "Не успяхме да създадем DOCX файла. Опитайте отново след малко.")
 
 
 # ============================================================================

@@ -541,14 +541,15 @@ class JobTest(unittest.TestCase):
 
 
 class DocxTest(unittest.TestCase):
-    """Изнасянето не показва домове и Асцендент без час и не се чупи от Луната без позиция."""
+    """Изнасянето не показва домове и Асцендент без час и не се чупи от Луната без позиция (подробно: test_report_export.py)."""
 
     def text_of(self, chart, aspects):
         import io
         from docx import Document
         from docx_generator import DOCXGenerator
-        data = {"user_name": "Мария", "birth_date": "1990-05-15", "birth_time": "", "birth_city": "София",
-                "report_type": "general", "natal_chart": chart, "natal_aspects": aspects, "monthly_results": []}
+        data = {"title": "Анализ", "kind": "Общ анализ", "created": "10.10.2026", "people": [],
+                "charts": [{"title": "Карта: Мария", "chart": chart, "aspects": aspects}],
+                "sections": [{"title": "", "text": "Текст."}]}
         doc = Document(io.BytesIO(DOCXGenerator().generate_docx(data)))
         parts = [p.text for p in doc.paragraphs]
         for table in doc.tables:
@@ -560,19 +561,19 @@ class DocxTest(unittest.TestCase):
         eng = engine.get_engine()
         chart = eng.calculate_chart("1990-05-15", "", SOFIA[0], SOFIA[1], time_known=False)
         text = self.text_of(chart, aspects_engine.calculate_natal_aspects(chart))
-        self.assertNotIn("ДОМОВЕ", text)
-        self.assertNotIn("Асцендент", text)
+        self.assertNotIn("\nДомове", text)
+        self.assertNotIn("\nАсцендент\n", text)
         self.assertNotIn("празен", text)
-        self.assertIn("Луна: Козирог или Водолей (според часа)", text)
-        self.assertIn("2. АСПЕКТИ", text)
+        self.assertIn("Луна\nКозирог или Водолей (според часа)", text)
+        self.assertIn("Аспекти", text)
 
-    def test_with_a_time_nothing_changes(self):
+    def test_with_a_time_nothing_is_lost(self):
         eng = engine.get_engine()
         chart = eng.calculate_chart("1990-05-15", "14:30", SOFIA[0], SOFIA[1])
         text = self.text_of(chart, aspects_engine.calculate_natal_aspects(chart))
-        self.assertIn("2. ДОМОВЕ", text)
-        self.assertIn("Асцендент:", text)
-        self.assertIn("3. АСПЕКТИ", text)
+        self.assertIn("Домове", text)
+        self.assertIn("\nАсцендент\n", text)
+        self.assertIn("Аспекти", text)
 
 
 class RealPromptTest(unittest.TestCase):
