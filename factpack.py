@@ -103,8 +103,44 @@ def _retrograde_summary(planets: Dict[str, Dict]) -> Dict:
     return {"retrograde_planets": names, "retrograde_count": len(names)}
 
 
+def has_houses(chart: Dict) -> bool:
+    """Има ли картата домове: не при неизвестен час на раждане (виж engine._calculate_chart_without_time)."""
+    return chart.get("time_known") is not False and bool(chart.get("houses"))
+
+
+def _time_dependent_signs(chart: Dict) -> Dict[str, Dict]:
+    """Телата, чийто знак зависи от часа: възможните знаци и обхватът през местния ден."""
+    return {name: {"possible_signs": info.get("signs"), "range_during_the_day": f"{info.get('from')} to {info.get('to')}"}
+            for name, info in (chart.get("sign_ranges") or {}).items()}
+
+
+def _natal_view_without_time(chart: Dict) -> Dict:
+    """Карта без час на раждане: само знаци и ретроградност на планетите. Без домове, Асцендент, МС и управители.
+    Луната няма позиция (longitude е None), а телата, сменящи знак през деня, са без градус: знакът им е в time_dependent_signs."""
+    changing = {name for name, info in (chart.get("sign_ranges") or {}).items() if len(info.get("signs") or []) > 1}
+    planets: Dict[str, Dict] = {}
+    for name, planet in (chart.get("planets") or {}).items():
+        if planet.get("longitude") is None:
+            continue
+        entry = {"retrograde": _retrograde(planet)}
+        if name not in changing:
+            entry["zodiac_sign"] = planet.get("zodiac_sign")
+            entry["formatted_pos"] = planet.get("formatted_pos")
+        planets[name] = entry
+    return {
+        "birth_time": "unknown",
+        "planets": planets,
+        **_retrograde_summary(planets),
+        "time_dependent_signs": _time_dependent_signs(chart),
+        "datetime_local": chart.get("datetime_local"),
+        "timezone": chart.get("timezone"),
+    }
+
+
 def natal_view(chart: Dict) -> Dict:
     """Натална карта за AI: без сурови градуси; всяка планета със знак, позиция, натален дом и ретроградност."""
+    if chart.get("time_known") is False:
+        return _natal_view_without_time(chart)
     planets: Dict[str, Dict] = {}
     for name, planet in (chart.get("planets") or {}).items():
         if planet.get("longitude") is None:

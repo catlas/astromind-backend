@@ -129,6 +129,8 @@ class Facts:
     transit_houses: Dict[str, Dict[str, int]] = field(default_factory=dict)     # човек -> транзитна планета -> натален дом
     transit_aspects: Dict[str, List[Dict]] = field(default_factory=dict)        # човек -> [{p1 (транзитна), p2 (натална), aspect, orb}]
     sky: Dict[str, Dict] = field(default_factory=dict)                   # транзитно небе: планета -> {sign, deg, min}
+    no_houses: Set[str] = field(default_factory=set)                     # хора без известен час: няма домове, Асцендент и MC
+    alt_signs: Dict[Tuple[str, str], List[str]] = field(default_factory=dict)   # (човек, тяло) -> възможни знаци при неизвестен час
     snapshot_date: Optional[str] = None                                  # "YYYY-MM-DD" (анализ за дата)
     snapshot_time: Optional[str] = None                                  # "HH:MM"
     calendar: Optional[List[Dict]] = None                                # редовете на календара (public)
@@ -442,6 +444,9 @@ def sign_rows(facts: Facts) -> List[Tuple[str, str, str, str, Optional[int], Opt
     for owner, planets in facts.natal.items():
         for planet, d in planets.items():
             rows.append((owner, "natal", planet, d["sign"], d.get("deg"), d.get("min")))
+    for (owner, planet), signs in facts.alt_signs.items():          # неизвестен час: всеки от възможните знаци е верен
+        for sign in signs:
+            rows.append((owner, "natal", planet, sign, None, None))
     for planet, d in facts.sky.items():
         rows.append(("sky", "transit", planet, d["sign"], d.get("deg"), d.get("min")))
     return rows
@@ -993,6 +998,46 @@ def check_cusps_rulers(seg: str, mentions: List[Mention], facts: Facts) -> List[
     return out
 
 
+# Изречение, което обяснява липсата на час, не е твърдение за домове (напр. „Часът не е известен, затова няма Асцендент“)
+EXPLAINS_NO_TIME_RE = re.compile(
+    r"(?<![\w])(?:неизвестен|неизвестна|неизвестно|непознат\w*|не е известен|не са известни|без (?:известен )?час|"
+    r"липс\w+\s+час|няма\s+(?:известен\s+)?час)(?![\w])", re.IGNORECASE)
+
+
+def check_unknown_time(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Violation]:
+    """Човек без известен час няма домове, Асцендент и MC. Твърдение за тях е измислица (hard). Когато собственикът не се
+    разпознава, твърдението е нарушение само ако никой в анализа няма час; иначе минава (не може да се реши сигурно)."""
+    out: List[Violation] = []
+    if not facts.no_houses or EXPLAINS_NO_TIME_RE.search(seg):
+        return out
+    everyone = set(facts.natal) or set(facts.names)
+    all_unknown = bool(everyone) and everyone <= facts.no_houses
+
+    def unknown(owner: Optional[str]) -> bool:
+        return (owner in facts.no_houses) if owner else all_unknown
+
+    def violation(owner: Optional[str], excerpt: str) -> Violation:
+        who = _who(facts, owner) if owner in facts.no_houses else "човека"
+        return Violation("no_time", "hard", excerpt,
+                         f"За {who} часът на раждане е неизвестен: няма домове, Асцендент и MC. Не твърдей дом, Асцендент "
+                         f"или MC за {who}.")
+
+    for c in placement_claims(seg, mentions, groups, facts)[0]:
+        owner = c["ho"] or (c["po"] if c["kind"] != "transit" else None)
+        if unknown(owner):
+            out.append(violation(owner, c["excerpt"]))
+    for m in mentions:
+        if m.kind == "planet" and m.key in ("ASC", "MC"):
+            owner = cue_before(seg, m.start, facts) or cue_after(seg, m.end, facts)
+            if unknown(owner):
+                out.append(violation(owner, _short(seg, max(0, m.start - 20), min(len(seg), m.end + 20))))
+    cusp_claims, ruler_claims = house_subject_claims(seg, mentions, facts)
+    for c in cusp_claims + ruler_claims:
+        if unknown(c["owner"]):
+            out.append(violation(c["owner"], c["excerpt"]))
+    return out
+
+
 def check_retro_count(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Violation]:
     out = []
     if not facts.retro_count:
@@ -1519,6 +1564,7 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
         found += check_signs(seg, mentions, groups, facts)
         found += check_aspects(seg, mentions, groups, facts)
         found += check_cusps_rulers(seg, mentions, facts)
+        found += check_unknown_time(seg, mentions, groups, facts)
         found += check_retro_count(seg, mentions, groups, facts)
         found += check_dates(seg, mentions, groups, facts)
     seen: Set[Tuple[str, str, str]] = set()
@@ -1547,7 +1593,7 @@ def _person_facts(chart: Dict) -> Tuple[Dict, Dict, int]:
         pos = _split_sign_pos(angles.get(key, ""))
         if pos:
             natal[name] = {**pos, "house": None}
-    return natal, cusps_view(view["houses"]), int(view.get("retrograde_count") or 0)
+    return natal, cusps_view(view.get("houses") or {}), int(view.get("retrograde_count") or 0)
 
 
 def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partner_name: Optional[str] = None,
@@ -1566,13 +1612,20 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
     for key, chart in people:
         natal, cusps, retro = _person_facts(chart)
         facts.natal[key], facts.cusps[key], facts.retro_count[key] = natal, cusps, retro
+        if chart.get("time_known") is False:
+            facts.no_houses.add(key)
+            for planet, info in (chart.get("sign_ranges") or {}).items():
+                facts.alt_signs[(key, planet)] = list(info.get("signs") or [])
         # Без изкуствено изпразване при грешка: непълни аспекти биха дали фалшиви „няма такъв аспект“; грешката
         # стига до AIInterpreter.build_text_facts и текстът минава непроверен
         facts.natal_aspects[key] = [{"p1": a["planet1"], "p2": a["planet2"], "aspect": a["aspect"], "orb": a.get("orb")}
                                     for a in calculate_natal_aspects(chart, use_wider_orbs=False)]
     if partner_chart is not None:
-        facts.overlays[("partner", "user")] = factpack.overlay(natal_chart, partner_chart)
-        facts.overlays[("user", "partner")] = factpack.overlay(partner_chart, natal_chart)
+        # Наслагване има само в домовете на човек с известен час
+        if factpack.has_houses(natal_chart):
+            facts.overlays[("partner", "user")] = factpack.overlay(natal_chart, partner_chart)
+        if factpack.has_houses(partner_chart):
+            facts.overlays[("user", "partner")] = factpack.overlay(partner_chart, natal_chart)
         facts.synastry = [{"o1": a["person1"], "p1": a["planet1"], "aspect": a["aspect"], "o2": a["person2"],
                            "p2": a["planet2"], "orb": a.get("orb")}
                           for a in factpack.synastry_aspects(natal_chart, partner_chart, facts.names["user"], facts.names["partner"])]
@@ -1581,7 +1634,7 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
         facts.sky = planets_view(sky_view["planets"])
         facts.retro_count["sky"] = int(sky_view.get("retrograde_count") or 0)
         for key, chart in people:
-            facts.transit_houses[key] = factpack.overlay(chart, transit_chart)
+            facts.transit_houses[key] = factpack.overlay(chart, transit_chart) if factpack.has_houses(chart) else {}
             facts.transit_aspects[key] = [{"p1": a["transit_planet"], "p2": a["natal_planet"], "aspect": a["aspect"], "orb": a.get("orb")}
                                           for a in factpack.transit_aspects(chart, transit_chart)]
     if target_date:

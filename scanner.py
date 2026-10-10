@@ -458,11 +458,14 @@ class TransitScanner:
             "exact": [{"when": x["when"], "motion": x["motion"]} for x in in_period],
             "active_from": window_from.strftime("%Y-%m-%d"), "active_to": window_to.strftime("%Y-%m-%d"),
             "natal_position": decimal_to_dms(natal["longitude"])["str"],
-            "transit_planet_natal_house": house,
-            "natal_planet_natal_house": natal.get("house"),
             "_exact_utc": [x["_utc"] for x in in_period],
             "_pass_count": len(passes),
         }
+        # Без час на раждане няма домове: полетата за дом не се пращат (null би подканил към измислен дом)
+        if house is not None:
+            row["transit_planet_natal_house"] = house
+        if natal.get("house") is not None:
+            row["natal_planet_natal_house"] = natal["house"]
         if not passes:
             row["turns_back"] = True
         if outside:

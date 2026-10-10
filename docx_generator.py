@@ -150,18 +150,27 @@ class DOCXGenerator:
         
         # Create two-column layout using table
         planets = natal_chart.get('planets', {})
+        # Без час на раждане няма домове и Асцендент, а Луната (и тяло, сменило знак през деня) е с възможни знаци
+        time_known = natal_chart.get('time_known') is not False
+        sign_ranges = natal_chart.get('sign_ranges') or {}
+        position_rows = []
+        for planet_name, planet_data in planets.items():
+            if planet_name in sign_ranges and not time_known:
+                signs = [self._translate_sign(sign) for sign in sign_ranges[planet_name].get('signs', [])]
+                position_rows.append((planet_name, ' или '.join(signs) + ' (според часа)'))
+            elif planet_data and planet_data.get('formatted_pos'):
+                position_rows.append((planet_name, self._translate_sign(planet_data['formatted_pos'])))
         if planets:
-            table = doc.add_table(rows=(len(planets) + 2) // 2, cols=2)
+            table = doc.add_table(rows=(len(position_rows) + 2) // 2, cols=2)
             table.style = 'Table Grid'  # White background for all rows
             
-            planet_items = list(planets.items())
-            for idx, (planet_name, planet_data) in enumerate(planet_items):
+            planet_items = position_rows
+            for idx, (planet_name, position) in enumerate(planet_items):
                 row_idx = idx // 2
                 col_idx = idx % 2
                 cell = table.rows[row_idx].cells[col_idx]
                 
                 planet_bg = self.planet_names.get(planet_name, planet_name)
-                position = self._translate_sign(planet_data.get('formatted_pos', ''))
                 
                 # Add text without bold for planet name
                 para = cell.paragraphs[0]
@@ -177,7 +186,7 @@ class DOCXGenerator:
             
             # Add Ascendant if available
             angles = natal_chart.get('angles', {})
-            if angles and angles.get('Ascendant') is not None:
+            if time_known and angles and angles.get('Ascendant') is not None:
                 asc_formatted = angles.get('Ascendant_formatted', f"{int(angles.get('Ascendant', 0))}°")
                 asc_translated = self._translate_sign(asc_formatted)
                 
@@ -201,17 +210,18 @@ class DOCXGenerator:
                 pos_run = para.add_run(asc_translated)
                 pos_run.font.size = Pt(9)  # Increased from 8 to 9 (+10%)
         
-        # 2. Houses (no spacer)
-        houses_heading = doc.add_heading('2. ДОМОВЕ', level=3)
-        houses_heading.runs[0].font.size = Pt(11)  # Increased from 10 to 11 (+10%)
-        houses_heading.runs[0].font.color.rgb = RGBColor(100, 150, 200)  # Blue color instead of black
-        houses_heading.paragraph_format.space_before = Pt(2)
-        houses_heading.paragraph_format.space_after = Pt(2)
+        # 2. Houses (no spacer); без час на раждане домове няма
+        if time_known:
+            houses_heading = doc.add_heading('2. ДОМОВЕ', level=3)
+            houses_heading.runs[0].font.size = Pt(11)  # Increased from 10 to 11 (+10%)
+            houses_heading.runs[0].font.color.rgb = RGBColor(100, 150, 200)  # Blue color instead of black
+            houses_heading.paragraph_format.space_before = Pt(2)
+            houses_heading.paragraph_format.space_after = Pt(2)
         
         # Group planets by house
         planets_by_house = {}
         for planet_name, planet_data in planets.items():
-            if planet_data and planet_data.get('longitude') is not None:
+            if time_known and planet_data and planet_data.get('longitude') is not None:
                 house_num = planet_data.get('house', 1)
                 if house_num not in planets_by_house:
                     planets_by_house[house_num] = []
@@ -261,7 +271,7 @@ class DOCXGenerator:
         
         # 3. Aspects (no spacer)
         if natal_aspects:
-            aspects_heading = doc.add_heading('3. АСПЕКТИ', level=3)
+            aspects_heading = doc.add_heading('3. АСПЕКТИ' if time_known else '2. АСПЕКТИ', level=3)
             aspects_heading.runs[0].font.size = Pt(11)  # Increased from 10 to 11 (+10%)
             aspects_heading.runs[0].font.color.rgb = RGBColor(100, 150, 200)  # Blue color instead of black
             aspects_heading.paragraph_format.space_before = Pt(2)

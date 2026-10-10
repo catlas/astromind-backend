@@ -29,6 +29,7 @@ import data_api
 import events
 import events_api
 import jobs
+import time_api
 import geocode_api
 import mailer
 import onboarding_api
@@ -74,6 +75,7 @@ app.include_router(geocode_api.router)
 app.include_router(onboarding_api.router)
 app.include_router(memory_api.router)
 app.include_router(jobs.router)
+app.include_router(time_api.router)
 
 # Записва в лога дали имейлите са настроени и дали пощенският сървър е достъпен
 mailer.log_status_in_background()
@@ -155,7 +157,10 @@ async def calculate_chart(request: ChartRequest, http_request: Request):
             date=request.date,
             time=request.time,
             lat=request.lat,
-            lon=request.lon
+            lon=request.lon,
+            fold=request.birth_fold,
+            strict=True,
+            time_known=request.birth_time_known
         )
         
         # Връщане на данните
@@ -163,6 +168,8 @@ async def calculate_chart(request: ChartRequest, http_request: Request):
             planets=chart_data["planets"],
             houses=chart_data["houses"],
             angles=chart_data["angles"],
+            time_known=chart_data.get("time_known", True),
+            sign_ranges=chart_data.get("sign_ranges", {}),
             julian_day=chart_data["julian_day"],
             datetime_utc=chart_data["datetime_utc"],
             timezone=chart_data["timezone"],

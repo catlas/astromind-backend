@@ -177,9 +177,11 @@ async def run_period_report(
            "months": months, "checks": checks}
 
 
-def saved_content(overview: str, month_texts: List[Tuple[str, str]]) -> str:
-    """Текстът за История: общият преглед е първи, после месеците (както досега: <h2> за всеки месец)."""
-    parts = [f"<h2>{OVERVIEW_TITLE}</h2>\n{overview}"]
+def saved_content(overview: str, month_texts: List[Tuple[str, str]], note: str = "") -> str:
+    """Текстът за История: общият преглед е първи, после месеците (както досега: <h2> за всеки месец).
+    note е бележката за неизвестен час на раждане (Фаза 12): стои в началото на прегледа."""
+    lead = f"{note}\n\n" if note else ""
+    parts = [f"<h2>{OVERVIEW_TITLE}</h2>\n{lead}{overview}"]
     parts += [f"<h2>{title}</h2>\n{text}" for title, text in month_texts]
     return "\n\n".join(parts)
 

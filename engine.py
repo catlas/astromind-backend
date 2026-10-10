@@ -127,6 +127,30 @@ def decimal_to_dms(longitude: float) -> Dict[str, any]:
     }
 
 
+class TimeResolutionError(ValueError):
+    """
+    Местният час не се превръща в един момент: не съществува (часовникът е преместен напред при лятно време) или се
+    повтаря (часовникът е върнат назад). code е time_nonexistent или time_ambiguous; options са възможните варианти.
+    Подклас на ValueError, затова старите обработки на невалиден вход я хващат като 400.
+    """
+
+    def __init__(self, code: str, message: str, options: Optional[list] = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.options = options or []
+
+
+# Часът, за който се смятат планетите, когато часът на раждане е неизвестен (местен пладне). Не е твърдение за часа.
+UNKNOWN_TIME_ANCHOR = "12:00"
+
+
+def utc_offset_label(minutes: int) -> str:
+    sign = "+" if minutes >= 0 else "-"
+    hours, rest = divmod(abs(int(minutes)), 60)
+    return f"UTC{sign}{hours}" + (f":{rest:02d}" if rest else "")
+
+
 class AstrologyEngine:
     """Основен клас за астрологични изчисления"""
     
@@ -177,63 +201,114 @@ class AstrologyEngine:
         # Инициализация на TimezoneFinder (тежък обект, зарежда се веднъж)
         self.tf = TimezoneFinder()
     
-    def _datetime_to_utc(self, date: str, time: str, lat: float, lon: float) -> Tuple[datetime, str]:
+    def resolve_local_time(self, date: str, time: str, lat: float, lon: float, fold: Optional[int] = None) -> Dict:
+        """
+        Превръща местния час в UTC момент и описва зоната. Не хвърля грешка при несъществуващ или повтарящ се час, а ги
+        връща като статус, за да ги покаже екранът:
+        - status "ok": utc, timezone, utc_offset_minutes;
+        - status "nonexistent": часът е прескочен при лятно време; next_valid_time е най-близкият валиден час след него;
+        - status "ambiguous": часът се повтаря; options са двата момента (fold 0 е първото преминаване, fold 1 е второто);
+          с избран fold (0 или 1) статусът е "ok" за избрания момент.
+        zone_found е False, когато координатите нямат часова зона: тогава се ползва UTC. at_sea е True за точки в открито
+        море (зона Etc/GMT±N), най-често грешка в координатите.
+        """
+        date_clean = date.replace("/", "-")
+        year, month, day = (int(part) for part in date_clean.split("-")[:3])
+        time_parts = time.split(":")
+        hour = int(time_parts[0])
+        minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+        second = int(time_parts[2]) if len(time_parts) > 2 else 0
+        local_naive = datetime(year, month, day, hour, minute, second)
+
+        timezone_str = self.tf.timezone_at(lat=lat, lng=lon)
+        zone_found = timezone_str is not None
+        if not zone_found:
+            timezone_str = "UTC"           # няма зона за тези координати
+        # timezonefinder връща Etc/GMT±N (фиксирано отместване) за точки в открито море: най-често грешка в координатите
+        base = {"timezone": timezone_str, "zone_found": zone_found, "at_sea": timezone_str.startswith("Etc/GMT")}
+
+        # СПЕЦИАЛНО ПРАВИЛО ЗА БЪЛГАРИЯ ПРЕДИ 1979: лятното часово време е въведено на 1 април 1979 г., затова преди това
+        # се ползва фиксиран UTC+2 (EET)
+        if timezone_str == "Europe/Sofia" and year < 1979:
+            fixed = pytz.FixedOffset(120).localize(local_naive)
+            return {**base, "status": "ok", "utc": fixed.astimezone(pytz.UTC), "utc_offset_minutes": 120}
+
+        tz = pytz.UTC if timezone_str == "UTC" else pytz.timezone(timezone_str)
+
+        def described(local_dt) -> Dict:
+            offset = int(local_dt.utcoffset().total_seconds() // 60)
+            return {"utc": local_dt.astimezone(pytz.UTC), "utc_offset_minutes": offset}
+
+        try:
+            return {**base, "status": "ok", **described(tz.localize(local_naive, is_dst=None))}
+        except pytz.exceptions.AmbiguousTimeError:
+            first, second = sorted((tz.localize(local_naive, is_dst=True), tz.localize(local_naive, is_dst=False)),
+                                   key=lambda dt: dt.astimezone(pytz.UTC))
+            options = []
+            for index, candidate in enumerate((first, second)):
+                info = described(candidate)
+                options.append({"fold": index, "utc_offset_minutes": info["utc_offset_minutes"],
+                                "utc_offset": utc_offset_label(info["utc_offset_minutes"]),
+                                "label": ("първото преминаване" if index == 0 else "второто преминаване")
+                                         + f" ({utc_offset_label(info['utc_offset_minutes'])})"})
+            if fold in (0, 1):
+                return {**base, "status": "ok", **described((first, second)[fold]), "options": options, "fold": fold}
+            return {**base, "status": "ambiguous", "options": options}
+        except pytz.exceptions.NonExistentTimeError:
+            next_valid = None
+            for extra in range(1, 241):
+                probe = local_naive + timedelta(minutes=extra)
+                try:
+                    tz.localize(probe, is_dst=None)
+                except pytz.exceptions.NonExistentTimeError:
+                    continue
+                except pytz.exceptions.AmbiguousTimeError:
+                    pass
+                next_valid = probe.strftime("%H:%M")
+                break
+            return {**base, "status": "nonexistent", "next_valid_time": next_valid}
+
+    def _datetime_to_utc(self, date: str, time: str, lat: float, lon: float, fold: Optional[int] = None,
+                         strict: bool = False) -> Tuple[datetime, str]:
         """
         Конвертира локална дата и час в UTC базирано на географски координати.
-        
+
         Args:
             date: Дата във формат "YYYY-MM-DD" или "YYYY/MM/DD"
             time: Час във формат "HH:MM:SS" или "HH:MM" (локално време)
             lat: Географска ширина в градуси
             lon: Географска дължина в градуси
-            
+            fold: 0 или 1 при повтарящ се час (първото или второто преминаване)
+            strict: True за рождени данни. Несъществуващ или повтарящ се час без избран fold е грешка
+                (TimeResolutionError), а не тихо поправяне. При False (транзити, "сега") се ползва зимното време.
+
         Returns:
             Tuple от (datetime обект в UTC, timezone string)
         """
-        # Нормализиране на формата на датата
+        resolved = self.resolve_local_time(date, time, lat, lon, fold)
+        if resolved["status"] == "ok":
+            return resolved["utc"], resolved["timezone"]
+        if strict:
+            zone = resolved["timezone"]
+            if resolved["status"] == "nonexistent":
+                hint = f" Най-близкият валиден час е {resolved['next_valid_time']}." if resolved.get("next_valid_time") else ""
+                raise TimeResolutionError(
+                    "time_nonexistent",
+                    f"Часът {time} на {date} не съществува в {zone}: тогава часовникът е преместен напред при смяната към "
+                    f"лятно време.{hint}")
+            raise TimeResolutionError(
+                "time_ambiguous",
+                f"Часът {time} на {date} се повтаря в {zone}: часовникът е върнат назад. Изберете първото или второто "
+                f"преминаване.", resolved["options"])
+        # Нестрого: старото поведение (зимно време за повтарящ се час; за несъществуващ час същият стенен час като зимно време)
+        tz = pytz.UTC if resolved["timezone"] == "UTC" else pytz.timezone(resolved["timezone"])
         date_clean = date.replace("/", "-")
-        
-        # Парсиране на датата
-        date_parts = date_clean.split("-")
-        year, month, day = int(date_parts[0]), int(date_parts[1]), int(date_parts[2])
-        
-        # Парсиране на времето
-        time_parts = time.split(":")
-        hour = int(time_parts[0])
-        minute = int(time_parts[1]) if len(time_parts) > 1 else 0
-        second = int(time_parts[2]) if len(time_parts) > 2 else 0
-        
-        # Намиране на timezone от координатите
-        timezone_str = self.tf.timezone_at(lat=lat, lng=lon)
-        
-        if timezone_str is None:
-            # Fallback: използваме UTC ако не можем да намерим timezone
-            timezone_str = "UTC"
-            tz = pytz.UTC
-        else:
-            # Получаване на pytz timezone обект
-            tz = pytz.timezone(timezone_str)
-        
-        # Създаване на локален datetime (naive)
-        local_dt_naive = datetime(year, month, day, hour, minute, second)
-        
-        # 🔥 СПЕЦИАЛНО ПРАВИЛО ЗА БЪЛГАРИЯ ПРЕДИ 1979
-        # В България смяната на времето (лятно/зимно) е въведена за първи път на 1 април 1979 г.
-        # Преди това няма лятно часово време, затова използваме фиксиран UTC+2 (EET)
-        if timezone_str == "Europe/Sofia" and year < 1979:
-            # През този период НЯМА лятно часово време
-            # Използваме фиксиран UTC+2 (EET)
-            tz = pytz.FixedOffset(120)  # 120 минути = +2 часа
-            local_dt = tz.localize(local_dt_naive)
-        else:
-            # За останалите случаи — стандартно локализиране (правилно обработва DST и исторически промени)
-            local_dt = tz.localize(local_dt_naive)
-        
-        # Конвертиране в UTC
-        utc_dt = local_dt.astimezone(pytz.UTC)
-        
-        return utc_dt, timezone_str
-    
+        year, month, day = (int(part) for part in date_clean.split("-")[:3])
+        parts = time.split(":")
+        naive = datetime(year, month, day, int(parts[0]), int(parts[1]) if len(parts) > 1 else 0,
+                         int(parts[2]) if len(parts) > 2 else 0)
+        return tz.localize(naive).astimezone(pytz.UTC), resolved["timezone"]
+
     @staticmethod
     def get_house_ruler(sign: str) -> Optional[str]:
         """
@@ -490,41 +565,8 @@ class AstrologyEngine:
             print(f"DEBUG info: cusps type: {type(result[0])}, len: {len(result[0])}")
             raise RuntimeError(f"Грешка при изчисляване на домове: {e}")
     
-    def calculate_chart(
-        self,
-        date: str,
-        time: str,
-        lat: float,
-        lon: float
-    ) -> Dict:
-        """
-        Изчислява пълна натална карта.
-        
-        Args:
-            date: Дата във формат "YYYY-MM-DD" или "YYYY/MM/DD" (локална дата)
-            time: Час във формат "HH:MM:SS" или "HH:MM" (локално време)
-            lat: Географска ширина в градуси (-90 до 90)
-            lon: Географска дължина в градуси (-180 до 180, източна положителна)
-        
-        Returns:
-            Речник със структурирани данни за картата:
-            {
-                "planets": {...},
-                "houses": {...},
-                "angles": {...},
-                "julian_day": ...,
-                "datetime_utc": "...",
-                "timezone": "Europe/Sofia",
-                "datetime_local": "..."
-            }
-        """
-        # Конвертиране на локалното време в UTC базирано на координатите
-        dt_utc, timezone_str = self._datetime_to_utc(date, time, lat, lon)
-        
-        # Конвертиране в Julian Day
-        jd = self._datetime_to_julian_day(dt_utc)
-        
-        # Изчисляване на позициите на планетите
+    def _planet_positions(self, jd: float) -> Dict[str, Dict]:
+        """Позиции на всички тела за един момент: дължина, скорост, разстояние, знак и форматирана позиция."""
         planets = {}
         for name, planet_id in self.PLANETS.items():
             try:
@@ -557,6 +599,100 @@ class AstrologyEngine:
                     "zodiac_sign": None,
                     "formatted_pos": None
                 }
+        return planets
+
+    def _calculate_chart_without_time(self, date: str, lat: float, lon: float) -> Dict:
+        """
+        Карта без час на раждане. Часът не се измисля: планетите са за местния пладне на датата, а Асцендент, МС, домове и
+        домът на всяка планета липсват. Луната се мести около 13° на ден, затова няма позиция (longitude е None и
+        аспектите я пропускат), а sign_ranges казва в кои знаци е била през деня. Същото важи за всяка друга планета,
+        която сменя знак през този ден. Дължините на останалите тела са за пладне (грешка най-много около 1°).
+        """
+        date_clean = date.replace("/", "-")
+        noon_utc, timezone_str = self._datetime_to_utc(date_clean, UNKNOWN_TIME_ANCHOR, lat, lon)
+        jd = self._datetime_to_julian_day(noon_utc)
+        planets = self._planet_positions(jd)
+
+        year, month, day = (int(part) for part in date_clean.split("-")[:3])
+        next_day = (datetime(year, month, day) + timedelta(days=1)).strftime("%Y-%m-%d")
+        start_utc, _ = self._datetime_to_utc(date_clean, "00:00", lat, lon)
+        end_utc, _ = self._datetime_to_utc(next_day, "00:00", lat, lon)
+        morning = self._planet_positions(self._datetime_to_julian_day(start_utc))
+        evening = self._planet_positions(self._datetime_to_julian_day(end_utc))
+
+        sign_ranges: Dict[str, Dict] = {}
+        for name, noon_data in planets.items():
+            first, last = morning[name].get("longitude"), evening[name].get("longitude")
+            if first is None or last is None:
+                continue
+            first_dms, last_dms = decimal_to_dms(first), decimal_to_dms(last)
+            signs = [first_dms["sign"]] + ([last_dms["sign"]] if last_dms["sign"] != first_dms["sign"] else [])
+            if name == "Moon" or len(signs) > 1:
+                sign_ranges[name] = {"signs": signs, "from": first_dms["str"], "to": last_dms["str"]}
+        moon = planets.get("Moon")
+        if moon:
+            moon.update({"longitude": None, "speed": None, "distance": None, "zodiac_sign": None, "formatted_pos": None})
+        for data in planets.values():
+            data["house"] = None
+
+        return {
+            "planets": planets,
+            "houses": {},
+            "angles": {},
+            "time_known": False,
+            "sign_ranges": sign_ranges,
+            "julian_day": jd,
+            "datetime_utc": noon_utc.isoformat(),
+            "timezone": timezone_str,
+            "datetime_local": f"{date} (час неизвестен)",
+            "location": {"latitude": lat, "longitude": lon},
+        }
+
+    def calculate_chart(
+        self,
+        date: str,
+        time: str,
+        lat: float,
+        lon: float,
+        fold: Optional[int] = None,
+        strict: bool = False,
+        time_known: bool = True
+    ) -> Dict:
+        """
+        Изчислява пълна натална карта.
+        
+        Args:
+            date: Дата във формат "YYYY-MM-DD" или "YYYY/MM/DD" (локална дата)
+            time: Час във формат "HH:MM:SS" или "HH:MM" (локално време)
+            lat: Географска ширина в градуси (-90 до 90)
+            lon: Географска дължина в градуси (-180 до 180, източна положителна)
+            fold, strict: виж _datetime_to_utc (несъществуващ и повтарящ се местен час)
+            time_known: False, когато часът на раждане е неизвестен. Тогава time се игнорира и картата няма домове,
+                Асцендент и МС (виж _calculate_chart_without_time)
+        
+        Returns:
+            Речник със структурирани данни за картата:
+            {
+                "planets": {...},
+                "houses": {...},
+                "angles": {...},
+                "julian_day": ...,
+                "datetime_utc": "...",
+                "timezone": "Europe/Sofia",
+                "datetime_local": "..."
+            }
+        """
+        if not time_known:
+            return self._calculate_chart_without_time(date, lat, lon)
+
+        # Конвертиране на локалното време в UTC базирано на координатите
+        dt_utc, timezone_str = self._datetime_to_utc(date, time, lat, lon, fold=fold, strict=strict)
+        
+        # Конвертиране в Julian Day
+        jd = self._datetime_to_julian_day(dt_utc)
+        
+        # Изчисляване на позициите на планетите
+        planets = self._planet_positions(jd)
         
         # Изчисляване на домовете
         house_data = self._calculate_houses(jd, lat, lon)
@@ -573,6 +709,7 @@ class AstrologyEngine:
         result = {
             "planets": planets,
             "houses": house_cusps,
+            "time_known": True,
             "angles": {
                 "Ascendant": house_data["Ascendant"],
                 "MC": house_data["MC"],
@@ -594,13 +731,30 @@ class AstrologyEngine:
         return result
 
 
+_shared_engine: Optional["AstrologyEngine"] = None
+
+
+def get_engine() -> "AstrologyEngine":
+    """
+    Общата инстанция на двигателя. Зареждането на двигателя взема над 0,6 секунди (TimezoneFinder), затова се прави веднъж, а не при
+    всяко изчисление: картата с готова инстанция се смята за около милисекунда.
+    """
+    global _shared_engine
+    if _shared_engine is None:
+        _shared_engine = AstrologyEngine()
+    return _shared_engine
+
+
 # Функция за удобство (не изисква инстанция)
 def calculate_chart(
     date: str,
     time: str,
     lat: float,
     lon: float,
-    base_dir: Path = None
+    base_dir: Path = None,
+    fold: Optional[int] = None,
+    strict: bool = False,
+    time_known: bool = True
 ) -> Dict:
     """
     Удобна функция за изчисляване на натална карта.
@@ -611,12 +765,13 @@ def calculate_chart(
         lat: Географска ширина в градуси
         lon: Географска дължина в градуси
         base_dir: Базова директория (опционално)
+        fold, strict, time_known: виж AstrologyEngine.calculate_chart
         
     Returns:
         Речник с данни за картата
     """
-    engine = AstrologyEngine(base_dir)
-    return engine.calculate_chart(date, time, lat, lon)
+    engine = AstrologyEngine(base_dir) if base_dir is not None else get_engine()
+    return engine.calculate_chart(date, time, lat, lon, fold=fold, strict=strict, time_known=time_known)
 
 
 if __name__ == "__main__":

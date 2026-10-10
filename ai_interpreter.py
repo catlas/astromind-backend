@@ -15,6 +15,8 @@ from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB, calculate_natal_aspects
 import factpack
 import period_report
 import progress
+import birthtime
+import relationship
 import text_check
 import text_guard
 from scanner import PeriodCalendar
@@ -1337,6 +1339,13 @@ NATAL_NOTE = (
     "natal chart) and the 'cusp' and 'ruler' of each house exactly as given. Never convert degrees to signs or houses yourself. "
     "'retrograde_planets' and 'retrograde_count' are already counted."
 )
+NATAL_NOTE_NO_TIME = (
+    "The birth time of this person is UNKNOWN. Everything here is PRE-CALCULATED for local noon of the birth date. There are NO "
+    "houses, NO Ascendant, NO MC, NO cusps and NO house rulers for this person: never write or imply any. Use "
+    "'formatted_pos' exactly as given. Where 'time_dependent_signs' lists 'possible_signs', name those signs and say the sign "
+    "depends on the birth time; never pick one and never give a degree for it. The Moon has no position or aspects. "
+    "'retrograde_planets' and 'retrograde_count' are already counted."
+)
 ASPECTS_NOTE = (
     "PRE-CALCULATED by the backend. Use only these aspects; do not recalculate or assume others. "
     "Each has the aspect type, the exact angle and the orb."
@@ -1519,6 +1528,15 @@ class AIInterpreter:
         if add_context:
             # Правилата за безопасност важат за всеки анализ, независимо от режима
             system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
+            # Контекстът на отношенията между двамата души (Фаза 12), ако анализът е за двама
+            relation_context = relationship.current.get()
+            if relation_context:
+                system_prompt = f"{system_prompt}\n\n{relation_context}"
+            # Човек без известен час на раждане: без Асцендент, МС и домове (последното правило, за да надделее над шаблоните)
+            time_context = birthtime.current.get()
+            if time_context:
+                system_prompt = f"{system_prompt}\n\n{time_context}"
+                user_prompt = f"{user_prompt}\n\n{birthtime.reminder.get()}"
             # Бележките от контролираната памет на потребителя (ако ги има и са включени)
             user_context = memory.current_context.get()
             if user_context:
@@ -2126,7 +2144,8 @@ class AIInterpreter:
     def _natal_block(name: str, chart: Dict) -> str:
         """Натална карта (знак, градус, дом, 12 куспиди с управители) и натални аспекти на един човек."""
         upper = name.upper()
-        text = factpack.section(f"{upper} NATAL CHART", NATAL_NOTE, factpack.natal_view(chart))
+        note = NATAL_NOTE if factpack.has_houses(chart) else NATAL_NOTE_NO_TIME
+        text = factpack.section(f"{upper} NATAL CHART", note, factpack.natal_view(chart))
         try:
             aspects = calculate_natal_aspects(chart, use_wider_orbs=False)
             text += factpack.section(f"{upper} NATAL ASPECTS (CALCULATED)", ASPECTS_NOTE, aspects)
@@ -2136,27 +2155,34 @@ class AIInterpreter:
 
     @staticmethod
     def _overlay_blocks(natal_chart: Dict, partner_chart: Dict, user_name: str, partner_name: str) -> str:
-        """Двете наслагвания с имена: партньорът в домовете на потребителя И потребителят в домовете на партньора."""
-        text = factpack.section(
-            "PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)",
-            f"USER = {user_name}, PARTNER = {partner_name}. Each number is the house of {user_name}'s NATAL chart in which "
-            f"that planet of {partner_name} falls. Use these numbers exactly.",
-            factpack.overlay(natal_chart, partner_chart))
-        text += factpack.section(
-            f"{user_name.upper()} PLANETS IN {partner_name.upper()}'S NATAL HOUSES (CALCULATED)",
-            f"Each number is the house of {partner_name}'s NATAL chart in which that planet of {user_name} falls. "
-            f"Use these numbers exactly.",
-            factpack.overlay(partner_chart, natal_chart))
+        """Двете наслагвания с имена: партньорът в домовете на потребителя И потребителят в домовете на партньора.
+        Наслагване има само в домовете на човек с известен час: без час няма домове и блокът се пропуска."""
+        text = ""
+        if factpack.has_houses(natal_chart):
+            text += factpack.section(
+                "PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)",
+                f"USER = {user_name}, PARTNER = {partner_name}. Each number is the house of {user_name}'s NATAL chart in which "
+                f"that planet of {partner_name} falls. Use these numbers exactly.",
+                factpack.overlay(natal_chart, partner_chart))
+        if factpack.has_houses(partner_chart):
+            text += factpack.section(
+                f"{user_name.upper()} PLANETS IN {partner_name.upper()}'S NATAL HOUSES (CALCULATED)",
+                f"Each number is the house of {partner_name}'s NATAL chart in which that planet of {user_name} falls. "
+                f"Use these numbers exactly.",
+                factpack.overlay(partner_chart, natal_chart))
         return text
 
     @staticmethod
     def _transit_blocks(owner_header: str, name: str, natal_chart: Dict, transit_chart: Dict) -> str:
-        """Къде попадат транзитните планети в натала на човека и кои аспекти правят към него."""
-        text = factpack.section(
-            f"TRANSIT PLANETS IN {owner_header}'S NATAL HOUSES (CALCULATED)",
-            f"Each number is the house of {name}'s NATAL chart in which that transiting planet is now. "
-            f"These are the only houses of transit planets.",
-            factpack.overlay(natal_chart, transit_chart))
+        """Къде попадат транзитните планети в натала на човека и кои аспекти правят към него.
+        Домовете на транзитните планети има само при известен час на раждане."""
+        text = ""
+        if factpack.has_houses(natal_chart):
+            text += factpack.section(
+                f"TRANSIT PLANETS IN {owner_header}'S NATAL HOUSES (CALCULATED)",
+                f"Each number is the house of {name}'s NATAL chart in which that transiting planet is now. "
+                f"These are the only houses of transit planets.",
+                factpack.overlay(natal_chart, transit_chart))
         text += factpack.section(
             f"TRANSIT ASPECTS TO {owner_header}'S NATAL CHART (CALCULATED)",
             f"Aspects between the sky at the chosen moment and {name}'s natal chart (orb up to "
