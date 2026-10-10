@@ -31,3 +31,16 @@ def register_and_login(client, email, password=PASSWORD, name="Тест"):
     r = client.post("/login", json={"email": email, "password": password})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def give_deposit(email, cents):
+    """Слага внесени средства на баланса (премиум услугите се плащат само с тях), през регистъра."""
+    import billing
+    from database import SessionLocal, User
+    db = SessionLocal()
+    try:
+        uid = db.query(User.id).filter(User.email == email).scalar()
+        billing.apply_transaction(db, uid, "admin", paid=cents, description="тест: внесени средства")
+        db.commit()
+    finally:
+        db.close()

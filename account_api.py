@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import billing
 import mailer
 from auth import (
     create_purpose_token, create_user_token, decode_purpose_token, hash_password,
@@ -23,7 +24,7 @@ router = APIRouter()
 
 # Сменя се при всяка съществена промяна на Общите условия или Политиката за поверителност.
 # Потребителите с по-стара версия ще бъдат помолени да приемат новата.
-TERMS_VERSION = "2026-09-25"
+TERMS_VERSION = "2026-10-10"
 
 
 def user_payload(user: User) -> dict:
@@ -31,7 +32,7 @@ def user_payload(user: User) -> dict:
         "id": user.id,
         "email": user.email,
         "full_name": user.full_name,
-        "coins": user.coins or 0,
+        **billing.balance_payload(user),     # balance_cents, paid_cents, gift_cents (евроценти)
         "email_verified": bool(user.email_verified),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "is_admin": _is_admin(user),

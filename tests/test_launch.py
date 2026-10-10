@@ -19,8 +19,8 @@ from rate_limit import limiter  # noqa: E402
 from testenv import PASSWORD, register_and_login  # noqa: E402
 
 EXPERIMENT = json.dumps({
-    "A": [{"id": "starter", "coins": 50, "amount_cents": 499}],
-    "B": [{"id": "starter", "coins": 60, "amount_cents": 599}],
+    "A": [{"id": "topup5", "amount_cents": 500, "credit_cents": 500}],
+    "B": [{"id": "topup5", "amount_cents": 500, "credit_cents": 600}],
 })
 
 
@@ -77,8 +77,8 @@ class PricingExperimentTest(unittest.TestCase):
         uid = self.client.get("/me", headers=h).json()["id"]
         expected = "A" if uid % 2 == 0 else "B"
         self.assertEqual(cfg["pricing_variant"], expected)
-        self.assertEqual(cfg["packages"][0]["amount_cents"], 499 if expected == "A" else 599)
-        self.assertEqual(billing.find_package("starter", uid)["amount_cents"], cfg["packages"][0]["amount_cents"])
+        self.assertEqual(cfg["topups"][0]["credit_cents"], 500 if expected == "A" else 600)
+        self.assertEqual(billing.find_topup("topup5", uid)["credit_cents"], cfg["topups"][0]["credit_cents"])
 
 
 if __name__ == "__main__":

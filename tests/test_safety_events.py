@@ -68,15 +68,15 @@ class SafetyApiTest(unittest.TestCase):
     def setUp(self):
         limiter.reset()
 
-    @mock.patch.dict(os.environ, {"COINS_ENFORCED": "1", "SIGNUP_BONUS_COINS": "0"})
+    @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1", "SIGNUP_GIFT_CENTS": "0"})
     def test_crisis_question_skips_ai_and_charge(self):
         h = register_and_login(self.client, "crisis@test.bg")
         never = mock.AsyncMock(return_value="<p>no</p>")
         with mock.patch.object(main.ai_interpreter, "interpret_chart", never):
             r = self.client.post("/interpret", json={**CHART, "question": "Не искам да живея вече"}, headers=h)
-        self.assertEqual(r.status_code, 200, r.text)  # дори с 0 монети
+        self.assertEqual(r.status_code, 200, r.text)  # дори с нулев баланс
         self.assertIn("112", r.json()["interpretation"])
-        self.assertEqual(r.json()["coins_charged"], 0)
+        self.assertEqual(r.json()["charged_cents"], 0)
         self.assertIsNone(r.json()["report_id"])
         never.assert_not_called()
         self.assertIn("crisis_detected", [n for n, _ in events_for("crisis@test.bg")])

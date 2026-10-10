@@ -33,7 +33,7 @@ import text_guard  # noqa: E402
 from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import TransitScanner  # noqa: E402
-from testenv import CHART, register_and_login  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)          # София
@@ -773,7 +773,7 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(recorded[0].props["stage"], "natal")
         self.assertNotIn("Слънце", json.dumps(recorded[0].props, ensure_ascii=False))
 
-    @mock.patch.dict(os.environ, {"COINS_ENFORCED": "1"})
+    @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
     def test_natal_that_cannot_be_repaired_is_502_nothing_saved_nothing_charged(self):
         h = register_and_login(self.client, "p10-reject@test.bg")
         me = self.client.get("/me", headers=h).json()
@@ -784,7 +784,7 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(r.json()["detail"], text_guard.USER_MESSAGE)
         self.assertNotIn("house", r.text)                                                     # без технически подробности
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
-        self.assertEqual(self.client.get("/me", headers=h).json()["coins"], me["coins"])
+        self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], me["balance_cents"])
         failed = self.events(me["id"], "analysis_failed")
         self.assertEqual(len(failed), 1)
         self.assertEqual(failed[0].props["reason"], "text_check")
@@ -828,9 +828,10 @@ class EndpointTest(unittest.TestCase):
         self.assertNotIn(self.BAD_OCT, content)
         self.assertEqual([e.props["result"] for e in self.events(uid, "text_check")], ["repaired"])
 
-    @mock.patch.dict(os.environ, {"COINS_ENFORCED": "1"})
+    @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
     def test_stream_with_a_month_that_cannot_be_repaired_fails_without_saving_or_charging(self):
         h = register_and_login(self.client, "p10-stream-bad@test.bg")
+        give_deposit("p10-stream-bad@test.bg", 1000)
         me = self.client.get("/me", headers=h).json()
         monthly = mock.AsyncMock(return_value=self.BAD_OCT)
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
@@ -842,7 +843,7 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(steps[-1], {"type": "error", "code": 502, "message": period_report.USER_MESSAGE})
         self.assertNotIn("complete", [s["type"] for s in steps])
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
-        self.assertEqual(self.client.get("/me", headers=h).json()["coins"], me["coins"])
+        self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], me["balance_cents"])
         failed = self.events(me["id"], "analysis_failed")
         self.assertEqual((failed[0].props["reason"], failed[0].props["stage"]), ("text_check", "month:2026-10"))
         self.assertEqual({e.props["result"] for e in self.events(me["id"], "text_check")}, {"rejected"})

@@ -1,14 +1,23 @@
 """
-Монети: цени на анализите, пакети за покупка и атомарни записи в регистъра.
+Баланс в евро: цени на услугите, пакети за зареждане и атомарни записи в регистъра.
 
-Балансът е users.coins, но всяка промяна минава през apply_transaction(),
-която записва ред в coin_transactions в същата транзакция. Затова сумата
-на регистъра винаги е равна на баланса.
+Балансът има два дяла:
+- внесени средства (users.paid_cents): заредени с плащане, важат за всички услуги;
+- подаръчен кредит (users.gift_cents): 5 € при регистрация, важи само за основните анализи.
+
+Услугите са на две нива. Основни (basic) са анализите за един човек: натален или за избрана дата. Премиум (premium) са
+анализите за двама и прогнозите за период. Основните първо ползват подаръка, после внесените средства. Премиум се плащат
+САМО с внесени средства, затова стават достъпни след първото зареждане.
+
+Всяка промяна на баланса минава през apply_transaction(), която записва ред в coin_transactions (името на таблицата е
+историческо: регистър на баланса) в същата транзакция. Затова сумата на регистъра винаги е равна на баланса, поотделно
+за двата дяла. Всички суми са в евроценти.
 """
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import update
@@ -17,34 +26,42 @@ from sqlalchemy.orm import Session
 
 from database import CoinTransaction, User
 
-DEFAULT_PACKAGES = [
-    {"id": "starter", "name": "Начинаещ", "coins": 50, "amount_cents": 499,
-     "description": "Около 6 подробни анализа", "icon": "star"},
-    {"id": "popular", "name": "Популярен", "coins": 150, "amount_cents": 1299,
-     "description": "Най-добрата стойност за редовни потребители", "icon": "auto_awesome", "recommended": True},
-    {"id": "expert", "name": "Експерт", "coins": 500, "amount_cents": 3599,
-     "description": "За професионалисти и сериозни изследователи", "icon": "workspace_premium"},
+BASIC, PREMIUM = "basic", "premium"
+
+# Пакети за зареждане: плащате amount_cents, в баланса влиза credit_cents (при по-големите има малък бонус).
+DEFAULT_TOPUPS = [
+    {"id": "topup5", "name": "5 €", "amount_cents": 500, "credit_cents": 500},
+    {"id": "topup10", "name": "10 €", "amount_cents": 1000, "credit_cents": 1050, "recommended": True},
+    {"id": "topup20", "name": "20 €", "amount_cents": 2000, "credit_cents": 2200},
 ]
+TOPUP_KEYS = {"id", "amount_cents", "credit_cents"}
 
 
 def _int_env(name: str, default: int) -> int:
     try:
-        return int(os.getenv(name, str(default)))
+        return max(0, int(os.getenv(name, str(default))))
     except ValueError:
         return default
 
 
-def packages() -> list:
-    """Пакетите могат да се сменят с COIN_PACKAGES (JSON) в Render, без нов код."""
-    raw = os.getenv("COIN_PACKAGES")
+def _valid_topups(items) -> bool:
+    return (isinstance(items, list) and bool(items)
+            and all(isinstance(i, dict) and TOPUP_KEYS <= set(i) and int(i["amount_cents"]) > 0 and int(i["credit_cents"]) > 0
+                    for i in items))
+
+
+def topups() -> list:
+    """Пакетите могат да се сменят с TOPUP_PACKAGES (JSON) в Render, без нов код."""
+    raw = os.getenv("TOPUP_PACKAGES")
     if raw:
         try:
             items = json.loads(raw)
-            if isinstance(items, list) and all({"id", "coins", "amount_cents"} <= set(i) for i in items):
+            if _valid_topups(items):
                 return items
-        except ValueError:
-            print("⚠️ COIN_PACKAGES не е валиден JSON; използват се пакетите по подразбиране")
-    return DEFAULT_PACKAGES
+        except (ValueError, TypeError, KeyError):
+            pass
+        print("⚠️ TOPUP_PACKAGES не е валиден JSON; използват се пакетите по подразбиране")
+    return DEFAULT_TOPUPS
 
 
 def pricing_variant(user_id: Optional[int]) -> Optional[str]:
@@ -64,86 +81,143 @@ def pricing_variant(user_id: Optional[int]) -> Optional[str]:
     return names[user_id % len(names)] if names else None
 
 
-def packages_for(user_id: Optional[int]) -> list:
+def topups_for(user_id: Optional[int]) -> list:
     variant = pricing_variant(user_id)
     if variant:
-        items = json.loads(os.environ["PRICING_EXPERIMENT"])[variant]
-        if all({"id", "coins", "amount_cents"} <= set(i) for i in items):
-            return items
-    return packages()
+        try:
+            items = json.loads(os.environ["PRICING_EXPERIMENT"])[variant]
+            if _valid_topups(items):
+                return items
+        except (ValueError, TypeError, KeyError):
+            pass
+    return topups()
 
 
-def find_package(package_id: str, user_id: Optional[int] = None) -> Optional[dict]:
-    return next((p for p in packages_for(user_id) if p["id"] == package_id), None)
+def find_topup(package_id: str, user_id: Optional[int] = None) -> Optional[dict]:
+    return next((p for p in topups_for(user_id) if p["id"] == package_id), None)
 
 
-def costs() -> dict:
+def prices() -> dict:
+    """Цените на услугите в евроценти. Сменят се от Render без нов код (PRICE_*_CENTS)."""
     return {
-        "analysis": _int_env("COST_ANALYSIS", 8),
-        "partner_extra": _int_env("COST_PARTNER_EXTRA", 4),
-        "forecast_month": _int_env("COST_FORECAST_MONTH", 5),
-        "signup_bonus": _int_env("SIGNUP_BONUS_COINS", 10),
+        "basic_analysis": _int_env("PRICE_BASIC_ANALYSIS_CENTS", 160),       # анализ за един човек (натален или за дата)
+        "pair_analysis": _int_env("PRICE_PAIR_ANALYSIS_CENTS", 180),         # анализ за двама (премиум)
+        "forecast_month": _int_env("PRICE_FORECAST_MONTH_CENTS", 75),        # един месец от прогноза за период (премиум)
+        "forecast_partner_extra": _int_env("PRICE_FORECAST_PARTNER_CENTS", 60),   # надбавка за двама при прогноза (веднъж)
     }
+
+
+def signup_gift_cents() -> int:
+    """Подаръчен кредит при регистрация. Важи само за основните анализи."""
+    return _int_env("SIGNUP_GIFT_CENTS", 500)
 
 
 def payments_enabled() -> bool:
     return bool(os.getenv("STRIPE_SECRET_KEY") and os.getenv("STRIPE_WEBHOOK_SECRET"))
 
 
-def coins_enforced() -> bool:
+def balance_enforced() -> bool:
     """
-    Дали анализите изразходват монети. По подразбиране: само когато плащанията
-    са включени, за да не остане никой без начин да си купи монети.
-    COINS_ENFORCED=1/0 го задава изрично.
+    Дали услугите се плащат от баланса. По подразбиране: само когато плащанията са включени, за да не остане никой без
+    начин да зареди баланс (дотогава всичко е безплатно и нищо не е заключено). BALANCE_ENFORCED=1/0 го задава изрично;
+    старото име COINS_ENFORCED още се чете.
     """
-    explicit = os.getenv("COINS_ENFORCED")
+    explicit = os.getenv("BALANCE_ENFORCED") or os.getenv("COINS_ENFORCED")
     if explicit in ("0", "1"):
         return explicit == "1"
     return payments_enabled()
 
 
-def analysis_cost(has_partner: bool = False) -> int:
-    c = costs()
-    return c["analysis"] + (c["partner_extra"] if has_partner else 0)
+def format_eur(cents: int) -> str:
+    """160 -> "1,60 €"."""
+    return f"{cents / 100:.2f}".replace(".", ",") + " €"
 
 
-def forecast_cost(months: int, has_partner: bool = False) -> int:
-    c = costs()
-    return max(1, months) * c["forecast_month"] + (c["partner_extra"] if has_partner else 0)
+@dataclass(frozen=True)
+class Quote:
+    """Цената на една услуга: сума в евроценти и ниво (basic | premium)."""
+    cents: int
+    tier: str
 
 
-def require_balance(user: User, cost: int):
-    if coins_enforced() and (user.coins or 0) < cost:
-        raise HTTPException(
-            status_code=402,
-            detail=f"Нямате достатъчно монети за този анализ (нужни: {cost}, налични: {user.coins or 0}).",
-        )
+def analysis_quote(has_partner: bool = False) -> Quote:
+    p = prices()
+    return Quote(p["pair_analysis"], PREMIUM) if has_partner else Quote(p["basic_analysis"], BASIC)
 
 
-def apply_transaction(db: Session, user_id: int, delta: int, reason: str,
+def forecast_quote(months: int, has_partner: bool = False) -> Quote:
+    p = prices()
+    return Quote(max(1, months) * p["forecast_month"] + (p["forecast_partner_extra"] if has_partner else 0), PREMIUM)
+
+
+def balance_of(user: User) -> Tuple[int, int]:
+    """(внесени средства, подаръчен кредит) в евроценти."""
+    return int(user.paid_cents or 0), int(user.gift_cents or 0)
+
+
+def balance_payload(user: User) -> dict:
+    paid, gift = balance_of(user)
+    return {"balance_cents": paid + gift, "paid_cents": paid, "gift_cents": gift}
+
+
+def available_cents(paid: int, gift: int, tier: str) -> int:
+    """Колко може да се похарчи за услуга от даденото ниво: основните ползват и подаръка, премиум само внесените."""
+    return paid + gift if tier == BASIC else paid
+
+
+def split_charge(paid: int, gift: int, cents: int, tier: str) -> Optional[Tuple[int, int]]:
+    """(от внесени средства, от подарък) за сума cents, или None при недостиг. Основните първо ползват подаръка."""
+    if cents > available_cents(paid, gift, tier):
+        return None
+    from_gift = min(gift, cents) if tier == BASIC else 0
+    return cents - from_gift, from_gift
+
+
+def insufficient_message(user: User, quote: Quote) -> str:
+    paid, gift = balance_of(user)
+    if quote.tier == PREMIUM:
+        return (f"Премиум услугите се плащат с внесени средства. Нужни са {format_eur(quote.cents)}, внесени са "
+                f"{format_eur(paid)}. Подаръчният кредит важи само за основните анализи. Заредете баланса си.")
+    return (f"Нямате достатъчно средства за този анализ (нужни: {format_eur(quote.cents)}, налични: "
+            f"{format_eur(paid + gift)}). Заредете баланса си.")
+
+
+def require_balance(user: User, quote: Quote):
+    if not balance_enforced():
+        return
+    paid, gift = balance_of(user)
+    if quote.cents > available_cents(paid, gift, quote.tier):
+        raise HTTPException(status_code=402, detail=insufficient_message(user, quote))
+
+
+def apply_transaction(db: Session, user_id: int, reason: str, *, paid: int = 0, gift: int = 0,
                       ref: Optional[str] = None, description: Optional[str] = None,
                       allow_negative: bool = False) -> Optional[CoinTransaction]:
     """
-    Променя баланса и записва реда в регистъра атомарно (в текущата транзакция,
-    без commit). Връща None, ако ref вече е записан (идемпотентност) или ако
-    дебитът би направил баланса отрицателен. При рядкото състезание за един и
-    същ ref сесията се връща назад (rollback).
+    Променя двата дяла на баланса и записва реда в регистъра атомарно (в текущата транзакция, без commit).
+    paid и gift са промените в евроценти (с минус при харчене). Връща None, ако ref вече е записан (идемпотентност) или
+    ако дебитът би направил някой от двата дяла отрицателен. При рядкото състезание за един и същ ref сесията се връща
+    назад (rollback).
     """
     if ref:
         exists = db.query(CoinTransaction.id).filter(CoinTransaction.ref == ref).first()
         if exists:
             return None
 
-    stmt = update(User).where(User.id == user_id).values(coins=User.coins + delta)
-    if delta < 0 and not allow_negative:
-        stmt = stmt.where(User.coins + delta >= 0)
+    stmt = update(User).where(User.id == user_id).values(
+        paid_cents=User.paid_cents + paid, gift_cents=User.gift_cents + gift)
+    if not allow_negative:
+        if paid < 0:
+            stmt = stmt.where(User.paid_cents + paid >= 0)
+        if gift < 0:
+            stmt = stmt.where(User.gift_cents + gift >= 0)
     result = db.execute(stmt)
     if result.rowcount != 1:
         return None
 
-    balance = db.query(User.coins).filter(User.id == user_id).scalar()
-    tx = CoinTransaction(user_id=user_id, delta=delta, balance_after=balance, reason=reason,
-                         ref=ref, description=(description or "")[:200] or None,
+    now_paid, now_gift = db.query(User.paid_cents, User.gift_cents).filter(User.id == user_id).one()
+    tx = CoinTransaction(user_id=user_id, delta=paid + gift, delta_gift=gift, balance_after=now_paid + now_gift,
+                         gift_after=now_gift, reason=reason, ref=ref, description=(description or "")[:200] or None,
                          created_at=datetime.utcnow())
     db.add(tx)
     try:
@@ -156,15 +230,36 @@ def apply_transaction(db: Session, user_id: int, delta: int, reason: str,
     # Обектите в сесията да отразят новия баланс
     user = db.get(User, user_id)
     if user is not None:
-        db.refresh(user, attribute_names=["coins"])
+        db.refresh(user, attribute_names=["paid_cents", "gift_cents"])
     return tx
 
 
-def charge_for_report(db: Session, user: User, report, cost: int, description: str) -> int:
-    """Дебит след успешен анализ. Връща реално изразходваните монети."""
-    if not coins_enforced() or cost <= 0:
+def charge(db: Session, user_id: int, quote: Quote, reason: str, ref: str, description: str) -> Optional[CoinTransaction]:
+    """
+    Взема цената от баланса по правилата за нивото: основните първо от подаръка, премиум само от внесените средства.
+    Връща реда от регистъра или None (недостиг или вече взето). При състезание между две заявки чете наново веднъж.
+    """
+    for _ in range(2):
+        row = db.query(User.paid_cents, User.gift_cents).filter(User.id == user_id).first()
+        if row is None:
+            return None
+        split = split_charge(int(row[0] or 0), int(row[1] or 0), quote.cents, quote.tier)
+        if split is None:
+            return None
+        from_paid, from_gift = split
+        tx = apply_transaction(db, user_id, reason, paid=-from_paid, gift=-from_gift, ref=ref, description=description)
+        if tx is not None:
+            return tx
+        if db.query(CoinTransaction.id).filter(CoinTransaction.ref == ref).first():
+            return None                                 # вече е взето за този отчет
+    return None
+
+
+def charge_for_report(db: Session, user: User, report, quote: Quote, description: str) -> int:
+    """Дебит след успешен анализ. Връща реално взетата сума в евроценти."""
+    if not balance_enforced() or quote.cents <= 0:
         return 0
-    tx = apply_transaction(db, user.id, -cost, "analysis", ref=f"report:{report.id}", description=description)
-    charged = cost if tx else 0
-    report.coins = charged
+    tx = charge(db, user.id, quote, "analysis", f"report:{report.id}", description)
+    charged = quote.cents if tx else 0
+    report.cost_cents = charged
     return charged

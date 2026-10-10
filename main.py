@@ -21,6 +21,7 @@ from ai_interpreter import AIInterpreter, get_interpreter
 from scanner import TransitScanner
 import period_report
 import text_guard
+import limits
 from limits import forecast_period_error
 from aspects_engine import calculate_natal_aspects
 from docx_generator import DOCXGenerator
@@ -233,8 +234,10 @@ class InterpretationResponse(BaseModel):
     natal_aspects: Optional[List[Dict]] = None
     partner_natal_aspects: Optional[List[Dict]] = None
     report_id: Optional[int] = None
-    coins_charged: int = 0
-    balance: Optional[int] = None
+    charged_cents: int = 0                 # колко е взето от баланса за този анализ (евроценти)
+    balance_cents: Optional[int] = None    # балансът след анализа: общо, внесени средства и подаръчен кредит
+    paid_cents: Optional[int] = None
+    gift_cents: Optional[int] = None
     crisis: bool = False
 
 
@@ -404,9 +407,9 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Няма събития за анализиране в избрания период'}, ensure_ascii=False)}\n\n"
                 return
 
-            cost = billing.forecast_cost(len(sorted_months), bool(partner_chart_data))
+            quote = billing.forecast_quote(len(sorted_months), bool(partner_chart_data))
             try:
-                billing.require_balance(current_user, cost)
+                billing.require_balance(current_user, quote)
             except HTTPException as e:
                 yield f"data: {json.dumps({'type': 'error', 'code': 402, 'message': e.detail}, ensure_ascii=False)}\n\n"
                 return
@@ -490,8 +493,8 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
 
             # Запазване в историята (собствена сесия: генераторът живее след края на зависимостите)
             report_id = None
-            coins_charged = 0
-            balance = None
+            charged_cents = 0
+            balance: Dict = {}
             db = SessionLocal()
             try:
                 report = data_api.save_report(
@@ -503,15 +506,15 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                                                 is_dynamic=True, question=request.question),
                     params={**_report_params(request), "months": len(sorted_months), "memory_used": memory_used},
                 )
-                coins_charged = billing.charge_for_report(db, db.get(User, current_user.id), report, cost,
+                charged_cents = billing.charge_for_report(db, db.get(User, current_user.id), report, quote,
                                                           description=report.label)
                 db.commit()
                 report_id = report.id
-                balance = db.get(User, current_user.id).coins or 0
+                balance = billing.balance_payload(db.get(User, current_user.id))
                 is_first = db.query(data_api.Report.id).filter(data_api.Report.user_id == current_user.id).count() == 1
                 events.track(db, "analysis_completed", current_user.id,
                              {"type": report.report_type, "dynamic": True, "first": is_first,
-                              "months": len(sorted_months), "coins": coins_charged})
+                              "months": len(sorted_months), "cents": charged_cents})
                 if flagged:
                     events.track(db, "ai_output_flagged", current_user.id, {"flags": ",".join(sorted(set(flagged)))})
                 _track_text_checks(db, current_user.id, report.report_type, final.get("checks"))
@@ -522,7 +525,7 @@ async def interpret_chart_stream(request: ChartRequest, current_user: User = Dep
                 db.close()
 
             # Send completion event
-            yield f"data: {json.dumps({'type': 'complete', 'report_id': report_id, 'coins_charged': coins_charged, 'balance': balance}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'report_id': report_id, 'charged_cents': charged_cents, **balance}, ensure_ascii=False)}\n\n"
             
         except ValueError as e:
             error_message = f"Невалидни входни данни: {str(e)}"
@@ -560,9 +563,14 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
     - AI интерпретация като текст
     """
     has_partner = bool(request.partner_date and request.partner_time and request.partner_lat is not None and request.partner_lon is not None)
-    cost = billing.analysis_cost(has_partner)
+    # Цената и нивото (основно или премиум) се определят от сървъра: анализ за двама и прогноза за период са премиум
+    if request.is_dynamic:
+        months = limits.period_months(request.target_date or datetime.now().strftime("%Y-%m-%d"), request.end_date or "")
+        quote = billing.forecast_quote(months or 1, has_partner)      # невалиден период: 400 идва по-долу
+    else:
+        quote = billing.analysis_quote(has_partner)
     if not safety.detect_crisis(request.question):
-        billing.require_balance(current_user, cost)
+        billing.require_balance(current_user, quote)
     text_checks: List[Dict] = []        # описания на проверката на текста (Фаза 10), за телеметрията
 
     try:
@@ -803,14 +811,14 @@ async def interpret_chart(request: ChartRequest, current_user: User = Depends(re
                                         question=request.question),
             params={**_report_params(request), "memory_used": memory_used},
         )
-        response_data["coins_charged"] = billing.charge_for_report(
-            db, current_user, report, cost, description=report.label)
+        response_data["charged_cents"] = billing.charge_for_report(
+            db, current_user, report, quote, description=report.label)
         db.commit()
         response_data["report_id"] = report.id
-        response_data["balance"] = current_user.coins or 0
+        response_data.update(billing.balance_payload(current_user))
         events.track(db, "analysis_completed", current_user.id,
                      {"type": report.report_type, "dynamic": False, "first": is_first,
-                      "coins": response_data["coins_charged"]})
+                      "cents": response_data["charged_cents"]})
         _track_text_checks(db, current_user.id, report.report_type, text_checks)
 
         return InterpretationResponse(**response_data)
@@ -929,16 +937,17 @@ async def register(user_data: UserRegister, http_request: Request, background_ta
         email=email,
         full_name=full_name,
         hashed_password=hash_password(user_data.password),
-        coins=0,
+        paid_cents=0,
+        gift_cents=0,
         terms_version=account_api.TERMS_VERSION,
         terms_accepted_at=datetime.utcnow(),
     )
     db.add(new_user)
     db.flush()
-    bonus = billing.costs()["signup_bonus"]
-    if bonus > 0:
-        billing.apply_transaction(db, new_user.id, bonus, "signup_bonus", ref=f"signup:{new_user.id}",
-                                  description="Бонус при регистрация")
+    gift = billing.signup_gift_cents()
+    if gift > 0:
+        billing.apply_transaction(db, new_user.id, "signup_gift", gift=gift, ref=f"signup:{new_user.id}",
+                                  description="Подарък при регистрация (за основните анализи)")
     db.commit()
     db.refresh(new_user)
     account_api.queue_verification(background_tasks, new_user)

@@ -33,7 +33,7 @@ from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import (APPLYING_ORB, ASPECTS, NATAL_TARGETS, SEPARATING_ORB, TRANSIT_PLANETS,  # noqa: E402
                      TransitScanner, utc_to_jd)
-from testenv import CHART, register_and_login  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "phase9_control")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)
@@ -648,10 +648,11 @@ class EndpointTest(unittest.TestCase):
         self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n<p>Преглед</p>"))
         self.assertLess(content.index("Общ преглед"), content.index("Октомври 2026"))
 
-    @mock.patch.dict(os.environ, {"COINS_ENFORCED": "1"})
+    @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
     def test_failed_month_means_no_report_and_no_charge(self):
         h = register_and_login(self.client, "p9-month-fail@test.bg")
-        before = self.client.get("/me", headers=h).json()["coins"]
+        give_deposit("p9-month-fail@test.bg", 1000)                                # прогнозата е премиум: плаща се с внесени средства
+        before = self.client.get("/me", headers=h).json()["balance_cents"]
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
@@ -663,7 +664,7 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(broken.await_count, 2)                                    # опит и един повторен опит
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
         me = self.client.get("/me", headers=h).json()
-        self.assertEqual(me["coins"], before)
+        self.assertEqual(me["balance_cents"], before)
         db = SessionLocal()
         try:
             failed = db.query(Event).filter(Event.name == "analysis_failed", Event.user_id == me["id"]).all()
@@ -672,10 +673,11 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(len(failed), 1)
         self.assertEqual(failed[0].props["stage"], "month:2026-10")
 
-    @mock.patch.dict(os.environ, {"COINS_ENFORCED": "1"})
+    @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
     def test_failed_overview_means_no_report_and_no_charge(self):
         h = register_and_login(self.client, "p9-overview-fail@test.bg")
-        before = self.client.get("/me", headers=h).json()["coins"]
+        give_deposit("p9-overview-fail@test.bg", 1000)
+        before = self.client.get("/me", headers=h).json()["balance_cents"]
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), self.month_ok(), \
                 mock.patch.object(main.ai_interpreter, "compose_period_overview", broken):
@@ -684,7 +686,7 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(steps[-1]["type"], "error")
         self.assertEqual(steps[-1]["message"], period_report.USER_MESSAGE)
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
-        self.assertEqual(self.client.get("/me", headers=h).json()["coins"], before)
+        self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], before)
 
     def test_plain_endpoint_returns_one_text_with_the_overview(self):
         h = register_and_login(self.client, "p9-plain@test.bg")

@@ -41,7 +41,9 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String)
-    coins = Column(Integer, default=10)  # Начален бонус
+    # Баланс в евроценти на два дяла (виж billing.py): внесени средства и подаръчен кредит
+    paid_cents = Column(Integer, nullable=False, default=0, server_default="0")
+    gift_cents = Column(Integer, nullable=False, default=0, server_default="0")
     email_verified = Column(Boolean, nullable=False, default=False, server_default="0")
     # Увеличава се при смяна на парола, за да спрат да важат старите токени
     token_version = Column(Integer, nullable=False, default=0, server_default="0")
@@ -92,7 +94,7 @@ class Report(Base):
     report_type = Column(String(30), nullable=False, default="general")
     label = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    coins = Column(Integer, nullable=False, default=0)
+    cost_cents = Column(Integer, nullable=False, default=0, server_default="0")   # колко е взето от баланса, в евроценти
     status = Column(String(20), nullable=False, default="completed")
     params = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
@@ -102,16 +104,20 @@ class Report(Base):
 
 class CoinTransaction(Base):
     """
-    Регистър на монетите. Всяка промяна на users.coins има ред тук;
-    сумата на delta винаги е равна на баланса. ref е уникален, за да не
-    се запише едно и също събитие (напр. повторен webhook) два пъти.
+    Регистър на баланса (името на таблицата е историческо: преди беше на монети). Всяка промяна на users.paid_cents
+    и users.gift_cents има ред тук. delta е общата промяна в евроценти, delta_gift е частта от нея в подаръчния кредит
+    (останалото е внесени средства); balance_after е общият баланс, gift_after е подаръчният дял след промяната.
+    Сумите на delta и delta_gift винаги са равни на баланса и на подаръчния дял. ref е уникален, за да не се запише
+    едно и също събитие (напр. повторен webhook) два пъти.
     """
     __tablename__ = "coin_transactions"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     delta = Column(Integer, nullable=False)
+    delta_gift = Column(Integer, nullable=False, default=0, server_default="0")
     balance_after = Column(Integer, nullable=False)
+    gift_after = Column(Integer, nullable=False, default=0, server_default="0")
     reason = Column(String(30), nullable=False)
     ref = Column(String(120), nullable=True, unique=True)
     description = Column(String(200), nullable=True)
@@ -119,13 +125,13 @@ class CoinTransaction(Base):
 
 
 class Purchase(Base):
-    """Покупка на монети през Stripe Checkout."""
+    """Зареждане на баланса през Stripe Checkout: amount_cents е платената сума, credit_cents е кредитът в баланса."""
     __tablename__ = "purchases"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     package_id = Column(String(40), nullable=False)
-    coins = Column(Integer, nullable=False)
+    credit_cents = Column(Integer, nullable=False)
     amount_cents = Column(Integer, nullable=False)
     currency = Column(String(3), nullable=False, default="eur")
     status = Column(String(20), nullable=False, default="pending")  # pending, paid, refunded, expired

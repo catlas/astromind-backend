@@ -219,14 +219,14 @@ def report_label(report_type: str, partner_name: Optional[str] = None, is_dynami
 
 
 def save_report(db: Session, user: User, *, content: str, report_type: str, profile_name: Optional[str],
-                label: str, coins: int = 0, params: Optional[dict] = None) -> Report:
+                label: str, cost_cents: int = 0, params: Optional[dict] = None) -> Report:
     r = Report(
         user_id=user.id,
         profile_name=(profile_name or "").strip()[:100] or None,
         report_type=report_type if report_type in REPORT_TYPES else "general",
         label=label[:200],
         content=(content or "")[:MAX_REPORT_CHARS],
-        coins=coins,
+        cost_cents=cost_cents,
         status="completed",
         params=params,
     )
@@ -238,7 +238,7 @@ def save_report(db: Session, user: User, *, content: str, report_type: str, prof
 def report_summary(r: Report) -> dict:
     return {
         "id": r.id, "type": r.report_type, "label": r.label, "profile": r.profile_name or "",
-        "coins": r.coins, "status": r.status,
+        "cost_cents": r.cost_cents, "status": r.status,
         "created_at": r.created_at.isoformat() if r.created_at else None,
     }
 
@@ -283,7 +283,7 @@ def import_reports(data: ReportsImport, current_user: User = Depends(get_current
         r = save_report(
             db, current_user, content=content, report_type=str(raw.get("type") or "general"),
             profile_name=str(raw.get("profile") or ""), label=str(raw.get("label") or "Анализ"),
-            coins=0, params={"imported": True},
+            cost_cents=0, params={"imported": True},
         )
         created = raw.get("created_at") or raw.get("date")
         try:
