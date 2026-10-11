@@ -23,6 +23,7 @@ import asyncio
 import hashlib
 import json
 import os
+import uuid
 import weakref
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -206,12 +207,18 @@ def create_job(db: Session, user: User, request: ChartRequest, key: Optional[str
 
     quote = generation.quote_for(request)
     billing.require_balance(user, quote)            # бърз отказ с обяснение, преди да броим заявката към лимита
-    enforce(f"ai-hour:{user.id}", AI_LIMIT_PER_HOUR, 3600, LIMIT_MESSAGE)
-    enforce(f"ai-day:{user.id}", AI_LIMIT_PER_DAY, 86400, LIMIT_MESSAGE)
+    # Всяка приета заявка държи свое място в часовия и дневния лимит (token): при неуспех се освобождава точно то
+    token = uuid.uuid4().hex
+    enforce(f"ai-hour:{user.id}", AI_LIMIT_PER_HOUR, 3600, LIMIT_MESSAGE, token)
+    try:
+        enforce(f"ai-day:{user.id}", AI_LIMIT_PER_DAY, 86400, LIMIT_MESSAGE, token)
+    except HTTPException:
+        limiter.release(f"ai-hour:{user.id}", token)
+        raise
 
     now = _now()
     job = Job(user_id=user.id, idempotency_key=key, kind=generation.kind_of(request), sku=quote.sku, status="queued",
-              stage="queued", request={**payload, "_hash": digest}, tier=quote.tier, quote_cents=quote.cents,
+              stage="queued", request={**payload, "_hash": digest, "_limit_token": token}, tier=quote.tier, quote_cents=quote.cents,
               events=[], event_count=0, created_at=now, lease_until=now + timedelta(seconds=LEASE_SECONDS))
     try:
         db.add(job)
@@ -230,10 +237,14 @@ def create_job(db: Session, user: User, request: ChartRequest, key: Optional[str
     except IntegrityError:
         # Две едновременни изпращания с един ключ: печели първото, второто получава същата задача
         db.rollback()
+        _refund_limit(user.id, token)
         existing = db.query(Job).filter(Job.user_id == user.id, Job.idempotency_key == key).first() if key else None
         if existing is None:
             raise
         return existing, "replay"
+    except BaseException:
+        _refund_limit(user.id, token)                  # недостиг на баланс или друга грешка преди задачата да е записана
+        raise
     return job, "created"
 
 
@@ -365,10 +376,11 @@ def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome")
     return True
 
 
-def _refund_limit(user_id: int) -> None:
-    """Неуспешен анализ (грешка на системата, отхвърлен от проверката, прекъсване) не се брои към лимита на заявките."""
-    limiter.refund(f"ai-hour:{user_id}")
-    limiter.refund(f"ai-day:{user_id}")
+def _refund_limit(user_id: int, token: Optional[str]) -> None:
+    """Неуспешен анализ (грешка на системата, отхвърлен от проверката, прекъсване) не се брои към лимита на заявките:
+    освобождава се точно мястото на тази задача (идемпотентно), не последното отбелязано."""
+    limiter.release(f"ai-hour:{user_id}", token)
+    limiter.release(f"ai-day:{user_id}", token)
 
 
 def _fail(job_id: int, failure: "generation.GenerationFailure") -> bool:
@@ -387,8 +399,9 @@ def _fail(job_id: int, failure: "generation.GenerationFailure") -> bool:
         _push(job, {"type": "error", "code": failure.code, "message": failure.message})
         user_id, props = job.user_id, _failure_props(job, failure)
         report_type = props["type"]
+        token = (job.request or {}).get("_limit_token")
     if failure.code != "invalid_input":
-        _refund_limit(user_id)
+        _refund_limit(user_id, token)
         _track("analysis_failed", user_id, props)
     _track_checks(user_id, report_type, failure.checks)
     return True
@@ -456,7 +469,7 @@ def recover_stale() -> List[int]:
     и сумата се връща. Връща номерата, които трябва да се пуснат наново.
     """
     relaunch: List[int] = []
-    failed: List[Tuple[int, dict]] = []
+    failed: List[Tuple[int, dict, Optional[str]]] = []
     with session_scope() as db:
         stale = db.query(Job).filter(Job.status.in_(ACTIVE), Job.lease_until < _now()).populate_existing().with_for_update().all()
         for job in stale:
@@ -470,7 +483,8 @@ def recover_stale() -> List[int]:
                 _release(db, job)
                 _push(job, {"type": "error", "code": "interrupted", "message": INTERRUPTED_MESSAGE})
                 failed.append((job.user_id, {"type": (job.request or {}).get("report_type") or "general",
-                                             "dynamic": job.kind == "forecast", "stage": "interrupted", "sku": job.sku}))
+                                             "dynamic": job.kind == "forecast", "stage": "interrupted", "sku": job.sku},
+                               (job.request or {}).get("_limit_token")))
             else:
                 job.status = "queued"
                 job.stage = "queued"
@@ -478,8 +492,8 @@ def recover_stale() -> List[int]:
                 job.event_count = 0
                 job.lease_until = _now() + timedelta(seconds=LEASE_SECONDS)
                 relaunch.append(job.id)
-    for user_id, props in failed:
-        _refund_limit(user_id)
+    for user_id, props, token in failed:
+        _refund_limit(user_id, token)
         _track("analysis_failed", user_id, props)
     return relaunch
 

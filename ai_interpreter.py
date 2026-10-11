@@ -1551,6 +1551,7 @@ class AIInterpreter:
         # --- OLLAMA CLOUD ATTEMPT (Primary) ---
         if self.ollama_key and self.ollama_url:
             for attempt in range(1, max_retries + 1):
+                slot = self._reserve_call(system_prompt, user_prompt, max_tokens)      # BudgetExceeded излиза навън
                 try:
                     print(f"🔄 Ollama опит {attempt}/{max_retries}...")
                     ollama_data = {
@@ -1584,7 +1585,8 @@ class AIInterpreter:
                                 print(f"✅ Ollama успешно отговори (опит {attempt}, finish_reason={finish_reason}, usage={resp_json.get('usage')})")
                                 if finish_reason == "length":
                                     print(f"⚠️ Отговорът е отрязан от max_tokens={max_tokens} — вдигнете AI_MAX_OUTPUT_TOKENS.")
-                                self._record_usage(resp_json, system_prompt + user_prompt, content)
+                                self._record_usage(resp_json, system_prompt + user_prompt, content, slot)
+                                slot = None
                                 return self._finish_text(content.strip(), add_context)
                             choice = resp_json.get("choices", [{}])[0]
                             print(
@@ -1611,8 +1613,11 @@ class AIInterpreter:
                         print("⚠️ Всички опити изчерпани. Fallback към Together...")
                         import traceback
                         traceback.print_exc()
+                finally:
+                    ai_budget.release(slot)                  # без платен отговор резервацията се освобождава (при успех slot е None)
         
         # --- TOGETHER.AI FALLBACK ---
+        slot = self._reserve_call(system_prompt, user_prompt, max_tokens)
         try:
             together_data = {
                 "model": self.together_model,
@@ -1643,13 +1648,16 @@ class AIInterpreter:
                 content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
                 
                 if content and content.strip():
-                    self._record_usage(resp_json, system_prompt + user_prompt, content)
+                    self._record_usage(resp_json, system_prompt + user_prompt, content, slot)
+                    slot = None
                     return self._finish_text(content.strip(), add_context)
                 
                 raise RuntimeError("Together.ai върна празен отговор")
                 
         except Exception as e:
             raise RuntimeError(f"Грешка при комуникация с AI провайдърите: {e}")
+        finally:
+            ai_budget.release(slot)
     
     @staticmethod
     def _finish_text(text: str, analysis: bool) -> str:
@@ -1657,12 +1665,17 @@ class AIInterpreter:
         return bg_text.bulgarianize(text) if analysis else text
 
     @staticmethod
-    def _record_usage(resp_json: Dict, prompt_text: str, content: str) -> None:
-        """Записва токените на отговора за бюджета; без usage от доставчика се оценяват по дължината на текста."""
+    def _reserve_call(system_prompt: str, user_prompt: str, max_tokens: int):
+        """Резервира най-високия възможен разход на една заявка към доставчика (хвърля ai_budget.BudgetExceeded)."""
+        return ai_budget.reserve(ai_budget.estimate_tokens(system_prompt + user_prompt), int(max_tokens or 0))
+
+    @staticmethod
+    def _record_usage(resp_json: Dict, prompt_text: str, content: str, slot=None) -> None:
+        """Записва токените на отговора за бюджета (и освобождава резервацията); без usage от доставчика се оценяват по дължината."""
         usage = resp_json.get("usage") or {}
         prompt = usage.get("prompt_tokens")
         completion = usage.get("completion_tokens")
-        ai_budget.record(prompt if isinstance(prompt, int) else ai_budget.estimate_tokens(prompt_text),
+        ai_budget.settle(slot, prompt if isinstance(prompt, int) else ai_budget.estimate_tokens(prompt_text),
                          completion if isinstance(completion, int) else ai_budget.estimate_tokens(content))
 
     @staticmethod

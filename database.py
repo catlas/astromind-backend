@@ -135,6 +135,17 @@ class AIUsage(Base):
     cost_millicents = Column(BigInteger, nullable=False, default=0, server_default="0")
 
 
+class AIReservation(Base):
+    """Резервиран най-висок възможен разход на една AI заявка до нейния край (ai_budget.reserve): паралелни заявки не
+    минават заедно над бюджета. Резервация, която не е освободена (срив), изтича сама след няколко минути."""
+    __tablename__ = "ai_reservations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    day = Column(String(10), nullable=False, index=True)
+    millicents = Column(BigInteger, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Job(Base):
     """
     Задача за генериране на анализ (Фаза 11). Генерацията върви на сървъра независимо от браузъра: клиентът създава
@@ -208,13 +219,16 @@ class MemoryNote(Base):
     """
     Бележка, която потребителят иска AI да знае (напр. „работя като учител“).
     Пише се само от потребителя, винаги е видима и може да се изтрие.
-    profile_name = None означава, че важи за всички анализи.
+    Без profile_name и без profile_id бележката е на собственика („за мен“); с profile_id е за този профил (връзката е по номер,
+    не по име: двама различни „Иван“ и преименуване не я губят). Бележка само с име, без profile_id, не се ползва, докато
+    собственикът не я свърже с профил.
     """
     __tablename__ = "memory_notes"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    profile_name = Column(String(100), nullable=True)
+    profile_name = Column(String(100), nullable=True)               # името е само за показване (копие), връзката е profile_id
+    profile_id = Column(Integer, ForeignKey("profiles.id", ondelete="CASCADE"), nullable=True, index=True)
     text = Column(String(500), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

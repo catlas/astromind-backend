@@ -30,9 +30,16 @@ class MemoryTest(unittest.TestCase):
                                                 "is_primary": True}, headers=headers)
         self.assertEqual(r.status_code, 200, r.text)
 
+    def make_profile(self, headers, name, relation="friend"):
+        r = self.client.post("/profiles", json={"name": name, "relation": relation, "birth_date": "1985-07-12",
+                                                "birth_time": "18:45", "lat": 48.2082, "lon": 16.3738}, headers=headers)
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["id"]
+
     def test_notes_crud_and_preview(self):
         h = register_and_login(self.client, "mem@test.bg")
         self.make_owner(h)
+        self.make_profile(h, "Мария", "relative")                                       # бележките за човек са по профил
         self.assertEqual(self.client.get("/memory", headers=h).json(), {"enabled": True, "notes": [], "preview": ""})
         a = self.client.post("/memory", json={"text": "Работя като  учител."}, headers=h).json()
         self.assertEqual(a["text"], "Работя като учител.")
@@ -86,8 +93,9 @@ class MemoryTest(unittest.TestCase):
     def test_owner_notes_do_not_leak_into_other_people(self):
         h = register_and_login(self.client, "mem-owner@test.bg")
         self.make_owner(h)
+        ivan = self.make_profile(h, "Иван")
         self.client.post("/memory", json={"text": "Работя като учител."}, headers=h)                    # на собственика
-        self.client.post("/memory", json={"text": "Иван е мой колега.", "profile_name": "Иван"}, headers=h)
+        self.client.post("/memory", json={"text": "Иван е мой колега.", "profile_id": ivan}, headers=h)
         seen = []
 
         async def fake_interpret(**kwargs):
@@ -103,12 +111,14 @@ class MemoryTest(unittest.TestCase):
             owner_only = ask(name="Аз")
             self.assertIn("учител", owner_only)
             self.assertNotIn("колега", owner_only)
-            friend = ask(name="Иван")
+            friend = ask(name="Иван", profile_id=ivan)
             self.assertIn("колега", friend)
             self.assertNotIn("учител", friend)                                                    # без личните факти на собственика
+            manual_namesake = ask(name="Иван")                                                    # друг човек със същото име, без профил
+            self.assertEqual(manual_namesake, "")
             unnamed = ask()
             self.assertEqual(unnamed, "")                                                         # ръчно въведен човек без име
-            pair = ask(name="Аз", partner_name="Иван", partner_date="1985-07-12", partner_time="18:45",
+            pair = ask(name="Аз", partner_name="Иван", partner_profile_id=ivan, partner_date="1985-07-12", partner_time="18:45",
                        partner_lat=48.2082, partner_lon=16.3738)
             self.assertIn("За Аз:", pair)
             self.assertIn("За Иван:", pair)

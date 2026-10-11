@@ -7,6 +7,7 @@ Render пуска бекенда като една инстанция, зато�
 import threading
 import time
 from collections import defaultdict, deque
+from typing import Optional
 
 from fastapi import HTTPException, Request, status
 
@@ -16,27 +17,35 @@ class RateLimiter:
         self._hits = defaultdict(deque)
         self._lock = threading.Lock()
 
-    def hit(self, key: str, limit: int, window_seconds: int) -> int:
+    def hit(self, key: str, limit: int, window_seconds: int, token: Optional[str] = None) -> int:
         """
         Отбелязва заявка за key. Връща 0, ако е позволена, иначе броя
         секунди, след които ще бъде позволена отново.
+        token (по избор) свързва заявката с резервация: release(key, token) освобождава точно нея.
         """
         now = time.monotonic()
         with self._lock:
             hits = self._hits[key]
-            while hits and hits[0] <= now - window_seconds:
+            while hits and hits[0][0] <= now - window_seconds:
                 hits.popleft()
             if len(hits) >= limit:
-                return max(1, int(hits[0] + window_seconds - now) + 1)
-            hits.append(now)
+                return max(1, int(hits[0][0] + window_seconds - now) + 1)
+            hits.append((now, token))
             return 0
 
-    def refund(self, key: str) -> None:
-        """Връща последната отбелязана заявка за key (неуспешен анализ не се брои към лимита)."""
+    def release(self, key: str, token: Optional[str]) -> bool:
+        """Освобождава точно заявката с този token (идемпотентно). Връща True, ако е имало какво да се освободи."""
+        if not token:
+            return False
         with self._lock:
             hits = self._hits.get(key)
-            if hits:
-                hits.pop()
+            if not hits:
+                return False
+            for index, (_, owner) in enumerate(hits):
+                if owner == token:
+                    del hits[index]
+                    return True
+            return False
 
     def peek(self, key: str, limit: int, window_seconds: int) -> tuple:
         """
@@ -48,12 +57,12 @@ class RateLimiter:
             hits = self._hits.get(key)
             if not hits:
                 return limit, 0
-            while hits and hits[0] <= now - window_seconds:
+            while hits and hits[0][0] <= now - window_seconds:
                 hits.popleft()
             remaining = max(0, limit - len(hits))
             if remaining > 0:
                 return remaining, 0
-            return 0, max(1, int(hits[0] + window_seconds - now) + 1)
+            return 0, max(1, int(hits[0][0] + window_seconds - now) + 1)
 
     def reset(self):
         with self._lock:
@@ -71,8 +80,8 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def enforce(key: str, limit: int, window_seconds: int, message: str):
-    retry_after = limiter.hit(key, limit, window_seconds)
+def enforce(key: str, limit: int, window_seconds: int, message: str, token: Optional[str] = None):
+    retry_after = limiter.hit(key, limit, window_seconds, token)
     if retry_after:
         minutes = (retry_after + 59) // 60
         raise HTTPException(

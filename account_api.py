@@ -136,6 +136,14 @@ def change_password(data: ChangePassword, request: Request,
     return {"message": "Паролата е сменена", "access_token": create_user_token(current_user)}
 
 
+@router.post("/logout-all")
+def logout_all(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Реален изход от всички устройства: всички издадени токени (и този) спират да важат; нов вход издава нов токен."""
+    current_user.token_version = (current_user.token_version or 0) + 1
+    db.commit()
+    return {"message": "Излязохте от всички устройства"}
+
+
 @router.delete("/me")
 def delete_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user_id = current_user.id

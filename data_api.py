@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 import bg_text
 import report_export
-from database import Profile, Report, User, get_db
+from database import MemoryNote, Profile, Report, User, get_db
 from deps import get_current_user
 from rate_limit import enforce
 
@@ -164,6 +164,7 @@ def update_profile(profile_id: int, data: ProfileIn,
         raise HTTPException(status_code=400, detail="Вече имате профил с това име")
     for k, v in fields.items():
         setattr(p, k, v)
+    db.query(MemoryNote).filter(MemoryNote.profile_id == p.id).update({"profile_name": p.name}, synchronize_session=False)   # името е само за показване
     if data.settings is not None:
         p.settings = data.settings
     if data.is_primary:
@@ -177,6 +178,7 @@ def update_profile(profile_id: int, data: ProfileIn,
 def delete_profile(profile_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     p = _get_owned_profile(db, current_user, profile_id)
     was_primary = p.is_primary
+    db.query(MemoryNote).filter(MemoryNote.profile_id == p.id).delete(synchronize_session=False)     # бележките за този човек (SQLite не налага CASCADE)
     db.delete(p)
     db.flush()
     if was_primary:

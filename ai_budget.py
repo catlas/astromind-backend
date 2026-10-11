@@ -7,15 +7,25 @@
 - AI_DAILY_BUDGET_CENTS / AI_MONTHLY_BUDGET_CENTS (евроценти, 0 = без таван) спират, когато оценката ги достигне.
 Спрените анализи не се таксуват: задачата не се създава. Цените са приблизителни и се нагласят през
 AI_PRICE_INPUT_CENTS_PER_MTOK и AI_PRICE_OUTPUT_CENTS_PER_MTOK (евроценти за милион токена).
+
+Резервация (Фаза 21): преди всяка заявка към доставчика се резервира най-високият възможен разход (токените на подканата и
+max_tokens на отговора). Резервациите на текущите заявки се броят към бюджета заедно с вече изразходеното, затова паралелни
+заявки не минават заедно над тавана. След отговора резервацията се заменя с реалния разход (settle), при грешка се освобождава
+(release). Всеки опит (първичен, резервен, поправка) е отделна заявка с отделна резервация. Резервацията е в базата, така че
+важи за всички процеси; необявена резервация изтича след RESERVATION_TTL_MINUTES. Редът на деня се заключва (FOR UPDATE), за да
+няма надбягване между процеси.
 """
 import os
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Dict, Optional
 
 from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 
-from database import AIUsage, SessionLocal
+from database import AIReservation, AIUsage, SessionLocal
+
+RESERVATION_TTL_MINUTES = 20
 
 STOPPED_MESSAGE = "Анализите са временно спрени по технически причини. Нищо не е таксувано. Опитайте отново по-късно."
 
@@ -80,6 +90,78 @@ def record(prompt_tokens: int, completion_tokens: int, now: Optional[datetime] =
         print(f"⚠️ ai_budget: записът на разхода не успя: {type(exc).__name__}: {exc}")
     finally:
         db.close()
+
+
+@dataclass
+class Reservation:
+    id: int
+    millicents: int
+
+
+def reserve(prompt_tokens: int, max_completion_tokens: int, now: Optional[datetime] = None) -> Optional[Reservation]:
+    """
+    Резервира най-високия възможен разход на една заявка или хвърля BudgetExceeded (аварийно спиране, дневен или месечен таван,
+    броейки и резервациите на другите текущи заявки). Връща None, когато няма таван (нищо за резервиране).
+    """
+    cfg = settings()
+    if cfg["emergency_stop"]:
+        raise BudgetExceeded("emergency")
+    if not cfg["daily_cents"] and not cfg["monthly_cents"]:
+        return None
+    moment = now or datetime.utcnow()
+    day, month = moment.strftime("%Y-%m-%d"), moment.strftime("%Y-%m")
+    amount = cost_millicents(int(prompt_tokens), int(max_completion_tokens), cfg)
+    db = SessionLocal()
+    try:
+        for _ in range(2):
+            if db.query(AIUsage).filter(AIUsage.day == day).first() is not None:
+                break
+            try:
+                db.add(AIUsage(day=day, calls=0, prompt_tokens=0, completion_tokens=0, cost_millicents=0))
+                db.flush()
+            except IntegrityError:
+                db.rollback()              # друг процес го е създал междувременно
+        row = db.query(AIUsage).filter(AIUsage.day == day).with_for_update().one()      # сериализира резервациите на деня
+        db.query(AIReservation).filter(AIReservation.created_at < moment - timedelta(minutes=RESERVATION_TTL_MINUTES)).delete()
+        active = db.query(AIReservation).all()
+        active_today = sum(r.millicents for r in active if r.day == day)
+        active_total = sum(r.millicents for r in active)
+        month_cost = db.query(func.coalesce(func.sum(AIUsage.cost_millicents), 0)).filter(AIUsage.day.like(f"{month}-%")).scalar()
+        # Заявка, чийто най-висок възможен разход не се побира в оставащото, не тръгва: паралелните заявки не минават над тавана
+        if cfg["daily_cents"] and int(row.cost_millicents or 0) + active_today + amount > cfg["daily_cents"] * 1000:
+            raise BudgetExceeded("daily")
+        if cfg["monthly_cents"] and int(month_cost or 0) + active_total + amount > cfg["monthly_cents"] * 1000:
+            raise BudgetExceeded("monthly")
+        reservation = AIReservation(day=day, millicents=amount, created_at=moment)
+        db.add(reservation)
+        db.commit()
+        return Reservation(id=reservation.id, millicents=amount)
+    except BudgetExceeded:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def release(reservation: Optional[Reservation]) -> None:
+    """Освобождава резервацията (заявката не е стигнала до платен отговор). Идемпотентно; без резервация не прави нищо."""
+    if reservation is None:
+        return
+    db = SessionLocal()
+    try:
+        db.query(AIReservation).filter(AIReservation.id == reservation.id).delete()
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"⚠️ ai_budget: освобождаването на резервацията не успя: {type(exc).__name__}: {exc}")
+    finally:
+        db.close()
+
+
+def settle(reservation: Optional[Reservation], prompt_tokens: int, completion_tokens: int) -> None:
+    """Заменя резервацията с реалния разход на отговора."""
+    record(prompt_tokens, completion_tokens)
+    release(reservation)
 
 
 def spent(now: Optional[datetime] = None) -> Dict:

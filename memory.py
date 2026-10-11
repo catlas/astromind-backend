@@ -15,7 +15,7 @@
 import contextvars
 from collections import OrderedDict
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -32,34 +32,71 @@ def owner_name(db: Session, user: User) -> Optional[str]:
     return profile.name if profile else None
 
 
-def notes_by_person(db: Session, user: User, names: List[str]) -> "OrderedDict[str, List[MemoryNote]]":
-    """Бележките, които важат за всеки от анализираните хора, по име."""
-    owner = owner_name(db, user)
+def primary_profile(db: Session, user: User) -> Optional[Profile]:
+    return db.query(Profile).filter(Profile.user_id == user.id, Profile.is_primary.is_(True)).first()
+
+
+def profiles_named(db: Session, user: User, name: str) -> List[Profile]:
+    """Профилите на собственика с това име (без значение от главни букви)."""
+    wanted = (name or "").strip().lower()
+    if not wanted:
+        return []
+    return [p for p in db.query(Profile).filter(Profile.user_id == user.id).all() if (p.name or "").strip().lower() == wanted]
+
+
+def unique_profile_id(db: Session, user: User, name: str) -> Optional[int]:
+    """Номерът на профила, ако името съвпада с точно един; иначе None (нищо не се присвоява автоматично)."""
+    rows = profiles_named(db, user, name)
+    return rows[0].id if len(rows) == 1 else None
+
+
+def notes_by_person(db: Session, user: User, people: List[Tuple[str, Optional[int]]]) -> "OrderedDict[str, List[MemoryNote]]":
+    """
+    Бележките, които важат за всеки от анализираните хора. people е [(име, profile_id или None)].
+    - Бележка на собственика („за мен“) важи за основния му профил (по номер) и за ръчно въведен човек със същото име.
+    - Бележка за профил важи само когато този профил (по номер) е в анализа. Ръчно въведен човек със същото име не я получава.
+    - Бележка само с име, без връзка с профил, не се ползва.
+    """
+    primary = primary_profile(db, user)
+    owned_ids = {pid for (pid,) in db.query(Profile.id).filter(Profile.user_id == user.id).all()}
     notes = db.query(MemoryNote).filter(MemoryNote.user_id == user.id).order_by(MemoryNote.id).all()
     groups: "OrderedDict[str, List[MemoryNote]]" = OrderedDict()
-    for name in names:
-        mine = [n for n in notes if (n.profile_name or "") == name]
-        if owner and name == owner:
-            mine = [n for n in notes if not n.profile_name] + mine
+    for name, pid in people:
+        pid = pid if pid in owned_ids else None
+        mine: List[MemoryNote] = []
+        is_owner = primary is not None and ((pid is not None and pid == primary.id) or (pid is None and name == primary.name))
+        if is_owner:
+            mine += [n for n in notes if not n.profile_name and n.profile_id is None]
+        if pid is not None:
+            mine += [n for n in notes if n.profile_id == pid]
         if mine:
             groups[name] = mine
     return groups
 
 
-def _clean_names(*names: Optional[str]) -> List[str]:
-    cleaned: List[str] = []
-    for raw in names:
+def _people(*pairs: Tuple[Optional[str], Optional[int]]) -> List[Tuple[str, Optional[int]]]:
+    """Хората на анализа без повторение (по номер на профил или, без номер, по име)."""
+    people: List[Tuple[str, Optional[int]]] = []
+    seen = set()
+    for raw, pid in pairs:
         name = (raw or "").strip()
-        if name and name not in cleaned:
-            cleaned.append(name)
-    return cleaned
+        key = ("id", pid) if pid else ("name", name)
+        if (name or pid) and key not in seen:
+            seen.add(key)
+            people.append((name, pid))
+    return people
 
 
-def build_context(db: Session, user: User, profile_name: Optional[str], partner_name: Optional[str] = None) -> str:
+def build_context(db: Session, user: User, profile_name: Optional[str], partner_name: Optional[str] = None,
+                  profile_id: Optional[int] = None, partner_profile_id: Optional[int] = None) -> str:
     """Точният текст, който ще види AI. Празен, ако паметта е изключена или няма бележки за тези хора."""
     if not user.memory_enabled:
         return ""
-    groups = notes_by_person(db, user, _clean_names(profile_name, partner_name))
+    people = _people((profile_name, profile_id), (partner_name, partner_profile_id))
+    # Името на избран профил идва от профила, ако анализът не е изпратил име
+    names = {p.id: p.name for p in db.query(Profile).filter(Profile.user_id == user.id).all()}
+    people = [((name or names.get(pid, "")), pid) for name, pid in people]
+    groups = notes_by_person(db, user, people)
     if not groups:
         return ""
     lines = [
@@ -73,13 +110,17 @@ def build_context(db: Session, user: User, profile_name: Optional[str], partner_
     return "\n".join(lines)
 
 
-def activate(db: Session, user: User, profile_name: Optional[str], partner_name: Optional[str] = None) -> bool:
+def activate(db: Session, user: User, profile_name: Optional[str], partner_name: Optional[str] = None,
+             profile_id: Optional[int] = None, partner_profile_id: Optional[int] = None) -> bool:
     """Задава контекста за текущата заявка. Връща дали има памет в анализа."""
-    ctx = build_context(db, user, profile_name, partner_name)
+    ctx = build_context(db, user, profile_name, partner_name, profile_id, partner_profile_id)
     current_context.set(ctx)
     return bool(ctx)
 
 
-def note_payload(n: MemoryNote) -> dict:
-    return {"id": n.id, "text": n.text, "profile_name": n.profile_name or "",
+def note_payload(n: MemoryNote, names: Optional[dict] = None) -> dict:
+    """Бележката за клиента. Името е само за показване: ако е свързана с профил, е текущото име на профила."""
+    shown = (names or {}).get(n.profile_id) if n.profile_id else None
+    return {"id": n.id, "text": n.text, "profile_id": n.profile_id, "profile_name": shown or n.profile_name or "",
+            "needs_profile": bool(n.profile_name and not n.profile_id),     # само име: не се ползва, докато не се свърже
             "updated_at": (n.updated_at or n.created_at or datetime.utcnow()).isoformat()}

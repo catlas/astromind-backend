@@ -190,10 +190,11 @@ def _natal_aspects(chart: Optional[Dict], who: str) -> Optional[list]:
         return None
 
 
-def _activate_memory(user_id: int, name: Optional[str], partner_name: Optional[str]):
+def _activate_memory(user_id: int, name: Optional[str], partner_name: Optional[str], profile_id: Optional[int] = None,
+                     partner_profile_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        return memory.activate(db, db.get(User, user_id), name, partner_name)
+        return memory.activate(db, db.get(User, user_id), name, partner_name, profile_id, partner_profile_id)
     finally:
         db.close()
 
@@ -293,7 +294,8 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
           "transit_chart": transit_chart, "natal_aspects": _natal_aspects(natal, "user"),
           "partner_natal_aspects": _natal_aspects(partner_data, "partner")})
 
-    memory_used = _activate_memory(user_id, request.name, request.partner_name if partner else None)
+    memory_used = _activate_memory(user_id, request.name, request.partner_name if partner else None, request.profile_id,
+                                    request.partner_profile_id if partner else None)
     emit({"type": "stage", "stage": "analyzing"})
     checks: List[Dict] = []
     token = progress.bind(lambda name: emit({"type": "stage", "stage": name}))
@@ -361,7 +363,8 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
           "natal_aspects": _natal_aspects(natal, "user"),
           "partner_natal_aspects": _natal_aspects(partner_data, "partner")})
 
-    memory_used = _activate_memory(user_id, request.name, request.partner_name if partner_data else None)
+    memory_used = _activate_memory(user_id, request.name, request.partner_name if partner_data else None, request.profile_id,
+                                    request.partner_profile_id if partner_data else None)
     emit({"type": "stage", "stage": "analyzing"})
 
     final: Optional[Dict[str, Any]] = None
