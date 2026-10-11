@@ -197,7 +197,8 @@ def create_job(db: Session, user: User, request: ChartRequest, key: Optional[str
     try:
         generation.validate(request)
     except generation.GenerationFailure as failure:
-        raise HTTPException(status_code=400, detail=failure.message)
+        # непълните изчисления са грешка на услугата (503), не на въведените данни (400)
+        raise HTTPException(status_code=503 if failure.code == "ephemeris_incomplete" else 400, detail=failure.message)
 
     try:
         ai_budget.check()
@@ -317,7 +318,7 @@ def _failure_props(job: Job, failure: "generation.GenerationFailure") -> dict:
             props["detail"] = outcome.reason or "violations_remain"          # checker_error | repair_unavailable | violations_remain
     elif failure.code == "timeout":
         props["reason"] = "timeout"
-    elif failure.code in ("internal", "forecast_failed", "interrupted", "stopped"):
+    elif failure.code in ("internal", "forecast_failed", "interrupted", "stopped", "ephemeris_incomplete"):
         props["reason"] = "provider_or_infrastructure"
         props["cause"] = type(cause).__name__ if cause is not None else ""      # само името на типа, без текст
     return props
@@ -353,7 +354,7 @@ def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome")
                 charged = real
         report = data_api.save_report(
             db, user, content=outcome.content, report_type=outcome.report_type, profile_name=request.name,
-            label=outcome.label, cost_cents=charged, params=outcome.params)
+            label=outcome.label, cost_cents=charged, params=outcome.params, snapshot=outcome.snapshot)
         is_first = db.query(data_api.Report.id).filter(data_api.Report.user_id == job.user_id).count() == 1
         job.status = "succeeded"
         job.stage = "done"

@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import swisseph as swe  # type: ignore
 import threading
 from datetime import datetime, timezone, timedelta
@@ -535,9 +536,15 @@ class AstrologyEngine:
         Изчислява домовете по системата Placidus.
         FIX: Автоматично засичане дали масивът е с 12 или 13 елемента.
         """
+        # Над полярния кръг Placidus не е определена и Swiss Ephemeris хвърля грешка: тогава се ползва Porphyry и това се заявява в
+        # картата (house_system), не се крие (R06, регресионен одит 11.10.2026)
+        fallback = False
         try:
-            # swe.houses връща tuple (cusps, ascmc)
-            result = swe.houses(jd, lat, lon, b'P')
+            try:
+                result = swe.houses(jd, lat, lon, b'P')
+            except swe.Error:
+                result = swe.houses(jd, lat, lon, b'O')
+                fallback = True
             
             cusps = result[0]
             ascmc = result[1]
@@ -565,6 +572,7 @@ class AstrologyEngine:
             mc_dms = self._decimal_to_dms(mc_raw)
             
             return {
+                "house_system": "porphyry_fallback" if fallback else "placidus",
                 "houses": houses,
                 "Ascendant": asc_raw,  # ASC raw value
                 "MC": mc_raw,          # MC raw value
@@ -575,8 +583,6 @@ class AstrologyEngine:
             }
             
         except Exception as e:
-            # Принтираме детайли за дебъг, ако пак гръмне
-            print(f"DEBUG info: cusps type: {type(result[0])}, len: {len(result[0])}")
             raise RuntimeError(f"Грешка при изчисляване на домове: {e}")
     
     def _ephemeris_info(self, jd: float, planets: Dict[str, Dict], intentional=()) -> Dict:
@@ -736,6 +742,7 @@ class AstrologyEngine:
             "planets": planets,
             "houses": house_cusps,
             "time_known": True,
+            "house_system": house_data.get("house_system", "placidus"),
             "ephemeris": self._ephemeris_info(jd, planets),
             "angles": {
                 "Ascendant": house_data["Ascendant"],
@@ -784,6 +791,42 @@ def ensure_ephemeris() -> None:
     if _EPHE_PATH and getattr(_ephe_thread, "path", None) != _EPHE_PATH:
         swe.set_ephe_path(_EPHE_PATH)
         _ephe_thread.path = _EPHE_PATH
+
+
+EPHEMERIS_BODY_FILE = "sepl"          # основните планети; seas_* е за Хирон (виж ephemeris_files)
+
+
+def ephemeris_files() -> Dict[str, int]:
+    """Файловете .se1 в директорията с ефемериди и размерите им (за отпечатъка на източника на изчисленията)."""
+    path = Path(_EPHE_PATH) if _EPHE_PATH else Path(__file__).resolve().parent / "ephe"
+    return {f.name: f.stat().st_size for f in sorted(path.glob("*.se1"))} if path.exists() else {}
+
+
+def ephemeris_fingerprint() -> str:
+    """Кратък отпечатък на файловете с ефемериди (имена и размери): запазва се в снимката на отчета."""
+    import hashlib
+    files = ephemeris_files()
+    return hashlib.sha256("|".join(f"{n}:{sz}" for n, sz in files.items()).encode("utf-8")).hexdigest()[:16]
+
+
+def supported_year_range() -> Tuple[int, int]:
+    """Поддържаният диапазон от години според файловете, които наистина са налични: sepl_18.se1 е 1800-2399, sepl_12 е 1200-1799.
+    Файл за Хирон (seas_NN) трябва да покрива същите години; диапазонът е сечението на планетите и Хирон. (0, -1) без файлове."""
+    def covered(prefix: str) -> set:
+        years = set()
+        for name in ephemeris_files():
+            m = re.fullmatch(rf"{prefix}_(\d{{2}})\.se1", name)
+            if m:
+                start = int(m.group(1)) * 100
+                years.update(range(start, start + 600))
+        return years
+    both = covered("sepl") & covered("seas")
+    return (min(both), max(both)) if both else (0, -1)
+
+
+def missing_bodies(chart: Optional[Dict]) -> List[str]:
+    """Телата, които не са изчислени в картата (ephemeris.missing). Празно = пълна карта."""
+    return list(((chart or {}).get("ephemeris") or {}).get("missing") or [])
 
 
 def get_engine() -> "AstrologyEngine":

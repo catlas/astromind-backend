@@ -97,6 +97,8 @@ class Report(Base):
     cost_cents = Column(Integer, nullable=False, default=0, server_default="0")   # колко е взето от баланса, в евроценти
     status = Column(String(20), nullable=False, default="completed")
     params = Column(JSON, nullable=True)
+    # Неизменяем изчислителен снимка (виж report_snapshot.py); NULL = стар отчет (legacy), без измислен снимка
+    snapshot = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     user = relationship("User", back_populates="reports")

@@ -55,6 +55,10 @@ class DOCXGenerator:
             if chart.get("chart"):
                 doc.add_page_break()
                 self._chart_summary(doc, chart)
+        if data.get("calendar_rows"):
+            doc.add_page_break()
+            doc.add_heading("Календар на периода", level=1)
+            self._table(doc, ["Дата и час", "Вид", "Събитие"], [[r["when"], r["kind"], r["what"]] for r in data["calendar_rows"]])
         sections = [s for s in data.get("sections", []) if (s.get("text") or "").strip()]
         for section in sections:
             doc.add_page_break()
@@ -110,8 +114,10 @@ class DOCXGenerator:
             for line in (person.get("birth"), person.get("place")):
                 if line:
                     block.add_run("\n" + str(line))
+        birth_zone = "; ".join(f"{p.get('name')}: {p['zone']}" for p in data.get("people", []) if p.get("zone")) or data.get("zone")
         facts = [("Вид анализ", data.get("kind")), ("Отношения", data.get("relationship")), ("Период", data.get("period")),
-                 ("Създаден на", data.get("created"))]
+                 ("Рождена зона", birth_zone), ("Прогнозна зона", data.get("forecast_zone")),
+                 ("Момент на прогнозата", data.get("forecast_moment")), ("Създаден на", data.get("created"))]
         facts = [(name, value) for name, value in facts if value]
         if facts:
             table = doc.add_table(rows=len(facts), cols=2)
@@ -122,6 +128,19 @@ class DOCXGenerator:
                 for paragraph in row.cells[0].paragraphs:
                     for r in paragraph.runs:
                         r.bold = True
+        notes = ([data["legacy_note"]] if data.get("legacy") and data.get("legacy_note") else []) + list(data.get("notes") or [])
+        for note in notes:
+            paragraph = doc.add_paragraph()
+            run = paragraph.add_run(str(note))
+            run.italic = True
+            run.font.size = Pt(10)
+        provenance = data.get("provenance") or []
+        if provenance:
+            paragraph = doc.add_paragraph()
+            for index, (name, value) in enumerate(provenance):
+                run = paragraph.add_run(("\n" if index else "") + f"{name}: {value}")
+                run.font.size = Pt(9)
+                run.font.color.rgb = GREY
         titles = [s["title"] for s in data.get("sections", []) if s.get("title") and (s.get("text") or "").strip()]
         if len(titles) > 1:
             doc.add_heading("Съдържание", level=2)
@@ -165,6 +184,28 @@ class DOCXGenerator:
             doc.add_heading("Аспекти", level=2)
             self._two_column(doc, [(f"{PLANET_NAMES.get(a['planet1'], a['planet1'])} – {PLANET_NAMES.get(a['planet2'], a['planet2'])}",
                                     f"{ASPECT_NAMES.get(a['aspect'], a['aspect'])} (орбис {a['orb']:.2f}°)") for a in aspects])
+
+    def _table(self, doc, headers, rows) -> None:
+        """Таблица със заглавен ред (удебелен) и редове от текст."""
+        if not rows:
+            return
+        table = doc.add_table(rows=len(rows) + 1, cols=len(headers))
+        table.style = "Table Grid"
+        for column, header in enumerate(headers):
+            cell = table.cell(0, column)
+            cell.text = header
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.bold = True
+                    run.font.size = Pt(10)
+        for r, row in enumerate(rows, 1):
+            for column, value in enumerate(row):
+                cell = table.cell(r, column)
+                cell.text = str(value)
+                for paragraph in cell.paragraphs:
+                    paragraph.paragraph_format.space_after = Pt(0)
+                    for run in paragraph.runs:
+                        run.font.size = Pt(9)
 
     def _two_column(self, doc, rows) -> None:
         if not rows:

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 import bg_text
 import report_export
+import report_snapshot
 from database import MemoryNote, Profile, Report, User, get_db
 from deps import get_current_user
 from rate_limit import enforce
@@ -229,16 +230,18 @@ def report_label(report_type: str, partner_name: Optional[str] = None, is_dynami
 
 
 def save_report(db: Session, user: User, *, content: str, report_type: str, profile_name: Optional[str],
-                label: str, cost_cents: int = 0, params: Optional[dict] = None) -> Report:
+                label: str, cost_cents: int = 0, params: Optional[dict] = None, snapshot: Optional[dict] = None) -> Report:
+    saved_content = (content or "")[:MAX_REPORT_CHARS]
     r = Report(
         user_id=user.id,
         profile_name=(profile_name or "").strip()[:100] or None,
         report_type=report_type if report_type in REPORT_TYPES else "general",
         label=label[:200],
-        content=(content or "")[:MAX_REPORT_CHARS],
+        content=saved_content,
         cost_cents=cost_cents,
         status="completed",
         params=params,
+        snapshot=report_snapshot.seal(snapshot, saved_content) if snapshot else None,       # отпечатък на текста точно както е записан
     )
     db.add(r)
     db.flush()
@@ -266,6 +269,7 @@ def report_summary(r: Report) -> dict:
         "id": r.id, "type": r.report_type, "label": r.label, "profile": r.profile_name or "",
         "cost_cents": r.cost_cents, "status": r.status,
         "created_at": r.created_at.isoformat() if r.created_at else None,
+        "legacy": report_snapshot.is_legacy(r.snapshot),          # преди запазването на изчисленията: износът е възстановен, без гаранция
         **report_mode(r.params),
     }
 

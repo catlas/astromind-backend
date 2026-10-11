@@ -2278,6 +2278,9 @@ def _person_facts(chart: Dict) -> Tuple[Dict, Dict, int]:
     return natal, cusps_view(view.get("houses") or {}), int(view.get("retrograde_count") or 0)
 
 
+CHECKER_VERSION = "23"       # версия на правилата за проверка на текста (влиза в снимката на отчета)
+
+
 class FactsUnavailable(Exception):
     """Фактите за проверка не могат да се построят пълно (липсва карта, небе, куспиди или календар). reason е кратка причина без данни."""
 

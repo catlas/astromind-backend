@@ -29,6 +29,7 @@ import memory
 import period_report
 import progress
 import relationship
+import report_snapshot
 import safety
 import text_guard
 from ai_interpreter import get_interpreter
@@ -67,6 +68,7 @@ class Outcome:
     months: int = 0                       # реален брой месеци при прогноза (0 при единичен анализ)
     flags: List[str] = field(default_factory=list)
     checks: List[Dict] = field(default_factory=list)
+    snapshot: Optional[Dict[str, Any]] = None       # неизменяем изчислителен снимка (report_snapshot.py), записва се с отчета
 
 
 def has_partner(request: ChartRequest) -> bool:
@@ -96,7 +98,7 @@ def report_params(request: ChartRequest) -> dict:
     """Параметрите на анализа, без свободния текст на въпроса."""
     keys = ("name", "date", "time", "lat", "lon", "birth_fold", "report_type", "is_dynamic", "end_date",
             "target_date", "target_time", "partner_name", "partner_date", "partner_time", "partner_lat", "partner_lon",
-            "partner_fold", "forecast_timezone", "target_fold")
+            "partner_fold", "forecast_timezone", "target_fold", "target_lat", "target_lon", "profile_id", "partner_profile_id")
     params = {k: getattr(request, k, None) for k in keys if getattr(request, k, None) not in (None, "")}
     if not request.birth_time_known:
         params.pop("time", None)                      # служебният пладне не е час на раждане
@@ -119,16 +121,46 @@ def validate(request: ChartRequest) -> None:
         error = forecast_period_error(period_start(request), request.end_date, has_partner(request))
         if error:
             raise GenerationFailure("invalid_input", error)
+    require_supported_dates(request)
     try:
-        natal_chart(request)
-        if has_partner(request):
-            partner_chart(request)
-        if not request.is_dynamic:
-            target_moment(request)
+        natal = natal_chart(request)
+        partner = partner_chart(request) if has_partner(request) else None
+        moment = None if request.is_dynamic else target_moment(request)
+        require_complete_charts(natal, partner, moment["chart"] if moment else None)
     except engine.TimeResolutionError as exc:
         raise GenerationFailure("invalid_input", exc.message) from exc
     except (ValueError, OverflowError) as exc:
         raise GenerationFailure("invalid_input", f"Невалидни входни данни: {exc}") from exc
+
+
+BODY_NAMES_BG = {"Sun": "Слънце", "Moon": "Луна", "Mercury": "Меркурий", "Venus": "Венера", "Mars": "Марс", "Jupiter": "Юпитер",
+                 "Saturn": "Сатурн", "Uranus": "Уран", "Neptune": "Нептун", "Pluto": "Плутон", "Node": "Възходящ възел", "Chiron": "Хирон"}
+
+
+def require_complete_charts(*charts: Optional[Dict]) -> None:
+    """R06: картата с липсващо тяло (например Хирон) не е пълна. Анализът, който обещава всички тела, не тръгва: без AI, без запис и
+    без такса. Липсата не се допълва от AI. Неизвестният час (Луна, Асцендент) е друг, изричен режим и не се брои за липса."""
+    missing = sorted({name for chart in charts for name in engine.missing_bodies(chart)})
+    if missing:
+        names = ", ".join(BODY_NAMES_BG.get(n, n) for n in missing)
+        raise GenerationFailure("ephemeris_incomplete", f"Изчисленията временно не са пълни (липсва: {names}). "
+                                                        "Нищо не е записано и не е таксувано. Опитайте отново по-късно.")
+
+
+def require_supported_dates(request: ChartRequest) -> None:
+    """R06: само дати, за които наистина има файлове с ефемериди (поддържан диапазон от наличните файлове)."""
+    low, high = engine.supported_year_range()
+    if high < low:
+        raise GenerationFailure("ephemeris_incomplete", "Изчисленията временно не са налични. Нищо не е записано и не е таксувано. Опитайте отново по-късно.")
+    for label, value in (("раждане", request.date), ("раждане на втория човек", request.partner_date), ("за анализа", request.target_date),
+                         ("краят на периода", request.end_date)):
+        if value:
+            try:
+                year = int(str(value).replace("/", "-").split("-")[0])
+            except ValueError:
+                continue
+            if not low <= year <= high:
+                raise GenerationFailure("invalid_input", f"Датата ({label}) е извън поддържания диапазон от години: {low}–{high}.")
 
 
 def forecast_zone(request: ChartRequest) -> str:
@@ -178,6 +210,23 @@ def time_note_for(request: ChartRequest, natal: Dict, partner_data: Optional[Dic
     if partner_data is not None:
         people.append((factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT), partner_data))
     return birthtime.note(people)
+
+
+def house_system_note(people) -> str:
+    """Бележка в началото, когато за мястото на раждане Placidus не е определена (над полярния кръг) и домовете са по Porphyry."""
+    fallback = [name for name, chart in people if chart and chart.get("house_system") == "porphyry_fallback"]
+    if not fallback:
+        return ""
+    return (f"**Бележка за домовете.** За {' и '.join(fallback)} мястото на раждане е над полярния кръг: системата Placidus не е определена там, "
+            f"затова домовете са изчислени по системата Porphyry.")
+
+
+def _notes(request: ChartRequest, natal: Dict, partner_data: Optional[Dict]) -> str:
+    """Бележките в началото на анализа: неизвестен час и система на домовете."""
+    people = [(factpack.display_name(request.name, factpack.FIRST_PERSON_DEFAULT), natal)]
+    if partner_data is not None:
+        people.append((factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT), partner_data))
+    return "\n\n".join(x for x in (time_note_for(request, natal, partner_data), house_system_note(people)) if x)
 
 
 def _natal_aspects(chart: Optional[Dict], who: str) -> Optional[list]:
@@ -264,7 +313,8 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
     partner = has_partner(request)
     natal = natal_chart(request)
     partner_data = partner_chart(request) if partner else None
-    time_note = time_note_for(request, natal, partner_data)
+    require_complete_charts(natal, partner_data)
+    time_note = _notes(request, natal, partner_data)
 
     # Транзитна карта само ако е заявена дата за анализа
     transit_chart = None
@@ -277,6 +327,7 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
     if moment is not None:
         transit_date = request.target_date
         transit_chart = moment["chart"]
+        require_complete_charts(transit_chart)
         # запазва се точният използван момент: износът и повторният прочит дават същото небе
         moment_params = {"target_time": moment["time"], "forecast_timezone": moment["zone"],
                          "target_datetime_utc": transit_chart["datetime_utc"]}
@@ -331,7 +382,10 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         label=data_api.report_label(request.report_type or "general", request.partner_name, question=request.question,
                                     is_snapshot=request.target_date is not None),
         params={**report_params(request), **moment_params, "memory_used": memory_used},
-        months=0, flags=list(flags), checks=checks)
+        months=0, flags=list(flags), checks=checks,
+        snapshot=report_snapshot.build(mode="snapshot" if transit_chart is not None else "natal", request=request, natal=natal,
+                                       partner=partner_data, transit=transit_chart, forecast_zone=forecast_zone(request),
+                                       target_lat=request.target_lat, target_lon=request.target_lon))
 
 
 async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
@@ -339,7 +393,8 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
     engine_instance = engine.get_engine()
     natal = natal_chart(request, engine_instance)
     partner_data = partner_chart(request, engine_instance) if has_partner(request) else None
-    time_note = time_note_for(request, natal, partner_data)
+    require_complete_charts(natal, partner_data)
+    time_note = _notes(request, natal, partner_data)
 
     start_date = period_start(request)
     calendar = TransitScanner(engine_instance=engine_instance).build_calendar(
@@ -404,4 +459,6 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
                                     question=request.question),
         params={**report_params(request), "forecast_timezone": forecast_zone(request), "months": len(months),
                 "memory_used": memory_used},
-        months=len(months), flags=list(final["flags"]), checks=list(final.get("checks", [])))
+        months=len(months), flags=list(final["flags"]), checks=list(final.get("checks", [])),
+        snapshot=report_snapshot.build(mode="period", request=request, natal=natal, partner=partner_data, transit=transit_chart,
+                                       forecast_zone=forecast_zone(request), calendar=calendar))
