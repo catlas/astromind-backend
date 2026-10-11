@@ -200,6 +200,19 @@ class DOCXGenerator:
                     paragraph.paragraph_format.space_after = Pt(3)
                     paragraph.add_run(f"{number}. ")
                     self._runs(paragraph, item)
+            elif block.kind == "table":
+                width = max(len(row) for row in block.rows)
+                table = doc.add_table(rows=len(block.rows), cols=width)
+                table.style = "Table Grid"
+                for r, row in enumerate(block.rows):
+                    for c in range(width):
+                        cell = table.cell(r, c)
+                        paragraph = cell.paragraphs[0]
+                        self._runs(paragraph, row[c] if c < len(row) else "")
+                        if block.header and r == 0:
+                            for run in paragraph.runs:
+                                run.bold = True
+                doc.add_paragraph().paragraph_format.space_after = Pt(4)
             else:
                 rule = doc.add_paragraph()
                 rule.paragraph_format.space_after = Pt(4)

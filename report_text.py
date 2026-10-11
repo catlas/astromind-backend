@@ -15,13 +15,21 @@ RULE = re.compile(r"^\s*(?:[-*_]{3,}|[━─═]{3,})\s*$")
 BULLET = re.compile(r"^\s*[-*•]\s+(.*)$")
 ORDERED = re.compile(r"^\s*\d{1,3}[.)]\s+(.*)$")
 HEADING = re.compile(r"^\s*(#{1,6})\s+(.*?)\s*#*\s*$")
+TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$")
 
 
 @dataclass
 class Block:
-    kind: str                      # h | p | ul | ol | hr
+    kind: str                      # h | p | ul | ol | hr | table
     level: int = 0                 # ниво на заглавие (1-6)
     items: List[str] = field(default_factory=list)   # текст с **полу-удебелено** и *курсив* (за p и h: един елемент)
+    rows: List[List[str]] = field(default_factory=list)   # за table: редовете с клетки; първият е заглавният, ако header
+    header: bool = False
+
+
+def _cells(line: str) -> List[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
 def normalize_markup(text: str) -> str:
@@ -48,8 +56,27 @@ def parse(text: str) -> List[Block]:
             blocks.append(Block("p", items=[" ".join(paragraph)]))
             paragraph.clear()
 
+    table: List[str] = []
+
+    def flush_table():
+        """Редове, които почват и свършват с | , са таблица (две или повече поредни); иначе са обикновен текст."""
+        rows = [line for line in table if not TABLE_RULE.match(line)]
+        has_rule = len(rows) != len(table)
+        if len(table) >= 2 and rows:
+            blocks.append(Block("table", rows=[_cells(line) for line in rows], header=has_rule))
+        else:
+            paragraph.extend(line.strip() for line in table)
+        table.clear()
+
     for raw in normalize_markup(text).split("\n"):
         line = raw.rstrip()
+        if TABLE_ROW.match(line):
+            flush()
+            table.append(line)
+            continue
+        if table:
+            flush_table()
+            flush()
         if not line.strip():
             flush()
             continue
@@ -72,6 +99,8 @@ def parse(text: str) -> List[Block]:
                 blocks.append(Block(kind, items=[body.strip()]))
             continue
         paragraph.append(line.strip())
+    if table:
+        flush_table()
     flush()
     return blocks
 
@@ -113,6 +142,12 @@ def to_markdown(text: str) -> str:
             out.append("\n".join(f"- {item}" for item in block.items))
         elif block.kind == "ol":
             out.append("\n".join(f"{n}. {item}" for n, item in enumerate(block.items, 1)))
+        elif block.kind == "table":
+            width = max(len(row) for row in block.rows)
+            padded = [row + [""] * (width - len(row)) for row in block.rows]
+            lines = ["| " + " | ".join(row) + " |" for row in padded]
+            lines.insert(1, "|" + "|".join(" --- " for _ in range(width)) + "|")
+            out.append("\n".join(lines))
         else:
             out.append("---")
     return "\n\n".join(out) + ("\n" if out else "")

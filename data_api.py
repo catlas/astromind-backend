@@ -213,10 +213,12 @@ def import_profiles(data: ProfilesImport, current_user: User = Depends(get_curre
 # ---------------------------------------------------------------------------
 
 def report_label(report_type: str, partner_name: Optional[str] = None, is_dynamic: bool = False,
-                 question: Optional[str] = None) -> str:
+                 question: Optional[str] = None, is_snapshot: bool = False) -> str:
     label = REPORT_TYPE_LABELS.get(report_type, "Анализ")
     if is_dynamic:
         label = f"Прогноза: {label.lower()}"
+    elif is_snapshot:
+        label = f"{label} за дата"                      # натален и моментен отчет с една тема не са с еднакво име
     if partner_name:
         label += f" с {partner_name}"
     if question:
@@ -241,11 +243,28 @@ def save_report(db: Session, user: User, *, content: str, report_type: str, prof
     return r
 
 
+def _bg_date(value: str) -> str:
+    return ".".join(reversed(str(value).split("-"))) if value else ""
+
+
+def report_mode(params: Optional[dict]) -> dict:
+    """Вид на анализа за История: натален, за дата (с момента) или за период (с дати), и вторият човек."""
+    params = params or {}
+    if params.get("is_dynamic"):
+        mode, when = "period", " – ".join(x for x in (_bg_date(params.get("target_date")), _bg_date(params.get("end_date"))) if x)
+    elif params.get("target_date"):
+        mode, when = "snapshot", f"{_bg_date(params['target_date'])} {str(params.get('target_time') or '')[:5]}".strip()
+    else:
+        mode, when = "natal", ""
+    return {"mode": mode, "when": when, "partner": params.get("partner_name") or ""}
+
+
 def report_summary(r: Report) -> dict:
     return {
         "id": r.id, "type": r.report_type, "label": r.label, "profile": r.profile_name or "",
         "cost_cents": r.cost_cents, "status": r.status,
         "created_at": r.created_at.isoformat() if r.created_at else None,
+        **report_mode(r.params),
     }
 
 

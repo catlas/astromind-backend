@@ -70,6 +70,11 @@ ASC = {
 CORE_PLANETS = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]
 
 
+def _join_bg(names: list) -> str:
+    """„огън, въздух и вода“."""
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " и " + names[-1]
+
+
 def big_three(chart: dict, time_known: bool = True) -> dict:
     planets = chart.get("planets", {})
     sun = planets.get("Sun", {}).get("zodiac_sign")
@@ -81,7 +86,9 @@ def big_three(chart: dict, time_known: bool = True) -> dict:
         sign = planets.get(name, {}).get("zodiac_sign")
         if sign in ELEMENTS:
             counts[ELEMENTS[sign]] += 1
-    dominant = max(counts, key=counts.get)
+    top = max(counts.values())
+    leaders = [k for k, v in counts.items() if v == top]          # при равен брой няма „преобладаващ“ елемент
+    dominant = leaders[0]
 
     def item(title, sign, texts):
         return {"title": title, "sign": sign, "sign_bg": SIGNS_BG.get(sign, sign), "text": texts.get(sign, "")}
@@ -92,6 +99,11 @@ def big_three(chart: dict, time_known: bool = True) -> dict:
         "ascendant": item("Асцендент", asc, ASC) if asc else None,
         "elements": [{"id": k, "name": ELEMENTS_BG[k], "count": v} for k, v in counts.items()],
         "dominant_element": {"id": dominant, "name": ELEMENTS_BG[dominant], "text": ELEMENT_NOTES[dominant]},
+        "dominant_elements": [{"id": k, "name": ELEMENTS_BG[k]} for k in leaders],
+        "balanced": len(leaders) > 1,
+        "balance_text": ("Няма един преобладаващ елемент: " + _join_bg([ELEMENTS_BG[k].lower() for k in leaders])
+                         + " са еднакво силни в картата ти.") if len(leaders) > 1 else "",
+        "method": "Броят е по знаците на Слънцето, Луната, Меркурий, Венера, Марс, Юпитер и Сатурн (7 тела).",
     }
     if not time_known:
         result["note"] = "Без точен час на раждане не можем да определим Асцендента и домовете. Луната може да е в съседния знак."

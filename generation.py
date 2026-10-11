@@ -326,7 +326,8 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
     return Outcome(
         content=interpretation,
         report_type=request.report_type or "general",
-        label=data_api.report_label(request.report_type or "general", request.partner_name, question=request.question),
+        label=data_api.report_label(request.report_type or "general", request.partner_name, question=request.question,
+                                    is_snapshot=request.target_date is not None),
         params={**report_params(request), **moment_params, "memory_used": memory_used},
         months=0, flags=list(flags), checks=checks)
 
