@@ -10,6 +10,8 @@ import unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
+import httpx
+
 import testenv  # noqa: F401  (трябва да е преди main)
 import ai_budget  # noqa: E402
 import generation  # noqa: E402
@@ -178,7 +180,7 @@ def clean():
 def reservations():
     db = SessionLocal()
     try:
-        return db.query(AIReservation).count()
+        return db.query(AIReservation).filter(AIReservation.state.in_(("reserved", "uncertain"))).count()       # само тези се броят към тавана
     finally:
         db.close()
 
@@ -230,7 +232,8 @@ class ReservationTest(unittest.TestCase):
             ai_budget.release(None)
             self.assertEqual(reservations(), 0)
 
-    def test_an_abandoned_reservation_expires(self):
+    def test_an_abandoned_reservation_is_uncertain_not_free_and_is_written_off_later(self):
+        """R10: изтекла резервация не е доказан неплатим опит: още се брои, а след UNCERTAIN_HOURS се отчита по резервираната сума."""
         with env(AI_DAILY_BUDGET_CENTS=1, AI_MONTHLY_BUDGET_CENTS=100000, **PRICES):
             old = datetime.utcnow() - timedelta(minutes=ai_budget.RESERVATION_TTL_MINUTES + 5)
             db = SessionLocal()
@@ -239,8 +242,18 @@ class ReservationTest(unittest.TestCase):
                 db.commit()
             finally:
                 db.close()
-            self.assertIsNotNone(ai_budget.reserve(0, 400))                              # старата не пречи
-            self.assertEqual(reservations(), 1)
+            with self.assertRaises(ai_budget.BudgetExceeded):                            # старата още пречи: цената е неизвестна
+                ai_budget.reserve(0, 400, now=datetime.utcnow())
+            self.assertEqual(ai_budget.uncertain_summary()["uncertain_attempts"], 1)
+            later = datetime.utcnow() + timedelta(hours=ai_budget.UNCERTAIN_HOURS + 1)
+            self.assertIsNotNone(ai_budget.reserve(0, 50, now=later))                    # отписана: 900 са разход на старата дата
+            self.assertEqual(ai_budget.uncertain_summary()["uncertain_attempts"], 0)
+            db = SessionLocal()
+            try:
+                self.assertEqual(sum(r.cost_millicents for r in db.query(AIUsage).all()), 900)
+                self.assertEqual(db.query(AIReservation).filter(AIReservation.state == "written_off").count(), 1)
+            finally:
+                db.close()
 
     def test_the_real_spend_and_the_reservations_both_count(self):
         with env(AI_DAILY_BUDGET_CENTS=1, AI_MONTHLY_BUDGET_CENTS=100000, **PRICES):
@@ -327,7 +340,7 @@ class ProviderCallTest(unittest.TestCase):
         self.assertEqual((reservations(), usage_cost()[1]), (0, 1))                       # само платеният отговор е записан
 
     def test_when_every_provider_fails_nothing_stays_reserved_or_spent(self):
-        result, calls, seen = self.run_call([RuntimeError("мрежа"), RuntimeError("мрежа"), RuntimeError("мрежа")])
+        result, calls, seen = self.run_call([httpx.ConnectError("мрежа"), httpx.ConnectError("мрежа"), httpx.ConnectError("мрежа")])
         self.assertIsInstance(result, RuntimeError)
         self.assertEqual((reservations(), usage_cost()), (0, (0, 0)))
 

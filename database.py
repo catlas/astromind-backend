@@ -146,6 +146,15 @@ class AIReservation(Base):
     day = Column(String(10), nullable=False, index=True)
     millicents = Column(BigInteger, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # R10: регистър на опитите. state: reserved (брои се към тавана) | settled (платен, отчетен) | released (не е платен) |
+    # uncertain (цената е неизвестна, например след таймаут: брои се към тавана до уточняване) | written_off (несигурният
+    # опит е отчетен по резервираната сума). attempt_id е идентификатор на опита: повторно settle не отчита два пъти.
+    attempt_id = Column(String(32), nullable=True, unique=True)
+    state = Column(String(12), nullable=False, default="reserved", server_default="reserved", index=True)
+    provider = Column(String(16), nullable=True)
+    prompt_tokens = Column(BigInteger, nullable=True)
+    completion_tokens = Column(BigInteger, nullable=True)
+    settled_at = Column(DateTime, nullable=True)
 
 
 class Job(Base):

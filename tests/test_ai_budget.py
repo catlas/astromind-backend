@@ -39,7 +39,7 @@ class MathTest(unittest.TestCase):
             self.assertEqual(ai_budget.cost_millicents(7000, 4500), int(round((7000 * 30 + 4500 * 120) / 1_000_000 * 1000)))
 
     def test_estimate_without_usage(self):
-        self.assertEqual(ai_budget.estimate_tokens("а" * 300), 100)
+        self.assertEqual(ai_budget.estimate_tokens("а" * 300), 150)            # 2 знака на токен (по-консервативно от 3)
         self.assertEqual(ai_budget.estimate_tokens(""), 1)
 
 
@@ -151,7 +151,7 @@ class ProviderTest(unittest.TestCase):
         db = SessionLocal()
         try:
             row = db.query(AIUsage).one()
-            self.assertEqual((row.prompt_tokens, row.completion_tokens), (ai_budget.estimate_tokens("системапотребител"), 30))
+            self.assertEqual((row.prompt_tokens, row.completion_tokens), (ai_budget.estimate_tokens("системапотребител"), 45))
         finally:
             db.close()
 

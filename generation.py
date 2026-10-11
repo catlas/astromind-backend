@@ -56,6 +56,7 @@ class GenerationFailure(Exception):
         self.stage = stage
         self.cause = cause
         self.checks: List[Dict] = list(checks or [])
+        self.ref = ""                                  # кратък код за търсене в дневниците (виж _failure_with_id)
 
 
 @dataclass
@@ -252,7 +253,9 @@ def _failure_with_id(code: str, message: str, line: str, **kwargs) -> Generation
     """Отказ с кратък код за търсене в логовете: редът в логовете съдържа само етап, причина и кодове, никога текст на анализа."""
     error_id = uuid.uuid4().hex[:8]
     print(f"❌ [{error_id}] {line}")
-    return GenerationFailure(code, f"{message} (код: {error_id})", **kwargs)
+    failure = GenerationFailure(code, f"{message} (код: {error_id})", **kwargs)
+    failure.ref = error_id
+    return failure
 
 
 def text_check_failure(failure: "text_guard.TextCheckError", checks: List[Dict]) -> GenerationFailure:
@@ -262,12 +265,38 @@ def text_check_failure(failure: "text_guard.TextCheckError", checks: List[Dict])
                             stage=failure.stage, cause=failure, checks=checks)
 
 
-def internal_failure(context: str, exc: Exception, user_message: str) -> GenerationFailure:
+FAILURE_CATEGORIES = ("validation", "ephemeris", "provider", "timeout", "budget", "fact_check", "assembly", "persistence")
+
+
+def failure_category(failure: "GenerationFailure") -> str:
+    """Етапът, в който е отпаднал анализът (R16): validation, ephemeris, provider, timeout, budget, fact_check, assembly, persistence.
+    Операторът вижда конкретната причина; потребителят получава разбираемо съобщение и кода за справка."""
+    code, stage, cause = failure.code, failure.stage or "", failure.cause
+    if code == "invalid_input" or code == "no_events":
+        return "validation"
+    if code == "ephemeris_incomplete":
+        return "ephemeris"
+    if code == "timeout":
+        return "timeout"
+    if code == "stopped" or type(cause).__name__ == "BudgetExceeded":
+        return "budget"
+    if stage == "persistence":
+        return "persistence"
+    if code == "text_check" or type(cause).__name__ == "TextCheckError" or getattr(cause, "outcome", None) is not None:
+        return "assembly" if stage.startswith("final:") else "fact_check"
+    if stage.startswith("final:") or stage == "assembly":
+        return "assembly"
+    return "provider"
+
+
+def internal_failure(context: str, exc: Exception, user_message: str, stage: str = "") -> GenerationFailure:
     """Пълната грешка се логва само на сървъра; потребителят получава общо съобщение с код за търсене в логовете."""
     error_id = uuid.uuid4().hex[:8]
     print(f"❌ [{error_id}] {context}: {type(exc).__name__}: {exc}")
     traceback.print_exc()
-    return GenerationFailure("internal", f"{user_message} (код: {error_id})", cause=exc)
+    failure = GenerationFailure("internal", f"{user_message} (код: {error_id})", cause=exc, stage=stage)
+    failure.ref = error_id
+    return failure
 
 
 async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:

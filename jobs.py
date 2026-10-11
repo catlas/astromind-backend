@@ -324,6 +324,17 @@ def _failure_props(job: Job, failure: "generation.GenerationFailure") -> dict:
     return props
 
 
+def _diagnostics(user_id: int, job: Optional[Job], category: str, ref: str, stage: str, usage: dict, outcome: str) -> None:
+    """Безопасна диагностика на един анализ (R16): етап, категория, референтен код, време, опити и разход на доставчика.
+    Без текст на анализа, рождени данни, ключове и токени за достъп."""
+    latency = int((job.finished_at - job.started_at).total_seconds() * 1000) if job is not None and job.finished_at and job.started_at else None
+    _track("analysis_diagnostics", user_id, {
+        "outcome": outcome, "category": category, "stage": stage or "", "ref": ref or "", "latency_ms": latency,
+        "provider_calls": usage.get("attempts"),
+        "providers": usage.get("providers") or "", "last": usage.get("last") or "",
+        "tokens": (usage.get("prompt_tokens") or 0) + (usage.get("completion_tokens") or 0), "model": usage.get("model") or ""})
+
+
 def _track_checks(user_id: int, report_type: str, checks) -> None:
     """Телеметрия на проверката на текста: етап, кодове и броеве, никога текст на анализа."""
     for check in checks or []:
@@ -331,7 +342,7 @@ def _track_checks(user_id: int, report_type: str, checks) -> None:
             _track("text_check", user_id, {"type": report_type, **check})
 
 
-def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome") -> bool:
+def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome", usage: Optional[dict] = None) -> bool:
     """Успех: отчетът и статусът "succeeded" се записват заедно. Връща False, ако задачата вече е отказана или изтрита."""
     final_months = outcome.months
     with session_scope() as db:
@@ -371,6 +382,7 @@ def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome")
             telemetry["months"] = final_months
         user_id, report_type = job.user_id, outcome.report_type
     _track("analysis_completed", user_id, telemetry)
+    _diagnostics(user_id, _snapshot_times(job_id), "", "", "done", usage or {}, "succeeded")
     if outcome.flags:
         _track("ai_output_flagged", user_id, {"flags": ",".join(sorted(set(outcome.flags)))})
     _track_checks(user_id, report_type, outcome.checks)
@@ -384,7 +396,16 @@ def _refund_limit(user_id: int, token: Optional[str]) -> None:
     limiter.release(f"ai-day:{user_id}", token)
 
 
-def _fail(job_id: int, failure: "generation.GenerationFailure") -> bool:
+def _snapshot_times(job_id: int) -> Optional[Job]:
+    """Задачата след затваряне на сесията (само за времето и броя опити в диагностиката)."""
+    with session_scope() as db:
+        job = db.get(Job, job_id)
+        if job is not None:
+            db.expunge(job)
+        return job
+
+
+def _fail(job_id: int, failure: "generation.GenerationFailure", usage: Optional[dict] = None) -> bool:
     """Неуспех: статусът "failed", сумата се връща. Връща False, ако задачата вече е приключила или отказана."""
     with session_scope() as db:
         job = _locked(db, job_id)
@@ -404,6 +425,8 @@ def _fail(job_id: int, failure: "generation.GenerationFailure") -> bool:
     if failure.code != "invalid_input":
         _refund_limit(user_id, token)
         _track("analysis_failed", user_id, props)
+        _diagnostics(user_id, _snapshot_times(job_id), generation.failure_category(failure), failure.ref, failure.stage or failure.code,
+                     usage or {}, "failed")
     _track_checks(user_id, report_type, failure.checks)
     return True
 
@@ -422,16 +445,27 @@ async def run_job(job_id: int) -> None:
         request: Optional[ChartRequest] = None
         try:
             request = ChartRequest(**claim["request"])
-            outcome = await asyncio.wait_for(generation.run(request, claim["user_id"], emit), JOB_DEADLINE_SECONDS)
-            _finalize(job_id, request, outcome)
+            attempts: list = []
+            attempt_token = ai_budget.attempt_log.set(attempts)
+            outcome = None
+            try:
+                outcome = await asyncio.wait_for(generation.run(request, claim["user_id"], emit), JOB_DEADLINE_SECONDS)
+                try:
+                    _finalize(job_id, request, outcome, ai_budget.summarize_attempts(attempts))
+                except Exception as exc:               # записът на отчета не успя след успешна генерация: етап persistence
+                    raise generation.internal_failure("persistence", exc, "Не успяхме да запишем анализа. Нищо не е таксувано. Опитайте отново след малко.",
+                                                      stage="persistence")
+            finally:
+                ai_budget.attempt_log.reset(attempt_token)
         except asyncio.CancelledError:
             raise                                   # отказът вече е сменил статуса и е върнал сумата (cancel_job)
         except asyncio.TimeoutError:
-            _fail(job_id, generation.GenerationFailure("timeout", DEADLINE_MESSAGE))
+            _fail(job_id, generation.GenerationFailure("timeout", DEADLINE_MESSAGE, stage="deadline"), ai_budget.summarize_attempts(attempts))
         except generation.GenerationFailure as failure:
-            _fail(job_id, failure)
+            _fail(job_id, failure, ai_budget.summarize_attempts(attempts))
         except Exception as exc:
-            _fail(job_id, generation.internal_failure("job", exc, "Не успяхме да завършим анализа. Опитайте отново след малко."))
+            _fail(job_id, generation.internal_failure("job", exc, "Не успяхме да завършим анализа. Опитайте отново след малко."),
+                  ai_budget.summarize_attempts(attempts))
         finally:
             heartbeat.cancel()
 

@@ -7,6 +7,7 @@ from safety import QUALITY_RULES, SAFETY_RULES
 import memory
 import os
 import asyncio
+import time
 from typing import Dict, Optional, List, Tuple
 import httpx
 from dotenv import load_dotenv
@@ -1559,7 +1560,8 @@ class AIInterpreter:
         # --- OLLAMA CLOUD ATTEMPT (Primary) ---
         if self.ollama_key and self.ollama_url:
             for attempt in range(1, max_retries + 1):
-                slot = self._reserve_call(system_prompt, user_prompt, max_tokens)      # BudgetExceeded излиза навън
+                slot = self._reserve_call(system_prompt, user_prompt, max_tokens, "ollama")      # BudgetExceeded излиза навън
+                started = time.monotonic()
                 try:
                     print(f"🔄 Ollama опит {attempt}/{max_retries}...")
                     ollama_data = {
@@ -1593,10 +1595,15 @@ class AIInterpreter:
                                 print(f"✅ Ollama успешно отговори (опит {attempt}, finish_reason={finish_reason}, usage={resp_json.get('usage')})")
                                 if finish_reason == "length":
                                     print(f"⚠️ Отговорът е отрязан от max_tokens={max_tokens} — вдигнете AI_MAX_OUTPUT_TOKENS.")
-                                self._record_usage(resp_json, system_prompt + user_prompt, content, slot)
+                                used = self._record_usage(resp_json, system_prompt + user_prompt, content, slot, "ollama")
                                 slot = None
+                                ai_budget.note_attempt("ollama", "length" if finish_reason == "length" else "ok", started, *used, model=self.ollama_model)
                                 return self._finish_text(content.strip(), add_context)
                             choice = resp_json.get("choices", [{}])[0]
+                            # Платен 200 без текст (празен content, само reasoning): разходът се отчита ПРЕДИ резервния доставчик
+                            used = self._record_usage(resp_json, system_prompt + user_prompt, "", slot, "ollama")
+                            slot = None
+                            ai_budget.note_attempt("ollama", "empty", started, *used, model=self.ollama_model)
                             print(
                                 f"⚠️ Ollama върна празен content (model={self.ollama_model}, "
                                 f"finish_reason={choice.get('finish_reason')}, "
@@ -1605,6 +1612,7 @@ class AIInterpreter:
                             )
                             break  # Празен отговор - не retry, веднага fallback
                         else:
+                            ai_budget.note_attempt("ollama", "http_error", started, model=self.ollama_model)
                             print(f"⚠️ Ollama HTTP {ollama_response.status_code} (опит {attempt})")
                             if attempt < max_retries:
                                 print(f"⏳ Изчакване 5 секунди преди следващия опит...")
@@ -1613,6 +1621,12 @@ class AIInterpreter:
                                 print("⚠️ Всички опити изчерпани. Fallback към Together...")
                                 
                 except Exception as e:
+                    # Таймаут или прекъсване СЛЕД изпращането: цената е неизвестна, резервацията остава несигурна (не е безплатна)
+                    timed_out = isinstance(e, httpx.TimeoutException) and not self._is_unsent_failure(e)
+                    if not self._is_unsent_failure(e):          # освен ако връзката не е била отворена, доставчикът може да е таксувал
+                        ai_budget.uncertain(slot)
+                        slot = None
+                    ai_budget.note_attempt("ollama", "timeout" if timed_out else "error", started, model=self.ollama_model)
                     print(f"⚠️ Ollama грешка (опит {attempt}): {type(e).__name__}: {e}")
                     if attempt < max_retries:
                         print(f"⏳ Изчакване 5 секунди преди следващия опит...")
@@ -1625,7 +1639,8 @@ class AIInterpreter:
                     ai_budget.release(slot)                  # без платен отговор резервацията се освобождава (при успех slot е None)
         
         # --- TOGETHER.AI FALLBACK ---
-        slot = self._reserve_call(system_prompt, user_prompt, max_tokens)
+        slot = self._reserve_call(system_prompt, user_prompt, max_tokens, "together")
+        started = time.monotonic()
         try:
             together_data = {
                 "model": self.together_model,
@@ -1648,6 +1663,7 @@ class AIInterpreter:
                 )
                 
                 if together_response.status_code != 200:
+                    ai_budget.note_attempt("together", "http_error", started, model=self.together_model)
                     raise RuntimeError(
                         f"Together.ai HTTP {together_response.status_code}: {together_response.text[:500]}"
                     )
@@ -1655,14 +1671,23 @@ class AIInterpreter:
                 resp_json = together_response.json()
                 content = resp_json.get("choices", [{}])[0].get("message", {}).get("content")
                 
+                finish_reason = (resp_json.get("choices", [{}])[0] or {}).get("finish_reason")
                 if content and content.strip():
-                    self._record_usage(resp_json, system_prompt + user_prompt, content, slot)
+                    used = self._record_usage(resp_json, system_prompt + user_prompt, content, slot, "together")
                     slot = None
+                    ai_budget.note_attempt("together", "length" if finish_reason == "length" else "ok", started, *used, model=self.together_model)
                     return self._finish_text(content.strip(), add_context)
-                
+
+                used = self._record_usage(resp_json, system_prompt + user_prompt, "", slot, "together")      # платен празен отговор
+                slot = None
+                ai_budget.note_attempt("together", "empty", started, *used, model=self.together_model)
                 raise RuntimeError("Together.ai върна празен отговор")
                 
         except Exception as e:
+            if slot is not None and not self._is_unsent_failure(e) and not isinstance(e, RuntimeError):
+                ai_budget.uncertain(slot)                       # прекъсване след изпращане: цената е неизвестна
+                slot = None
+                ai_budget.note_attempt("together", "timeout" if isinstance(e, httpx.TimeoutException) else "error", started, model=self.together_model)
             raise RuntimeError(f"Грешка при комуникация с AI провайдърите: {e}")
         finally:
             ai_budget.release(slot)
@@ -1673,18 +1698,27 @@ class AIInterpreter:
         return bg_text.bulgarianize(text) if analysis else text
 
     @staticmethod
-    def _reserve_call(system_prompt: str, user_prompt: str, max_tokens: int):
-        """Резервира най-високия възможен разход на една заявка към доставчика (хвърля ai_budget.BudgetExceeded)."""
-        return ai_budget.reserve(ai_budget.estimate_tokens(system_prompt + user_prompt), int(max_tokens or 0))
+    def _reserve_call(system_prompt: str, user_prompt: str, max_tokens: int, provider: Optional[str] = None):
+        """Резервира най-високия възможен разход на една заявка към доставчика (хвърля ai_budget.BudgetExceeded). Входът се
+        резервира по консервативна горна граница (един токен на знак), изходът по max_tokens и тарифата на доставчика."""
+        return ai_budget.reserve(ai_budget.upper_bound_tokens(system_prompt + user_prompt), int(max_tokens or 0), provider=provider)
 
     @staticmethod
-    def _record_usage(resp_json: Dict, prompt_text: str, content: str, slot=None) -> None:
-        """Записва токените на отговора за бюджета (и освобождава резервацията); без usage от доставчика се оценяват по дължината."""
+    def _record_usage(resp_json: Dict, prompt_text: str, content: str, slot=None, provider: Optional[str] = None) -> Tuple[int, int]:
+        """Отчита платения отговор (идемпотентно, по резервацията); без usage от доставчика токените се оценяват по дължината.
+        Връща използваните (prompt, completion) токени."""
         usage = resp_json.get("usage") or {}
         prompt = usage.get("prompt_tokens")
         completion = usage.get("completion_tokens")
-        ai_budget.settle(slot, prompt if isinstance(prompt, int) else ai_budget.estimate_tokens(prompt_text),
-                         completion if isinstance(completion, int) else ai_budget.estimate_tokens(content))
+        prompt = prompt if isinstance(prompt, int) else ai_budget.estimate_tokens(prompt_text)
+        completion = completion if isinstance(completion, int) else ai_budget.estimate_tokens(content or "")
+        ai_budget.settle(slot, prompt, completion, provider=provider)
+        return prompt, completion
+
+    @staticmethod
+    def _is_unsent_failure(exc: BaseException) -> bool:
+        """Грешка, при която заявката със сигурност не е стигнала до доставчика (няма платен разход): връзката не е отворена."""
+        return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout))
 
     @staticmethod
     def _get_synastry_type_focus(report_type: str) -> str:
