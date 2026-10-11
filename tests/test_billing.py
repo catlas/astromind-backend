@@ -26,7 +26,7 @@ import main  # noqa: E402
 from billing_api import verify_signature  # noqa: E402
 from database import CoinTransaction, Purchase, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, register_and_login, analyze  # noqa: E402
+from testenv import CHART, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
 
 WEBHOOK_SECRET = "whsec_test"
 STRIPE_ENV = {"STRIPE_SECRET_KEY": "sk_test_x", "STRIPE_WEBHOOK_SECRET": WEBHOOK_SECRET}
@@ -187,7 +187,7 @@ class BillingTest(unittest.TestCase):
 
     def stream_ai(self):
         return (mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>m</p>")),
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value="<p>o</p>")))
+                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)))
 
     # --- подарък и регистър -------------------------------------------------------------------------------------
     def test_signup_gift_is_in_the_ledger_as_gift(self):

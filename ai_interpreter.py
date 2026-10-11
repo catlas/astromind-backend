@@ -3,7 +3,7 @@ AI Интерпретатор за астрологични карти
 Използва Together.ai API за анализ и интерпретация
 """
 
-from safety import SAFETY_RULES
+from safety import QUALITY_RULES, SAFETY_RULES
 import memory
 import os
 import asyncio
@@ -19,6 +19,7 @@ import ai_budget
 import bg_text
 import birthtime
 import relationship
+from datetime import timezone
 import text_check
 import text_guard
 from scanner import PeriodCalendar
@@ -1447,6 +1448,13 @@ TRANSIT_MODE_OVERRIDE = """
 """
 
 
+
+def _utc_today() -> str:
+    """Днешната дата (UTC) за проверката на текста: „днес“ при избрана друга дата и дати в натален анализ."""
+    from datetime import datetime as _dt
+    return _dt.now(timezone.utc).date().isoformat()
+
+
 class AIInterpreter:
     """Клас за AI интерпретация на астрологични карти"""
     
@@ -1533,7 +1541,7 @@ class AIInterpreter:
 
         if add_context:
             # Правилата за безопасност важат за всеки анализ, независимо от режима
-            system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}"
+            system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}\n\n{QUALITY_RULES}"
             # Контекстът на отношенията между двамата души (Фаза 12), ако анализът е за двама
             relation_context = relationship.current.get()
             if relation_context:
@@ -2440,7 +2448,7 @@ class AIInterpreter:
         return await self._call_api(system_prompt=system_prompt, user_prompt=user_prompt, max_tokens=4000)
 
     async def guard_text(self, text: str, facts, *, stage: str, checks: Optional[List[Dict]] = None,
-                         max_tokens: Optional[int] = None) -> str:
+                         max_tokens: Optional[int] = None, extra_check=None) -> str:
         """
         Проверка на готовия текст срещу фактите (Фаза 10, виж text_guard.py): най-много една поправка с втора AI заявка.
         Връща текста (поправен при нужда). Хвърля text_guard.TextCheckError, ако и след поправката има тежко нарушение.
@@ -2455,7 +2463,7 @@ class AIInterpreter:
 
         try:
             outcome = await text_guard.guard_text(text, facts, stage=stage, repair_call=repair_call,
-                                                  language_rules=self._get_bulgarian_language_rules())
+                                                  language_rules=self._get_bulgarian_language_rules(), extra_check=extra_check)
         except text_guard.TextCheckError as failure:
             if checks is not None:
                 checks.append(failure.outcome.summary())
@@ -2897,7 +2905,7 @@ class AIInterpreter:
             facts = self.build_text_facts(
                 mode="snapshot" if transit_chart is not None else "natal", user_name=user_name, natal_chart=natal_chart,
                 partner_name=partner_name, partner_chart=partner_chart, transit_chart=transit_chart,
-                target_date=target_date)
+                target_date=target_date, report_date=_utc_today(), question=question or "")
             self.require_text_facts(facts, stage="snapshot" if transit_chart is not None else "natal", checks=checks)
 
         try:

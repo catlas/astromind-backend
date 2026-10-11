@@ -24,7 +24,7 @@ import text_check  # noqa: E402
 from ai_interpreter import AIInterpreter  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from schemas import ChartRequest  # noqa: E402
-from testenv import CHART, register_and_login  # noqa: E402
+from testenv import CHART, register_and_login, OVERVIEW_OK  # noqa: E402
 
 SOFIA = (42.6977, 23.3219)
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn",
@@ -319,6 +319,14 @@ class PromptTest(unittest.TestCase):
         self.last_user = captured["user"]
         return captured["system"]
 
+    def test_safety_and_quality_rules_are_in_every_astrological_request(self):
+        import safety
+        prompt = self.system_prompt()
+        self.assertIn(safety.SAFETY_RULES, prompt)
+        self.assertIn(safety.QUALITY_RULES, prompt)
+        self.assertLess(prompt.index(safety.SAFETY_RULES), prompt.index(safety.QUALITY_RULES))
+        self.assertNotIn(safety.QUALITY_RULES, self.system_prompt(add_context=False))       # техническите заявки (места) не ги получават
+
     def test_the_reminder_ends_the_user_prompt(self):
         self.system_prompt(["Мария"])
         self.assertTrue(self.last_user.rstrip().endswith("do not write those parts."))
@@ -508,7 +516,7 @@ class JobTest(unittest.TestCase):
             events.append(kwargs["monthly_events"])
             assert kwargs["natal_chart"]["houses"] == {}
             return "<p>месец</p>"
-        overview = mock.AsyncMock(return_value="<p>преглед</p>")
+        overview = mock.AsyncMock(return_value=OVERVIEW_OK)
         body = {**self.NO_TIME, "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-01-31"}
         with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", month), \
                 mock.patch.object(main.ai_interpreter, "compose_period_overview", overview):
@@ -522,7 +530,7 @@ class JobTest(unittest.TestCase):
             self.assertNotEqual(row["natal_planet"], "Moon")
         content = self.client.get(f"/reports/{job['report_id']}", headers=h).json()["content"]
         self.assertIn("Бележка за часа на раждане", content)
-        self.assertLess(content.index("Бележка за часа на раждане"), content.index("<p>преглед</p>"))
+        self.assertLess(content.index("Бележка за часа на раждане"), content.index("Накратко"))
 
     def test_the_calculate_endpoint(self):
         body = {"date": "1990-05-15", "lat": 42.6977, "lon": 23.3219, "birth_time_known": False}
@@ -594,7 +602,7 @@ class RealPromptTest(unittest.TestCase):
             calls.append({"system": system_prompt, "user": user_prompt, "rule": birthtime.current.get(),
                           "reminder": birthtime.reminder.get()})
             if "MODE: PERIOD OVERVIEW" in system_prompt:
-                return "**Накратко**: преглед."
+                return OVERVIEW_OK
             return "<p>Подменен текст.</p>"
         with mock.patch.object(main.ai_interpreter, "_call_api", record):
             response = self.client.post("/jobs?wait=60", json=body, headers=h)

@@ -285,7 +285,8 @@ class PromptPayloadTest(Phase8Base):
             calls.append((system_prompt, user_prompt, kw))
             return "<p>ok</p>"
 
-        with mock.patch.object(ai_interpreter.AIInterpreter, "_call_api", new=fake_call):
+        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
+                mock.patch.object(ai_interpreter.AIInterpreter, "_call_api", new=fake_call):
             asyncio.run(self.interp.interpret_chart(**kwargs))
         return calls
 

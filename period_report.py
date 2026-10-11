@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 import pytz
 
 import factpack
+import report_guard
 import safety
 import text_check
 import text_guard
@@ -109,7 +110,7 @@ async def run_period_report(
     if language == "bg":
         facts = interpreter.build_text_facts(mode="period", user_name=user_name, natal_chart=natal_chart,
                                              partner_name=partner_name, partner_chart=partner_chart,
-                                             calendar=calendar, report_date=report_date)
+                                             calendar=calendar, report_date=report_date, question=question)
     overview_facts = dataclasses.replace(facts, mode="overview") if isinstance(facts, text_check.Facts) else facts
 
     checks: List[Dict] = []
@@ -174,14 +175,48 @@ async def run_period_report(
             return await interpreter.guard_text(raw, overview_facts, stage="overview", checks=checks, max_tokens=4000)
 
         overview = await _attempt("overview", overview_call, retry_pause)
+        overview, flags = safety.check_output(overview, report_type)
+        flagged.extend(flags)
+        # R03: финална съгласуваност на целия отчет преди запис, показване като готов и такса
+        replaced: List[Tuple[str, str]] = []
+        if isinstance(facts, text_check.Facts):
+            overview, replaced = await _final_guard(interpreter, facts, overview_facts, months, month_texts, overview, checks,
+                                                    retry_pause, report_type)
     except ForecastGenerationError as failure:
         failure.checks = checks
         raise
-    overview, flags = safety.check_output(overview, report_type)
-    flagged.extend(flags)
+    for title, text in replaced:
+        yield {"type": "part_replaced", "title": title, "text": text}
     yield {"type": "overview_complete", "title": OVERVIEW_TITLE, "text": overview}
     yield {"type": "finished", "overview": overview, "month_texts": month_texts, "flags": sorted(set(flagged)),
            "months": months, "checks": checks}
+
+
+async def _final_guard(interpreter, facts, overview_facts, months: List[str], month_texts: List[Tuple[str, str]], overview: str,
+                       checks: List[Dict], retry_pause: float, report_type: str) -> Tuple[str, List[Tuple[str, str]]]:
+    """Противоречие между частите на отчета (report_guard): засегнатата част се връща на поправка и се проверява и срещу другите.
+    Месечните текстове се сменят на място (month_texts); връща (общ преглед, [(заглавие на месец, нов текст)]). Хвърля ForecastGenerationError."""
+    parts: List[Tuple[str, str]] = [(f"month:{m}", text) for m, (_title, text) in zip(months, month_texts)] + [("overview", overview)]
+    found = report_guard.cross_part_violations(parts, months, facts)
+    replaced: List[Tuple[str, str]] = []
+    for stage in [s for s, _ in parts if s in found]:
+        current = dict(parts)[stage]
+        stage_facts = overview_facts if stage == "overview" else facts
+        extra = report_guard.part_check(parts, stage, months, facts)
+
+        async def call(text=current, stage=stage, stage_facts=stage_facts, extra=extra) -> str:
+            return await interpreter.guard_text(text, stage_facts, stage=f"final:{stage}", checks=checks, extra_check=extra)
+
+        fixed = await _attempt(f"final:{stage}", call, retry_pause)
+        fixed, _flags = safety.check_output(fixed, report_type)
+        parts = [(s, fixed if s == stage else t) for s, t in parts]
+        if stage == "overview":
+            overview = fixed
+        else:
+            index = months.index(stage[6:])
+            month_texts[index] = (month_texts[index][0], fixed)
+            replaced.append((month_texts[index][0], fixed))
+    return overview, replaced
 
 
 def saved_content(overview: str, month_texts: List[Tuple[str, str]], note: str = "") -> str:

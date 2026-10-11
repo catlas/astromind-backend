@@ -141,6 +141,9 @@ def build_repair_prompts(text: str, violations: Sequence[Violation], language_ru
         "- Change nothing else. Keep the structure, headings, order, tone, language, Markdown and the length as close to the "
         "original as possible. Do not add any new astrological fact, date, house, aspect or number that is not in the list.\n"
         "- Never describe an aspect as exact unless the list says it has an exact moment.\n"
+        "- Exception for completeness items: when an item says a required section is missing or the text is cut off, write the missing "
+        "part or finish the last sentence using ONLY facts that are already stated in the text; add no new date, aspect, house or sign.\n"
+        "- Items about health: never delay medical help because of an astrological period; keep practical habits (rest, sleep, routine).\n"
         "- Do not mention the check, the list or the corrections.\n"
         "- Output the COMPLETE corrected text and nothing else (no comments, no code fences)."
     )
@@ -162,13 +165,18 @@ def _strip_fences(text: str) -> str:
     return text.strip()
 
 
-def _check_sync(text: str, facts: Facts, ignore: Set[str]) -> List[Violation]:
-    return [v for v in text_check.check_text(text, facts) if v.code not in ignore]
+ExtraCheck = Callable[[str], List[Violation]]
 
 
-async def _check(text: str, facts: Facts, ignore: Set[str]) -> List[Violation]:
-    """Проверката е чист CPU код: върви в отделна нишка, за да не блокира сървъра, и има таван на времето."""
-    return await asyncio.wait_for(asyncio.to_thread(_check_sync, text, facts, ignore), timeout=CHECK_TIMEOUT_SECONDS)
+def _check_sync(text: str, facts: Facts, ignore: Set[str], extra: Optional[ExtraCheck] = None) -> List[Violation]:
+    found = text_check.check_text(text, facts) + (extra(text) if extra else [])
+    return [v for v in found if v.code not in ignore]
+
+
+async def _check(text: str, facts: Facts, ignore: Set[str], extra: Optional[ExtraCheck] = None) -> List[Violation]:
+    """Проверката е чист CPU код: върви в отделна нишка, за да не блокира сървъра, и има таван на времето.
+    extra е допълнителна проверка на кандидат-текста (например съгласуваност с другите части на отчета)."""
+    return await asyncio.wait_for(asyncio.to_thread(_check_sync, text, facts, ignore, extra), timeout=CHECK_TIMEOUT_SECONDS)
 
 
 def refuse_missing_facts(facts: Any, *, stage: str, mode: Optional[str] = None, text: str = "") -> Optional[GuardOutcome]:
@@ -187,7 +195,7 @@ def refuse_missing_facts(facts: Any, *, stage: str, mode: Optional[str] = None, 
 
 
 async def guard_text(text: str, facts: Any, *, stage: str, repair_call: RepairCall,
-                     language_rules: str = "", mode: Optional[str] = None) -> GuardOutcome:
+                     language_rules: str = "", mode: Optional[str] = None, extra_check: Optional[ExtraCheck] = None) -> GuardOutcome:
     """Проверява текста срещу фактите. Връща GuardOutcome (с поправения текст) или хвърля TextCheckError."""
     mode = mode or check_mode()
     cleaned_text, cleaned = text_check.clean_labels(text or "")
@@ -201,7 +209,7 @@ async def guard_text(text: str, facts: Any, *, stage: str, repair_call: RepairCa
         return outcome
     ignore = ignored_codes()
     try:
-        outcome.before = outcome.after = await _check(cleaned_text, facts, ignore)
+        outcome.before = outcome.after = await _check(cleaned_text, facts, ignore, extra_check)
     except Exception as exc:
         outcome.error = f"{type(exc).__name__}: {str(exc)[:80]}"
         if mode == MODE_ENFORCE:               # непроверен текст не се доставя като проверен
@@ -233,7 +241,7 @@ async def guard_text(text: str, facts: Any, *, stage: str, repair_call: RepairCa
         fixed, more = text_check.clean_labels(fixed)
         outcome.cleaned += more
         try:
-            after = await _check(fixed, facts, ignore)
+            after = await _check(fixed, facts, ignore, extra_check)
         except Exception as exc:
             outcome.error = f"{type(exc).__name__}: {str(exc)[:80]}"
             print(f"❌ Проверка на текста ({stage}): грешка в проверителя след поправката, анализът се отхвърля ({outcome.error})")

@@ -34,7 +34,7 @@ import text_guard  # noqa: E402
 from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import TransitScanner  # noqa: E402
-from testenv import CHART, give_deposit, register_and_login, analyze  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)          # София
@@ -131,7 +131,8 @@ class CorpusTest(unittest.TestCase):
             target, mode, _ = key.split("-")
             if (target, mode) not in cls.facts:
                 cls.facts[(target, mode)] = corpus_facts(target, mode)
-            cls.results[key] = tc.check_text("\n".join(segments), cls.facts[(target, mode)])
+            # корпусът е от откъси (само изреченията с твърдения), не цели текстове: пълнотата и краят на текста се проверяват другаде
+            cls.results[key] = [v for v in tc.check_text("\n".join(segments), cls.facts[(target, mode)]) if v.code != "complete"]
 
     def violations(self, key, code=None):
         return [v for v in self.results[key] if code is None or v.code == code]
@@ -522,11 +523,12 @@ class GuardTest(unittest.TestCase):
 
     def test_soft_violations_alone_do_not_cause_a_repair(self):
         facts, good, _, _ = good_and_bad_text()
-        text = good + "\n\nВероятността е 85% през октомври."
+        text = good + "\n\nОтделете 10% от бюджета за обучение."          # дял от бюджет е меко нарушение (вероятност в проценти е тежко)
         outcome, calls = self.run_guard(text, facts, [])
         self.assertEqual(calls, [])
         self.assertEqual(outcome.text, text)
         self.assertEqual({v.code for v in outcome.before}, {"percent"})
+        self.assertEqual(outcome.hard_before, [])
 
     def test_modes_warn_and_off(self):
         facts, _, bad, _ = good_and_bad_text()
@@ -707,7 +709,7 @@ class PeriodGuardTest(unittest.TestCase):
         self.interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
         self.cal = calendar_for(partner=False)
 
-    def run_report(self, month_texts, overview="<p>Общ преглед</p>", repair=None):
+    def run_report(self, month_texts, overview=OVERVIEW_OK, repair=None):
         async def monthly(**kwargs):
             return month_texts[kwargs["month"]].pop(0)
 
@@ -758,15 +760,15 @@ class PeriodGuardTest(unittest.TestCase):
         self.assertEqual([c["result"] for c in steps[-1]["checks"]][:2], ["rejected", "ok"])
 
     def test_the_overview_is_checked_too(self):
-        bad = "Най-важното: Плутон става директен на 17 октомври."
-        good = "Най-важното: Плутон става директен на 16 октомври."
+        bad = OVERVIEW_OK + "<p>Най-важното: Плутон става директен на 17 октомври.</p>"
+        good = OVERVIEW_OK + "<p>Най-важното: Плутон става директен на 16 октомври.</p>"
         repair = mock.AsyncMock(return_value=good)
         steps = self.run_report({"2026-10": [self.GOOD_OCT], "2026-11": [self.NOV]}, overview=bad, repair=repair)
         self.assertEqual(steps[-1]["overview"], good)
         self.assertEqual(steps[-1]["checks"][-1]["stage"], "overview")
 
     def test_labels_are_cleaned_in_period_texts(self):
-        text = self.GOOD_OCT + " Състояние state_in_month: approaching."
+        text = self.GOOD_OCT + " Състояние (state_in_month: approaching) е известно."
         steps = self.run_report({"2026-10": [text], "2026-11": [self.NOV]})
         self.assertNotIn("state_in_month", steps[-1]["month_texts"][0][1])
 
@@ -868,7 +870,7 @@ class EndpointTest(unittest.TestCase):
         uid = self.client.get("/me", headers=h).json()["id"]
         monthly = mock.AsyncMock(side_effect=[self.BAD_OCT, "<p>Ноември</p>"])
         with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value="<p>Преглед</p>")), \
+                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)), \
                 mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.GOOD_OCT)):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
@@ -891,7 +893,7 @@ class EndpointTest(unittest.TestCase):
         monthly = mock.AsyncMock(return_value=self.BAD_OCT)
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
                 mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value="<p>Преглед</p>")), \
+                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)), \
                 mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.BAD_OCT)):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)

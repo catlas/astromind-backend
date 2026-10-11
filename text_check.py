@@ -112,6 +112,7 @@ LABEL_RES = [
     re.compile(r"[ \t]*[(\[]\s*(?:MANDATORY|REQUIRED)(?: SECTION)?\s*[)\]]", re.IGNORECASE),
     re.compile(r"[ \t]*(?<![\w])(?:MANDATORY|REQUIRED) SECTION\s*:?", re.IGNORECASE),
 ]
+PROBABILITY_WORD_RE = re.compile(r"вероятност\w*|шанс\w*|от\s+случаите|в\s+\d{1,3}\s*%\s+от|успех\w*|благоприят\w*|висока|ниска|средна|надежд\w*|гаранци\w*|сигурност\w*", re.IGNORECASE)
 PERCENT_RE = re.compile(r"(?<![\w.])\d{1,3}\s*(?:%|на сто|процента?)", re.IGNORECASE)
 
 
@@ -142,6 +143,9 @@ class Facts:
     motion: Dict[str, Dict[str, bool]] = field(default_factory=dict)     # "sky" / човек -> планета -> ретроградна ли е (моментно небе, натал)
     timeline: Dict[str, List[Dict]] = field(default_factory=dict)        # транзитно тяло -> интервали {from, to, sign, motion} на периода
     house_timeline: Dict[str, Dict[str, List[Dict]]] = field(default_factory=dict)    # човек -> транзитно тяло -> интервали {from, to, house}
+    question: str = ""                                                   # въпросът на потребителя (само за проверка на пълнотата; не влиза в дневници)
+    known_times: Set[str] = field(default_factory=set)                   # часове „HH:MM“, които са изчислени: моментът на анализа и часовете на раждане
+    birth_dates: Set[str] = field(default_factory=set)                   # „MM-DD“ на рождените дати (рожден ден не е транзитна дата)
 
 
 @dataclass
@@ -1722,7 +1726,10 @@ def check_leaks(raw: str) -> List[Violation]:
         out.append(Violation("english", "soft", _short(raw, max(0, m.start() - 30), m.end() + 30),
                              f"Вътрешното име „{m.group(0)}“ не трябва да се вижда в текста: махни го или го кажи с обикновени думи."))
     for m in PERCENT_RE.finditer(raw):
-        out.append(Violation("percent", "soft", _short(raw, max(0, m.start() - 30), m.end() + 20),
+        # процент като вероятност или оценка („в 80% от случаите“, „висока (70–80%)“) е тежко нарушение; дял от бюджет или време е меко
+        context = raw[max(0, m.start() - 60):m.end() + 40]
+        severity = "hard" if PROBABILITY_WORD_RE.search(context) else "soft"
+        out.append(Violation("percent", severity, _short(raw, max(0, m.start() - 30), m.end() + 20),
                              "Не давай проценти или числови вероятности: използвай обикновени думи (благоприятен, смесен, затруднен период)."))
     return out
 
@@ -2118,6 +2125,96 @@ def check_dignity(seg: str, mentions: List[Mention], facts: Facts) -> List[Viola
     return out
 
 
+# --------------------------------------------------------------------------------------------------------------
+# Пълнота и конкретност без измислена прецизност (R03/R15, регресионен одит 11.10.2026)
+# --------------------------------------------------------------------------------------------------------------
+OVERVIEW_HEADINGS = ("Накратко", "Най-силни моменти", "Моменти за повече внимание", "Съгласуван план")
+_QUESTION_HEADING_RE = re.compile(r"отговор\s+на\s+(?:вашия|твоя|вашият|твоят)\s+въпрос", re.IGNORECASE)
+_LIST_ITEM_RE = re.compile(r"^\s*(?:[-*•▪]|\d+[.)])\s+")
+_DANGLING_WORDS = {"и", "в", "във", "на", "с", "със", "за", "от", "до", "към", "че", "като", "когато", "ако", "но", "а", "или", "по", "при"}
+_CLOCK_WINDOW_RE = re.compile(r"(?<![\w:])(?:след|преди|около|между|от|до|в|към)\s+(\d{1,2}):(\d{2})(?![\d:])", re.IGNORECASE)
+_TODAY_RE = re.compile(r"(?<![\w])(?:днес|днешн\w+)(?![\w])", re.IGNORECASE)
+
+
+def _last_line(text: str) -> str:
+    plain = re.sub(r"</?(?:p|li|div|h\d|ul|ol|tr|td|th|br)[^>]*>", "\n", text or "", flags=re.IGNORECASE)
+    plain = re.sub(r"<[^>]+>", "", plain)
+    lines = [ln for ln in (x.strip() for x in plain.split("\n")) if ln and not re.fullmatch(r"[|\-\s:*#_>]+", ln)]
+    return lines[-1] if lines else ""
+
+
+def check_completeness(text: str, facts: Facts) -> List[Violation]:
+    """Задължителните секции са налице и текстът не е отрязан. Месец с въпрос има секция „Отговор на вашия въпрос“, общият преглед има четирите части."""
+    out: List[Violation] = []
+    low = re.sub(r"<[^>]+>", " ", text or "").lower()
+    if facts.mode == "overview":
+        missing = [h for h in OVERVIEW_HEADINGS if h.lower() not in low]
+        if missing:
+            out.append(Violation("complete", "hard", "общ преглед",
+                                 "Липсват задължителни части на общия преглед: " + ", ".join(f"„{h}“" for h in missing)
+                                 + ". Допиши ги по месечните анализи, без нови факти, дати или аспекти."))
+    if facts.mode == "period" and facts.question and not _QUESTION_HEADING_RE.search(low):
+        out.append(Violation("complete", "hard", "край на месеца",
+                             "Липсва финалната секция „### Отговор на вашия въпрос“: допиши я в края, като отговориш на въпроса "
+                             "САМО с фактите, които вече са в този текст (без нови дати и аспекти)."))
+    last = _last_line(text)
+    if last and not last.lstrip().startswith("|"):                 # ред от таблица не е изречение
+        words = re.findall(r"\w+", last.lower())
+        is_item = bool(_LIST_ITEM_RE.match(last))
+        ends_open = bool(re.search(r"[,;:–—-]\s*$", last)) or (bool(words) and words[-1] in _DANGLING_WORDS)
+        ends_plain = not re.search(r"[.!?…\"”»)\]]\s*$", last)
+        if ends_open or (ends_plain and not is_item and len(last) >= 60):
+            out.append(Violation("complete", "hard", _short(last, max(0, len(last) - 80)),
+                                 "Текстът изглежда отрязан в края. Доизкажи последното изречение, без нови факти, и завърши с точка."))
+    return out
+
+
+def check_invented_precision(seg: str, facts: Facts) -> List[Violation]:
+    """Натален и моментен анализ: без „след 14:00“ (няма изчислен прозорец), без „днес“ за друга избрана дата и без транзитни дати в натала."""
+    out: List[Violation] = []
+    if facts.mode in ("natal", "snapshot"):
+        for m in _CLOCK_WINDOW_RE.finditer(seg):
+            clock = f"{int(m.group(1)):02d}:{m.group(2)}"
+            if clock not in facts.known_times and int(m.group(1)) < 24:
+                out.append(Violation("time", "hard", _short(seg, max(0, m.start() - 30), m.end() + 20),
+                                     f"Часът {clock} не е изчислен прозорец: за този вид анализ няма данни за часове през деня. "
+                                     "Махни часа и пиши за деня или момента като цяло."))
+    if facts.mode == "snapshot" and facts.snapshot_date and facts.report_date:
+        gap = abs((date.fromisoformat(facts.snapshot_date) - date.fromisoformat(facts.report_date)).days)
+        for m in _TODAY_RE.finditer(seg):
+            if gap >= 2:
+                out.append(Violation("date", "hard", _short(seg, max(0, m.start() - 30), m.end() + 20),
+                                     f"Анализът е за избраната дата ({_dm(facts.snapshot_date)}), не за днес: пиши „на избраната дата“."))
+    if facts.mode == "natal" and facts.report_date:
+        for item in parse_dates(seg, facts):
+            if item.relative or any(d.isoformat()[5:10] in facts.birth_dates for d in item.dates):
+                continue
+            out.append(Violation("date", "hard", _short(seg, max(0, item.start - 30), item.end + 20),
+                                 f"В натален анализ няма изчислени дати на транзити: датата {_dm(item.dates[0].isoformat())} не е в данните. "
+                                 "Махни датата или опиши темата без дата."))
+    return out
+
+
+def check_text_safety(text: str) -> List[Violation]:
+    """Здраве (R05) и самокорекция на редактор (R15): тежки нарушения, които се връщат на AI за поправка като всички останали."""
+    import safety
+    out: List[Violation] = []
+    for code, sentence in safety.health_findings(text):
+        if code == "health_delay":
+            out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_DELAY_ADVICE))
+        else:
+            out.append(Violation("health", "hard", sentence[:160],
+                                 "Не описвай орган или болест като известен проблем или доказана уязвимост. Преформулирай символично и неутрално "
+                                 "(например „темата за храносмилането и стреса“), без прогноза за заболяване."))
+    for sentence in safety.biography_findings(text):
+        out.append(Violation("biography", "hard", sentence[:160],
+                             "Не твърди реални събития от семейството или миналото като факт. Опиши само символичен модел на собствените реакции на човека "
+                             "(„може да се свързва с …“)."))
+    for leak in safety.editor_leaks(text):
+        out.append(Violation("editor", "hard", leak[:160], "В текста има самокорекция на редактор („… – всъщност …“). Остави само верното твърдение, без поправката."))
+    return out
+
+
 def protect_names(text: str, facts: Facts) -> str:
     """Тире в името на човек („Тест А — одит“) не е разделител на мисли: вътре в името се заменя с интервал, преди текстът да се реже на изречения."""
     for key in ("user", "partner"):
@@ -2135,6 +2232,8 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
     found: List[Violation] = list(check_leaks(text or ""))
     if name_collides(facts):
         return found                          # само служебните етикети и проценти: твърденията не могат да се разпознаят сигурно
+    found += check_text_safety(text or "")
+    found += check_completeness(text or "", facts)
     for seg in segments(protect_names(text or "", facts)):
         mentions = find_mentions(seg)
         groups = planet_groups(seg, mentions, facts)
@@ -2147,6 +2246,7 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
         found += check_retro_count(seg, mentions, groups, facts)
         found += check_motion(seg, mentions, groups, facts)
         found += check_ingress_source(seg, mentions, facts)
+        found += check_invented_precision(seg, facts)
         found += check_dignity(seg, mentions, facts)
         found += check_dates(seg, mentions, groups, facts)
     seen: Set[Tuple[str, str, str]] = set()
@@ -2224,12 +2324,12 @@ def validate_facts(facts: "Facts") -> None:
 
 def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partner_name: Optional[str] = None,
                 partner_chart: Optional[Dict] = None, transit_chart: Optional[Dict] = None, calendar=None,
-                target_date: Optional[str] = None, report_date: Optional[str] = None) -> Facts:
+                target_date: Optional[str] = None, report_date: Optional[str] = None, question: str = "") -> Facts:
     """mode: natal | snapshot | period | overview. calendar е scanner.PeriodCalendar."""
     import factpack
     from aspects_engine import calculate_natal_aspects
 
-    facts = Facts(mode=mode, report_date=report_date)
+    facts = Facts(mode=mode, report_date=report_date, question=(question or "").strip())
     facts.names["user"] = factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT)
     people = [("user", natal_chart)]
     if partner_chart is not None:
@@ -2240,6 +2340,11 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
         facts.natal[key], facts.cusps[key], facts.retro_count[key] = natal, cusps, retro
         facts.motion[key] = {name: bool(p.get("retrograde")) for name, p in (factpack.natal_view(chart).get("planets") or {}).items()
                              if p.get("retrograde") is not None}
+        local = str(chart.get("datetime_local") or "")
+        if len(local) >= 10:
+            facts.birth_dates.add(local[5:10])
+            if len(local) >= 16 and chart.get("time_known") is not False:
+                facts.known_times.add(local[11:16])
         if chart.get("time_known") is False:
             facts.no_houses.add(key)
             for planet, info in (chart.get("sign_ranges") or {}).items():
@@ -2271,6 +2376,8 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
         m = re.search(r"(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?", target_date)
         if m:
             facts.snapshot_date, facts.snapshot_time = m.group(1), m.group(2)
+            if m.group(2):
+                facts.known_times.add(m.group(2))
     if calendar is not None:
         facts.calendar = calendar.public_events_with_context()
         facts.period = (calendar.start, calendar.end)

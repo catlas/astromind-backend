@@ -21,6 +21,10 @@ for key in ("RESEND_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSW
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Общ преглед с четирите задължителни части (проверката за пълнота на отчета): за тестове с подменен AI
+OVERVIEW_OK = ("<p><b>Накратко</b>: смесен период.</p><p><b>Най-силни моменти</b>: няколко дати.</p>"
+               "<p><b>Моменти за повече внимание</b>: две.</p><p><b>Съгласуван план</b>: по дати.</p>")
+
 PASSWORD = "Zvezdi2026x"
 CHART = {"date": "1990-05-15", "time": "14:30", "lat": 42.6977, "lon": 23.3219}
 

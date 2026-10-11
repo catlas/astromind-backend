@@ -34,7 +34,7 @@ from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import (APPLYING_ORB, ASPECTS, NATAL_TARGETS, SEPARATING_ORB, TRANSIT_PLANETS,  # noqa: E402
                      TransitScanner, utc_to_jd)
-from testenv import CHART, give_deposit, register_and_login, analyze  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "phase9_control")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)
@@ -555,7 +555,8 @@ class PromptTest(CalendarBase):
                     report_type="love", user_name="A", partner_name="Иван" if pair else None, question=question,
                     partner_gender="male", report_date="2026-10-09", retry_pause=0):
                 pass
-        with mock.patch.object(ai_interpreter.AIInterpreter, "_call_api", new=fake_call):
+        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
+                mock.patch.object(ai_interpreter.AIInterpreter, "_call_api", new=fake_call):
             asyncio.run(go())
         return calls
 
@@ -630,7 +631,7 @@ class EndpointTest(unittest.TestCase):
 
     def overview_ok(self):
         return mock.patch.object(main.ai_interpreter, "compose_period_overview",
-                                 mock.AsyncMock(return_value="<p>Преглед</p>"))
+                                 mock.AsyncMock(return_value=OVERVIEW_OK))
 
     def user_id(self, headers):
         return self.client.get("/me", headers=headers).json()["id"]
@@ -643,7 +644,7 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual([s["type"] for s in steps], ["start", "month_start", "month_complete", "month_start",
                                                       "month_complete", "overview_start", "overview_complete", "complete"])
         self.assertEqual(steps[0]["total_months"], 2)
-        self.assertEqual(steps[6]["text"], "<p>Преглед</p>")
+        self.assertEqual(steps[6]["text"], OVERVIEW_OK)
         reports = self.client.get("/reports", headers=h).json()
         self.assertEqual(len(reports), 1)
         db = SessionLocal()
@@ -651,7 +652,7 @@ class EndpointTest(unittest.TestCase):
             content = db.get(Report, reports[0]["id"]).content
         finally:
             db.close()
-        self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n<p>Преглед</p>"))
+        self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n" + OVERVIEW_OK))
         self.assertLess(content.index("Общ преглед"), content.index("Октомври 2026"))
 
     @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
