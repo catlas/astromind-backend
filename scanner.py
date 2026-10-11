@@ -175,12 +175,18 @@ class PeriodCalendar:
     """Календарът на един период: хронологичен списък от събития и помощници за месеците."""
 
     def __init__(self, timezone_name: str, start: str, end: str, events: List[Dict], planets_scanned: List[str],
-                 context_events: Optional[List[Dict]] = None):
+                 context_events: Optional[List[Dict]] = None, timeline: Optional[Dict[str, List[Dict]]] = None):
         self.timezone = timezone_name
         self.start = start
         self.end = end
         self.events = events
         self.context_events = list(context_events or [])      # станции малко преди и след периода: само контекст (outside_period)
+        # Времеви ред на транзитните тела (Слънце, Меркурий до Плутон): интервали с постоянен знак и посока на движение,
+        # {"from": "YYYY-MM-DD HH:MM", "to": ..., "sign": "Leo", "motion": "direct"|"retrograde"} в зоната на календара.
+        # Само за проверка на текста (не влиза в подканата): „Марс е в Скорпион през октомври“ се сверява с него.
+        self.timeline: Dict[str, List[Dict]] = dict(timeline or {})
+        # Същото по натални домове: {"User"|"Partner": {тяло: [{"from", "to", "house"}]}}; само за хора с известен час
+        self.house_timeline: Dict[str, Dict[str, List[Dict]]] = {}
         self.version = CALENDAR_VERSION
         self.planets_scanned = planets_scanned
 
@@ -304,11 +310,15 @@ class TransitScanner:
 
         context = self._context_stations(ctx)
         people = [("User", natal_chart)] + ([("Partner", partner_chart)] if partner_chart else [])
+        house_timeline = self._house_timelines(ctx, people)
         _add_event_houses(events, people)
         _add_event_houses(context, people)
         events.sort(key=_event_order_key)
         _number_series(events)
-        return PeriodCalendar(zone, start_date, end_date, events, list(TRANSIT_PLANETS), context_events=context)
+        calendar = PeriodCalendar(zone, start_date, end_date, events, list(TRANSIT_PLANETS), context_events=context,
+                                  timeline=ctx.timeline)
+        calendar.house_timeline = house_timeline
+        return calendar
 
     # ------------------------------------------------------------------------------------------------------
     # Съвместимост със старите тестове
@@ -327,6 +337,7 @@ class TransitScanner:
         a, b = ctx.p0 - 1.0, ctx.p1 + 1.0
         for name, pid in INGRESS_PLANETS.items():
             points = _monotone_points(pid, a, b, POINT_EVENT_STEP_DAYS)
+            breaks: List[float] = [jd for jd, _lon_, _speed, tag in points if tag]       # станциите са граници на посоката
             for jd, lon, _speed, tag in points:
                 if tag and name in STATION_PLANETS:
                     ev = ctx.make_point(jd, "RETROGRADE", name, {
@@ -347,14 +358,73 @@ class TransitScanner:
                 t = _bisect(lambda x: _wrap180(_lon(x, pid) - boundary), prev[0], cur[0],
                             fa=_wrap180(prev[1] - boundary))
                 new_sign = SIGNS[idx_c % 12]
+                breaks.append(t)                                                      # влизането в знак е граница на знака
                 motion = "direct" if forward else "retrograde"
                 text = f"{name} enters {new_sign}" + ("" if forward else " (moving retrograde)")
-                ev = ctx.make_point(t, "INGRESS", name, {"sign": new_sign, "motion": motion, "event": text,
+                ev = ctx.make_point(t, "INGRESS", name, {"sign": new_sign, "from_sign": SIGNS[idx_p % 12], "motion": motion, "event": text,
                                                          "_lon": (boundary + (0.001 if forward else -0.001)) % 360.0})
                 if ev:
                     ev["id"] = f"IN:{name}:{new_sign}:{ev['_utc'][:10]}"
                     events.append(ev)
+            ctx.timeline[name] = self._body_timeline(ctx, pid, a, b, breaks)
         return events
+
+    def _house_timelines(self, ctx: "_Context", people: List[Tuple[str, Dict]]) -> Dict[str, Dict[str, List[Dict]]]:
+        """За всеки човек с известен час: в кой негов натален дом е всяко транзитно тяло във всеки момент на периода.
+        Границите са преминаванията през куспидите и станциите (между две станции ходът е в една посока)."""
+        result: Dict[str, Dict[str, List[Dict]]] = {}
+        a, b = ctx.p0 - 1.0, ctx.p1 + 1.0
+        for label, chart in people:
+            cusps = chart.get("houses") or {}
+            if not cusps or chart.get("time_known") is False:
+                continue
+            cusp_lons = sorted({float(v) % 360.0 for v in cusps.values() if isinstance(v, (int, float))})
+            if len(cusp_lons) != 12:
+                continue
+            bodies: Dict[str, List[Dict]] = {}
+            for name, pid in INGRESS_PLANETS.items():
+                points = _monotone_points(pid, a, b, POINT_EVENT_STEP_DAYS)
+                breaks: List[float] = [jd for jd, _lon_, _speed, tag in points if tag]
+                for prev, cur in zip(points, points[1:]):
+                    delta = _wrap180(cur[1] - prev[1])
+                    if delta == 0.0 or abs(delta) > 20.0:
+                        continue
+                    for cusp in cusp_lons:
+                        x = _wrap180(cusp - prev[1])
+                        if (delta > 0 and 0.0 < x <= delta) or (delta < 0 and delta <= x < 0.0):
+                            breaks.append(_bisect(lambda t, c=cusp: _wrap180(_lon(t, pid) - c), prev[0], cur[0],
+                                                  fa=_wrap180(prev[1] - cusp)))
+                edges = [a] + sorted(t for t in breaks if a < t < b) + [b]
+                rows: List[Dict] = []
+                for lo, hi in zip(edges, edges[1:]):
+                    if hi - lo < 1e-6:
+                        continue
+                    house = house_for_longitude(_lon(0.5 * (lo + hi), pid), cusps)
+                    row = {"from": ctx.local(lo).strftime("%Y-%m-%d %H:%M"), "to": ctx.local(hi).strftime("%Y-%m-%d %H:%M"), "house": house}
+                    if rows and rows[-1]["house"] == house:
+                        rows[-1]["to"] = row["to"]
+                    else:
+                        rows.append(row)
+                bodies[name] = rows
+            result[label] = bodies
+        return result
+
+    @staticmethod
+    def _body_timeline(ctx: "_Context", pid: int, a: float, b: float, breaks: List[float]) -> List[Dict]:
+        """Интервалите между станциите и влизанията в знак: в средата на всеки е знакът и посоката на движение."""
+        edges = [a] + sorted(t for t in breaks if a < t < b) + [b]
+        out: List[Dict] = []
+        for lo, hi in zip(edges, edges[1:]):
+            if hi - lo < 1e-6:
+                continue
+            lon, speed = _lon_speed(0.5 * (lo + hi), pid)
+            row = {"from": ctx.local(lo).strftime("%Y-%m-%d %H:%M"), "to": ctx.local(hi).strftime("%Y-%m-%d %H:%M"),
+                   "sign": _sign_name(lon), "motion": "retrograde" if speed < 0 else "direct"}
+            if out and out[-1]["sign"] == row["sign"] and out[-1]["motion"] == row["motion"]:
+                out[-1]["to"] = row["to"]
+            else:
+                out.append(row)
+        return out
 
     def _context_stations(self, ctx: "_Context") -> List[Dict]:
         """Станциите малко преди и след периода (outside_period): AI ги ползва за „ретрограден до ...“, вместо да ги познава от
@@ -544,6 +614,7 @@ class _Context:
 
     def __init__(self, tz, zone: str, start: date, end: date, p0: float, p1: float):
         self.tz, self.zone, self.start, self.end, self.p0, self.p1 = tz, zone, start, end, p0, p1
+        self.timeline: Dict[str, List[Dict]] = {}         # тяло -> интервали със знак и посока (пълни се от станциите и влизанията)
 
     def local(self, jd: float) -> datetime:
         return _round_minute(jd_to_utc(jd)).astimezone(self.tz)

@@ -63,10 +63,13 @@ HOUSE_WORDS = {"първ": 1, "втор": 2, "трет": 3, "четвърт": 4,
 _BOUND = r"(?<![\w])(?:%s)(?![\w])"
 PLANET_RE = {k: re.compile(_BOUND % v, re.IGNORECASE) for k, v in PLANET_FORMS.items()}      # „сатурн“ не заобикаля проверката
 SIGN_RE = {k: re.compile(_BOUND % v) for k, v in SIGN_FORMS.items()}
+# Знак с малка буква („новолунието във везни“, „Марс е в скорпион“) се чете само след „в/във“ и само ако в изречението има планета или
+# лунация: „рак“, „риби“, „лъв“ и „дева“ са и обикновени думи
+SIGN_LOWER_RE = {k: re.compile(r"(?<![\w])(?:в|във)\s+(%s)(?![\w])" % v, re.IGNORECASE) for k, v in SIGN_FORMS.items()}
 ASPECT_RE = {k: re.compile(r"(?<![\w])(?:%s)(?![\w])" % v, re.IGNORECASE) for k, v in ASPECT_FORMS.items()}
 ANGLE_RE = {"ASC": re.compile(_BOUND % r"Асцендент(?:а|ът)?|ASC"), "MC": re.compile(_BOUND % r"MC|Среда на небето")}
-HOUSE_DIGIT_RE = re.compile(r"(?<![\w.,])(\d{1,2})\s*[-–]?\s*(?:ви|ри|ти|ми|и|а|о|ма|ва|ра|та|во|ро|то|мо|ия|ият|ата|ото)?\s*(?:-?\s*)?(?:дом|дома|домът|домове|къща|къщата)(?![\w])", re.IGNORECASE)
-HOUSE_WORD_RE = re.compile(r"(?<![\w])(първ|втор|трет|четвърт|пет|шест|седм|осм|девет|десет|единадесет|дванадесет)\w*\s+(?:дом|дома|домът|къща|къщата)(?![\w])", re.IGNORECASE)
+HOUSE_DIGIT_RE = re.compile(r"(?<![\w.,])(\d{1,2})\s*[-–]?\s*(?:ви|ри|ти|ми|и|а|о|ма|ва|ра|та|во|ро|то|мо|ия|ият|ата|ото)?\s*(?:-?\s*)?(?:(?:натален|натални|наталния|наталната|наталното|транзитен|транзитния|транзитна|транзитната)\s+)?(?:дом|дома|домът|домове|къща|къщата)(?![\w])", re.IGNORECASE)
+HOUSE_WORD_RE = re.compile(r"(?<![\w])(първ|втор|трет|четвърт|пет|шест|седм|осм|девет|десет|единадесет|дванадесет)\w*\s+(?:(?:натален|натални|наталния|наталната|наталното|транзитен|транзитния|транзитна|транзитната)\s+)?(?:дом|дома|домът|къща|къщата)(?![\w])", re.IGNORECASE)
 DEGREE_RE = re.compile(r"(\d{1,2})\s*°\s*(?:(\d{1,2})\s*[′'’]?)?")
 TIME_RE = re.compile(r"(?<![\d:])([01]?\d|2[0-3]):([0-5]\d)(?![\d:])")
 DATE_TEXT_RE = re.compile(r"(?<![\w.])(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s+(януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември)(?:\s+(\d{4}))?(?![\w])", re.IGNORECASE)
@@ -136,6 +139,9 @@ class Facts:
     calendar: Optional[List[Dict]] = None                                # редовете на календара (public)
     period: Optional[Tuple[str, str]] = None                             # (начало, край) на периода
     report_date: Optional[str] = None
+    motion: Dict[str, Dict[str, bool]] = field(default_factory=dict)     # "sky" / човек -> планета -> ретроградна ли е (моментно небе, натал)
+    timeline: Dict[str, List[Dict]] = field(default_factory=dict)        # транзитно тяло -> интервали {from, to, sign, motion} на периода
+    house_timeline: Dict[str, Dict[str, List[Dict]]] = field(default_factory=dict)    # човек -> транзитно тяло -> интервали {from, to, house}
 
 
 @dataclass
@@ -185,6 +191,7 @@ def normalize(text: str) -> str:
     t = re.sub(r"^\s*[-•▪]\s+", "", t, flags=re.MULTILINE)                  # водещи тирета на списък
     t = t.replace("|", " · ")
     t = re.sub(r"(?<=\d{4})\s*г\.", "", t)                                 # „23 ноември 2026 г.“: точката не е край на изречение
+    t = re.sub(r"(?<=\d)\s*ч\.(?!\w)", "", t)                               # „04:24 ч.,“: точката е съкращение, не край на изречение
     t = re.sub(r"[ \t]+", " ", t)
     return t
 
@@ -211,12 +218,65 @@ def _cap_segment(raw: str) -> List[str]:
     return pieces
 
 
+MAX_DATE_LEAD = 90         # най-много толкова знака са водеща дата и час пред тире („24 октомври, 16:28 и 28 октомври, 09:23“)
+_DASH_RE = re.compile(r"\s[—–]\s")
+_DATE_FILLER_RE = re.compile(r"(?<![\w])(?:ч|г|на|от|до|и|около|в|във)(?![\w])\.?", re.IGNORECASE)
+ASPECT_START_RE = re.compile(r"^\W*(?:%s)(?![\w])" % "|".join(ASPECT_FORMS.values()), re.IGNORECASE)
+
+
+def _is_date_lead(piece: str) -> bool:
+    """Парчето е само дата и час („24 октомври, 03:24“, „3–5 ноември“): тирето след него е „дата – събитие“, не край на мисъл."""
+    if len(piece) > MAX_DATE_LEAD:
+        return False                                   # дълго парче не е „дата – събитие“; и пази от квадратично време при дълги списъци
+    t = piece
+    for rx in (DATE_TEXT_RE, DATE_NUMRANGE_RE, DATE_NUM_RE, DATE_ISO_RE, TIME_RE):
+        t = rx.sub(" ", t)
+    t = _DATE_FILLER_RE.sub(" ", t)
+    return bool(piece.strip()) and not re.search(r"\w", t)
+
+
+def _split_keeping_delimiters(text: str) -> List[Tuple[str, str]]:
+    pieces: List[Tuple[str, str]] = []
+    position = 0
+    for m in _SPLIT_RE.finditer(text):
+        pieces.append((text[position:m.start()], m.group(0)))
+        position = m.end()
+    pieces.append((text[position:], ""))
+    return pieces
+
+
 def segments(text: str) -> List[str]:
-    parts = []
-    for raw in _SPLIT_RE.split(normalize(text)):
-        raw = (raw or "").strip()
-        if len(raw) > 2:
-            parts.extend(_cap_segment(raw))
+    """
+    Изречения и редове. Тире се реже само когато двете страни са самостоятелни мисли. Не се реже:
+    - след дата и час („24 октомври, 03:24 – точен секстил Марс–Венера“): иначе датата остава сама и не се сверява със събитието;
+    - преди аспект без подлог („Меркурий е в напрегнати аспекти – квадратура с Луната, съвпад с възела“): подлогът е в предишното парче.
+    """
+    pieces = _split_keeping_delimiters(normalize(text))
+    merged: List[str] = []
+    carry = ""
+    previous_delimiter = ""
+    for raw, delimiter in pieces:
+        raw = (raw or "")
+        current = (carry + raw) if carry else raw
+        carry = ""
+        stripped = current.strip()
+        if stripped and _DASH_RE.fullmatch(delimiter or "") and _is_date_lead(stripped):
+            carry = stripped + " – "                      # датата и часът остават с каквото следва (с тире: „05:24:“ не е час за TIME_RE)
+            continue
+        if merged and _DASH_RE.fullmatch(previous_delimiter or "") and ASPECT_START_RE.match(stripped) \
+                and find_mentions(merged[-1]) and not _is_date_lead(merged[-1]) and not re.search(r"[.!?]\s*$", merged[-1]):
+            if any(m.kind == "planet" for m in find_mentions(merged[-1])) and not any(m.kind == "aspect" for m in find_mentions(merged[-1])):
+                merged[-1] = merged[-1].rstrip() + " " + stripped
+                previous_delimiter = delimiter
+                continue
+        if len(stripped) > 2:
+            merged.append(stripped)
+        previous_delimiter = delimiter
+    if carry.strip() and len(carry.strip(" –")) > 2:
+        merged.append(carry.strip(" –"))
+    parts: List[str] = []
+    for raw in merged:
+        parts.extend(_cap_segment(raw))
     return parts
 
 
@@ -239,6 +299,9 @@ def find_mentions(seg: str) -> List[Mention]:
         out += [Mention("planet", key, m.start(), m.end()) for m in rx.finditer(seg)]
     for key, rx in SIGN_RE.items():
         out += [Mention("sign", key, m.start(), m.end()) for m in rx.finditer(seg)]
+    if any(x.kind == "planet" for x in out) or LUNATION_WORD_RE.search(seg):
+        for key, rx in SIGN_LOWER_RE.items():
+            out += [Mention("sign", key, m.start(1), m.end(1)) for m in rx.finditer(seg) if not seg[m.start(1)].isupper()]
     for key, rx in ASPECT_RE.items():
         out += [Mention("aspect", key, m.start(), m.end()) for m in rx.finditer(seg)]
     for m in HOUSE_DIGIT_RE.finditer(seg):
@@ -267,7 +330,7 @@ _FILLER = {"е", "са", "бе", "бяха", "в", "във", "и", "или", "н
            "твоя", "твоят", "твоята", "твоето", "твоите", "твой", "негов", "неговия", "неговият", "неговата",
            "неговото", "неговите", "нейния", "нейната", "нейното", "нейните", "партньорския", "партньорската",
            "партньорското", "партньорските", "партньорът", "партньора", "ваш", "вашия", "вашата", "вашето", "вашите",
-           "си", "ти", "му", "ѝ", "я", "го", "също", "точно", "вече", "още", "само", "едновременно", "именно",
+           "си", "ти", "ви", "ми", "им", "ни", "му", "ѝ", "я", "го", "също", "точно", "вече", "още", "само", "едновременно", "именно",
            "доминира", "акцентира", "попаднал", "попаднала", "попаднали"}
 
 
@@ -310,7 +373,7 @@ def _parens_are_positions(gap: str) -> bool:
     return True
 
 
-def planet_groups(seg: str, mentions: List[Mention]) -> List[Group]:
+def planet_groups(seg: str, mentions: List[Mention], facts: Optional[Facts] = None) -> List[Group]:
     """Планети, изброени една до друга ("Венера, Марс и Нептун", "Меркурий–Плутон", "Слънце (Везни 15°) и Луна")."""
     groups: List[Group] = []
     aspects = [x for x in mentions if x.kind == "aspect"]
@@ -325,6 +388,8 @@ def planet_groups(seg: str, mentions: List[Mention]) -> List[Group]:
                 for rx in SIGN_RE.values():
                     stripped = rx.sub(" ", stripped)
                 stripped = re.sub(r"[,–-]|\bи\b|\bили\b", " ", stripped)
+                if facts is not None:
+                    stripped = _strip_names(stripped, facts)             # „Сатурн на Тест А и Сатурн на Иван“: имената не прекъсват изброяването
                 joined = (gap_ok(stripped) and not re.search(r"[.+·/|]", stripped) and _parens_are_positions(gap))
             if joined and re.search(r"[,и]|\bили\b", gap):
                 # „Нептун квадрат Нептун, Марс квадрат Сатурн“: обектът на един аспект и подлогът на следващия са различни изречения
@@ -347,7 +412,19 @@ def _name_re(name: str) -> Optional[re.Pattern]:
     name = (name or "").strip()
     if len(name) < 3:
         return None
-    return re.compile(r"(?<![\w])" + re.escape(name) + r"\w{0,2}(?![\w])", re.IGNORECASE)
+
+    def flexible(text: str) -> Optional[str]:
+        words = re.findall(r"\w+", text)
+        return r"[\s—–\-'’.]{1,4}".join(re.escape(w) for w in words) if words else None
+
+    full = flexible(name)
+    head_text = re.split(r"\s+[—–-]\s+", name, maxsplit=1)[0]
+    head = flexible(head_text) if head_text.strip() != name and len(head_text.strip()) >= 3 else None
+    # „Тест А — одит“ се пише и „Тест А одит“, и „Тест А“: тиретата и интервалите не са част от името, а частта пред тире го определя
+    body = f"(?:{full}|{head})" if head and full else (full or head)
+    if not body:
+        return None
+    return re.compile(r"(?<![\w])" + body + r"\w{0,2}(?![\w])", re.IGNORECASE)
 
 
 def _owner_cues(facts: Facts) -> Dict[str, List[re.Pattern]]:
@@ -629,12 +706,53 @@ def _house_row_fits(r: Tuple[str, str, str, str, int], c: Dict) -> bool:
     return (not c["po"] or r[0] == c["po"]) and (not c["ho"] or r[1] == c["ho"])
 
 
+def _timeline_house_violations(seg: str, c: Dict, facts: Facts, rows: List[Tuple[str, str, str, str, int]]) -> List[Violation]:
+    """Дом на транзитно тяло в период: сверява се с интервалите на тялото в домовете на човека; без „транзитен“ се приема и натален дом.
+    Домът след няколко планети („Юпитер–Сатурн (11-ти дом)“) е на която и да е от тях: нарушение е само ако не пасва на нито една."""
+    out: List[Violation] = []
+    if not facts.house_timeline:
+        return out
+    items = [i for i in parse_dates(seg, facts) if not i.relative]
+    lo, hi, anchored = _claim_window(seg, facts)
+    if lo is None or (c["kind"] != "transit" and not (anchored or items)):
+        return out
+    owner = c["ho"] or c["po"]
+    owners = [owner] if owner else list(facts.names)
+    planets = [p for p in c["planets"] if p not in ("ASC", "MC")]
+    allowed: Set[int] = set()
+    known = False
+    for planet in planets:
+        for o in owners:
+            intervals = facts.house_timeline.get(o, {}).get(planet) or []
+            covered = [r for r in intervals if r["from"][:10] <= hi and r["to"] > f"{lo} 00:00"] \
+                if intervals and hi >= intervals[0]["from"][:10] and lo <= intervals[-1]["to"][:10] else []
+            if covered:
+                known = True
+                allowed |= {r["house"] for r in covered}
+            if c["kind"] != "transit":
+                allowed |= {r[4] for r in rows if r[3] == planet and r[2] != "transit" and r[1] == o}
+    if not known or c["house"] in allowed:
+        return out
+    parts = []
+    for planet in planets:
+        for o in owners:
+            intervals = [r for r in (facts.house_timeline.get(o, {}).get(planet) or []) if r["from"][:10] <= hi and r["to"] > f"{lo} 00:00"]
+            if intervals:
+                parts.append(f"транзитният {_pl(planet)} в домовете на {_who(facts, o)}: " + ", ".join(
+                    f"{r['house']}-ти дом (от {_stamp(r['from'])} до {_stamp(r['to'])})" for r in intervals))
+    out.append(Violation("house", "hard", c["excerpt"],
+                         f"Домът {c['house']}-ти не пасва на {', '.join(_pl(p) for p in planets)} за {_dm(lo)}–{_dm(hi)}. Вярно: " + "; ".join(parts[:4]) + "."))
+    return out
+
+
 def check_houses(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Violation]:
     rows = house_rows(facts)
     out = []
     for c in placement_claims(seg, mentions, groups, facts)[0]:
         if facts.mode in _PARTIAL_SKY_MODES and c["kind"] != "natal":
-            continue                          # в периода няма пълно транзитно небе: „Марс в Лъв (8-ми дом)“ може да е транзитен
+            # в периода няма пълно транзитно небе, затова „Марс в 8-ми дом“ се сверява с интервалите на транзитното тяло
+            out += _timeline_house_violations(seg, c, facts, rows)
+            continue
         for planet in c["planets"]:
             if planet in ("ASC", "MC"):
                 continue
@@ -660,6 +778,8 @@ def check_signs(seg: str, mentions: List[Mention], groups: List[Group], facts: F
     out = []
     for c in placement_claims(seg, mentions, groups, facts)[1]:
         if facts.mode in _PARTIAL_SKY_MODES and c["kind"] != "natal":
+            if facts.timeline and c["kind"] in ("transit", None) and not (c["kind"] is None and c["po"]):
+                out += _timeline_sign_violations(seg, c, facts)
             continue
         for planet in c["planets"]:
             candidates = [r for r in rows if r[2] == planet]
@@ -1318,6 +1438,26 @@ def _adjacent(seg: str, item: DateItem, a: Anchor, mentions: List[Mention]) -> b
     return all(t in _EVENT_GAP_OK or t in _FILLER or t.startswith(("ретроград", "директ", "транзит", "натал")) for t in toks)
 
 
+def _parallel_anchor(seg: str, item: DateItem, anchors: List[Anchor], items: List[DateItem]) -> Optional[Anchor]:
+    """
+    „24 октомври, 16:28 и 28 октомври, 09:23 – Марс в опозиция с Юпитер и в съвпад с Меркурий“: две дати в началото, свързани с „и“,
+    и поне толкова аспекта след тях. Първата дата е за първия аспект, втората за втория (по реда им в изречението).
+    """
+    lead = [x for x in items if not x.relative]
+    lead.sort(key=lambda x: x.start)
+    chain: List[DateItem] = []
+    for x in lead:
+        if chain and not re.fullmatch(r"[\s,;:–—-]*(?:\d{1,2}:\d{2}(?:\s*ч\.?)?)?[\s,;:–—-]*(?:и|или)?[\s,;:–—-]*(?:\d{1,2}:\d{2}(?:\s*ч\.?)?)?[\s,;:–—-]*", seg[chain[-1].end:x.start]):
+            break
+        chain.append(x)
+    if len(chain) < 2 or item not in chain:
+        return None
+    aspects = sorted((a for a in anchors if a.kind == "aspect" and a.start >= chain[-1].end), key=lambda a: a.start)
+    if len(aspects) < len(chain):
+        return None
+    return aspects[chain.index(item)]
+
+
 def _bind(seg: str, item: DateItem, anchors: List[Anchor], mentions: List[Mention], items: List[DateItem],
           exact_span: Optional[Tuple[int, int]] = None) -> Optional[Anchor]:
     """Най-близкото събитие до датата; при две еднакво близки различни събития няма привързване.
@@ -1342,6 +1482,9 @@ def _bind(seg: str, item: DateItem, anchors: List[Anchor], mentions: List[Mentio
         left = [a for a in aspects if 0 <= item.start - a.end <= 90 and not re.search(r"[.!?;]", seg[a.end:item.start])]
         pool = right or left
         return min(pool, key=lambda a: abs(a.start - item.end)) if pool else None
+    ordered = _parallel_anchor(seg, item, anchors, items)
+    if ordered is not None:
+        return ordered
     cands = []
     for a in anchors:
         g = _gap(item, a)
@@ -1488,6 +1631,17 @@ def check_dates(seg: str, mentions: List[Mention], groups: List[Group], facts: F
                        and r["aspect"] == c["aspect"]]
             if not matched:
                 continue
+            claimed_owners = {o for o in (c.get("o1"), c.get("o2")) if o}
+            if claimed_owners and len(facts.names) > 1:
+                # при двама аспектът от календара е на конкретен човек: датата и часът на Иван не са на Тест А (и обратно)
+                owned = [r for r in matched if r["o2"] in claimed_owners]
+                if not owned:
+                    others = sorted({_who(facts, r["o2"]) for r in matched})
+                    out.append(Violation("event", "hard", excerpt,
+                                         f"Аспектът {_pl(c['p1'])}–{_pl(c['p2'])} няма в календара за {', '.join(_who(facts, o) for o in sorted(claimed_owners))}; "
+                                         f"в данните е за {', '.join(others)}."))
+                    continue
+                matched = owned
             ser = [s_ for s_ in idx.series if any(s_["row"] is r["row"] for r in matched)]
             all_exact = {dt for s_ in ser for dt, _ in s_["exact"] + s_["outside"]}
             bounds = {x for s_ in ser for x in s_["bounds"]}
@@ -1516,6 +1670,11 @@ def check_dates(seg: str, mentions: List[Mention], groups: List[Group], facts: F
                     times = {x[1] for s_ in ser for x in s_["exact"] if x[0] == it.dates[0].isoformat()}
                     if times and it.time not in times:
                         out.append(Violation("time", "hard", excerpt, f"Часът на точния аспект е {', '.join(sorted(times))}, не {it.time}."))
+                    elif not times:
+                        # дата и час са точен момент; в прозорец на активност без точен момент на тази дата часът не съществува
+                        real = sorted(f"{_dm(d)} {t}" for s_ in ser for d, t in s_["exact"] + s_["outside"])
+                        out.append(Violation("time", "hard", excerpt, f"{it.time} на {_dm(it.dates[0].isoformat())} не е точен момент на този аспект. "
+                                             f"Точни моменти: {', '.join(real) if real else 'няма в периода'}."))
     return out
 
 
@@ -1581,24 +1740,56 @@ def name_collides(facts: Facts) -> bool:
     return False
 
 
-def _event_house_sets(facts: Facts) -> Dict[Tuple[str, str], Set[int]]:
-    """(вид, ключ) -> натални домове на събитието за всички хора: ("lunation:new", "Libra"), ("station", "Mercury"), ("ingress", "Mercury:Scorpio")."""
-    out: Dict[Tuple[str, str], Set[int]] = {}
+_OWNER_LABEL = {"User": "user", "Partner": "partner"}
+
+
+def _event_house_sets(facts: Facts) -> Dict[Tuple[str, str], Dict[str, Set[int]]]:
+    """(вид, ключ) -> собственик ("user" | "partner") -> натален дом на събитието:
+    ("lunation:new", "Libra"), ("station", "Mercury:Scorpio"), ("ingress", "Mercury:Scorpio"). Домовете на двамата не се смесват."""
+    out: Dict[Tuple[str, str], Dict[str, Set[int]]] = {}
+
+    def add(key: Tuple[str, str], houses: Dict) -> None:
+        for label, house in houses.items():
+            out.setdefault(key, {}).setdefault(_OWNER_LABEL.get(label, label), set()).add(house)
+
     for e in facts.calendar or []:
-        houses = set((e.get("natal_house") or {}).values())
+        houses = e.get("natal_house") or {}
         if not houses:
             continue
         t = e.get("type")
         if t in ("LUNATION", "ECLIPSE"):
             kind = "eclipse" if t == "ECLIPSE" else ("new" if e["event"].startswith("New") else "full")
             sign = next((k for k in SIGN_FORMS if e["event"].endswith(k) or f" in {k}" in e["event"]), "")
-            out.setdefault((f"lunation:{kind}", sign), set()).update(houses)
+            add((f"lunation:{kind}", sign), houses)
         elif t == "RETROGRADE":
             sign = next((k for k in SIGN_FORMS if e["event"].endswith(k) or f" in {k}" in e["event"]), "")
-            out.setdefault(("station", f"{e['planet']}:{sign}"), set()).update(houses)
+            add(("station", f"{e['planet']}:{sign}"), houses)
         elif t == "INGRESS":
-            out.setdefault(("ingress", f"{e['planet']}:{e['sign']}"), set()).update(houses)
+            add(("ingress", f"{e['planet']}:{e['sign']}"), houses)
     return out
+
+
+def _house_owner(seg: str, anchor_start: int, h: Mention, facts: Facts) -> Optional[str]:
+    """Чий е домът: „… в 5-ти дом на Иван“, „във вашия 5-ти дом“, „За Иван: новолунието … е в 9-ти дом“. None, когато не се разбира."""
+    owner = cue_after(seg, h.end, facts) or cue_before(seg, h.start, facts, window=26)
+    if owner:
+        return owner
+    near = seg[max(0, h.start - 50):h.start]                                         # „… а за Тест А в 5-ти дом“: името е точно пред дома
+    for key in ("user", "partner"):
+        rx = _name_re(facts.names.get(key, ""))
+        if rx and any(re.fullmatch(r"\s*(?:(?:е|са|пада|попада|остава|стои)\s+)?(?:в|във)\s*", near[m.end():]) for m in rx.finditer(near)):
+            return key
+    head = re.split(r"[.!?;]", seg[max(0, anchor_start - 90):anchor_start])[-1]       # само в рамките на същото изречение
+    best: Tuple[int, Optional[str]] = (-1, None)
+    for key in ("user", "partner"):
+        rx = _name_re(facts.names.get(key, ""))
+        if rx:
+            for m in rx.finditer(head):
+                if m.end() >= best[0]:
+                    best = (m.end(), key)
+    if best[1] is not None and re.fullmatch(r"[\s:,\-–—]*", head[best[0]:]):         # „За Иван: новолунието …“ / „Иван — новолунието …“
+        return best[1]
+    return None
 
 
 def check_event_houses(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Violation]:
@@ -1611,19 +1802,19 @@ def check_event_houses(seg: str, mentions: List[Mention], groups: List[Group], f
     houses = [m for m in mentions if m.kind == "house"]
     if not houses:
         return out
-    anchors = []                                               # (край на събитието, ключ, име за съобщението)
+    anchors = []                                               # (край на събитието, ключ, име за съобщението, начало на събитието)
     for m in LUNATION_WORD_RE.finditer(seg):
         word = m.group(1).lower()
         kind = "new" if word.startswith("новолуни") else ("full" if word.startswith("пълнолуни") else "eclipse")
         sign = next((x for x in mentions if x.kind == "sign" and 0 <= x.start - m.end() <= 14), None)
         if sign is not None:
-            anchors.append((sign.end, (f"lunation:{kind}", sign.key), f"{m.group(1).lower()} в {SIGN_BG[sign.key]}"))
+            anchors.append((sign.end, (f"lunation:{kind}", sign.key), f"{m.group(1).lower()} в {SIGN_BG[sign.key]}", m.start()))
     for m in STATION_WORD_RE.finditer(seg):
         planet = next((p for p in _planets_near(mentions, m.start()) if p.key not in ("Sun",) + _NO_EVENT_PLANETS), None)
         sign = next((x for x in mentions if x.kind == "sign" and 0 <= x.start - m.end() <= 40 and not re.search(r"[.!?;]", seg[m.end():x.start])), None)
         if planet is not None and sign is not None and (("station", f"{planet.key}:{sign.key}") in sets):
-            anchors.append((sign.end, ("station", f"{planet.key}:{sign.key}"), f"{_pl(planet.key)} в {SIGN_BG[sign.key]}"))
-    for end, key, label in anchors:
+            anchors.append((sign.end, ("station", f"{planet.key}:{sign.key}"), f"{_pl(planet.key)} в {SIGN_BG[sign.key]}", min(planet.start, m.start())))
+    for end, key, label, begin in anchors:
         if key not in sets:
             continue
         nxt = [a[0] for a in anchors if a[0] > end]
@@ -1635,11 +1826,308 @@ def check_event_houses(seg: str, mentions: List[Mention], groups: List[Group], f
             if re.search(r"[.!?;]", between) or any(x.kind == "planet" and end <= x.start < h.start for x in mentions) \
                     or re.search(r"(?<![\w])натал\w*", between, re.IGNORECASE):
                 continue
-            if h.key not in sets[key]:
+            owner = _house_owner(seg, begin, h, facts)
+            by_owner = sets[key]
+            if owner in by_owner:                               # домът на човека, за когото е казан
+                allowed, whose = by_owner[owner], f" за {_who(facts, owner)}"
+            elif owner is None and len(facts.names) == 1:
+                allowed, whose = set().union(*by_owner.values()), ""
+            elif owner is None:
+                allowed, whose = set().union(*by_owner.values()), " (за всеки от двамата)"       # собственикът не се разбира: допустим е домът на кой да е
+            else:
+                continue                                          # човек без известен час: няма дом на събитието
+            if h.key not in allowed:
                 out.append(Violation("house", "hard", _short(seg, max(0, end - 40), min(len(seg), h.end + 12)),
-                                     f"Домът на {label} не е верен. Вярно (натален дом на този момент): "
-                                     + ", ".join(str(x) for x in sorted(sets[key])) + "."))
+                                     f"Домът на {label}{whose} не е верен. Вярно (натален дом на този момент): "
+                                     + ", ".join(str(x) for x in sorted(allowed)) + "."))
     return out
+
+
+# --------------------------------------------------------------------------------------------------------------
+# Посока на движение (ретрограден/директен), станции и знак на транзитно тяло през период (R02, регресионен одит 11.10.2026)
+# --------------------------------------------------------------------------------------------------------------
+_MOTION_WORD = r"(?:ретроград\w*|директ(?:ен|на|но|ни|ния|ният|ната|ното|ните))"
+_MOTION_AFTER_RE = re.compile(
+    rf"^\s*[,(]?\s*(?:(?:е|са|остава|остават|си|вече|още|все|ще|бъде|бъдат|стои|стоят|продължава|продължават|да|в|във)\s+){{0,3}}"
+    rf"(не\s+)?[(]?\s*({_MOTION_WORD})(?![\w])", re.IGNORECASE)
+_MOTION_BEFORE_RE = re.compile(rf"({_MOTION_WORD})\s+(?:(?:транзитн\w+|наталн\w+|натален)\s+)?$", re.IGNORECASE)
+_STATION_VERB_RE = re.compile(
+    r"^\s*(?:(?:ще|вече|отново|окончателно|официално|точно)\s+){0,2}(?:се\s+)?(?:става\w*|стан\w+|обръща\w*|обърн\w+|тръгва\w*|тръгн\w+|завива\w*|завие\w*|поема\w*|поем\w+)"
+    r"(?![\w])([^.!?;]{0,48})", re.IGNORECASE)
+_FUTURE_RE = re.compile(r"(?<![\w])(?:ще|скоро|следва|предстои|предстоят|след)(?![\w])", re.IGNORECASE)
+_MONTH_ONLY_RE = re.compile(r"(?<![\d\w])(?<!\d )(януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември)(?:\s+(\d{4}))?(?![\w])", re.IGNORECASE)
+_PERIOD_WORD_RE = re.compile(r"(?<![\w])(?:периода|периодът|период|месеца|месеца|тези\s+седмици|тези\s+дни|сега|в\s+момента)(?![\w])", re.IGNORECASE)
+_MOTION_BG = {"retrograde": "ретрограден", "direct": "директен"}
+
+
+def _stamp(local: str) -> str:
+    return f"{int(local[8:10])} {_MONTH_NAMES[int(local[5:7])]} {local[11:16]}"
+
+
+def _claim_window(seg: str, facts: Facts) -> Tuple[Optional[str], Optional[str], bool]:
+    """(прозорец (от, до) като „YYYY-MM-DD“ включително, има ли времева опора в изречението).
+    Дати в изречението -> от най-ранната до най-късната; иначе споменат месец; иначе целият период."""
+    items = [i for i in parse_dates(seg, facts) if not i.relative]
+    if items:
+        return min(i.dates[0] for i in items).isoformat(), max(i.dates[-1] for i in items).isoformat(), True
+    if facts.period:
+        for m in _MONTH_ONLY_RE.finditer(seg):
+            month = MONTHS[m.group(1).lower()]
+            year = int(m.group(2)) if m.group(2) else int(facts.period[0][:4])
+            if month < int(facts.period[0][5:7]) and not m.group(2) and int(facts.period[1][:4]) > year:
+                year = int(facts.period[1][:4])
+            last = (date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)).isoformat()
+            return f"{year:04d}-{month:02d}-01", last, True
+    if facts.period:
+        return facts.period[0], facts.period[1], bool(_PERIOD_WORD_RE.search(seg))
+    return None, None, False
+
+
+def _timeline_in(facts: Facts, planet: str, lo: str, hi: str) -> List[Dict]:
+    """Интервалите на тялото, които засягат дните lo..hi (включително); празно, ако прозорецът е извън изчисленото."""
+    rows = facts.timeline.get(planet) or []
+    if not rows or hi < rows[0]["from"][:10] or lo > rows[-1]["to"][:10]:
+        return []
+    return [r for r in rows if r["from"][:10] <= hi and r["to"] > f"{lo} 00:00"]
+
+
+def _timeline_text(rows: List[Dict], what: str) -> str:
+    parts = []
+    for r in rows[:4]:
+        value = SIGN_BG.get(r["sign"], r["sign"]) if what == "sign" else _MOTION_BG[r["motion"]]
+        parts.append(f"{value} (от {_stamp(r['from'])} до {_stamp(r['to'])})")
+    return "; ".join(parts)
+
+
+def _motion_claims(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Dict]:
+    """Твърдения за посока: {planets, motion, station: bool, kind (transit|natal|None), owner, excerpt, span}.
+    Състояние: „Транзитният Юпитер е ретрограден“, „ретроградният Меркурий“. Станция: „Плутон се обръща назад“, „Венера става директна“."""
+    claims: List[Dict] = []
+    for g in groups:
+        keys = [k for k in g.keys if k in MOTION_PLANETS]
+        if not keys:
+            continue
+        after = seg[g.end:g.end + 90]
+        verb = _STATION_VERB_RE.match(after)
+        if verb:
+            tail = verb.group(1).lower()
+            direction = "retrograde" if re.search(r"ретроград|назад", tail) else ("direct" if re.search(r"директ|напред", tail) else None)
+            if direction:
+                claims.append({"planets": keys, "motion": direction, "station": True, "kind": kind_cue(seg, g.start, mentions),
+                               "owner": _group_owner(seg, g, facts), "excerpt": _short(seg, max(0, g.start - 12), min(len(seg), g.end + 70)),
+                               "span": (g.start, g.end)})
+            continue
+        m = _MOTION_AFTER_RE.match(after)
+        if m and not m.group(1):
+            word = m.group(2).lower()
+            claims.append({"planets": keys, "motion": "retrograde" if word.startswith("ретроград") else "direct", "station": False,
+                           "kind": kind_cue(seg, g.start, mentions), "owner": _group_owner(seg, g, facts),
+                           "excerpt": _short(seg, max(0, g.start - 12), min(len(seg), g.end + m.end() + 10)), "span": (g.start, g.end)})
+            continue
+        before = _MOTION_BEFORE_RE.search(seg[max(0, g.start - 40):g.start])
+        if before and not re.search(r"(?<![\w])не\s+$", seg[max(0, g.start - 40):max(0, g.start - 40) + before.start()]):
+            word = before.group(1).lower()
+            claims.append({"planets": keys, "motion": "retrograde" if word.startswith("ретроград") else "direct", "station": False,
+                           "kind": kind_cue(seg, g.start, mentions), "owner": _group_owner(seg, g, facts),
+                           "excerpt": _short(seg, max(0, g.start - 40 + before.start() - 4), min(len(seg), g.end + 12)), "span": (g.start, g.end)})
+    return claims
+
+
+def check_motion(seg: str, mentions: List[Mention], groups: List[Group], facts: Facts) -> List[Violation]:
+    out: List[Violation] = []
+    claims = _motion_claims(seg, mentions, groups, facts)
+    if not claims:
+        return out
+    items = [i for i in parse_dates(seg, facts) if not i.relative]
+    stations = [(e["planet"], e["direction"], e["when"]) for e in (facts.calendar or [])
+                if e.get("type") == "RETROGRADE" and e.get("direction") and e.get("when")]
+    for c in claims:
+        for planet in c["planets"]:
+            if c["station"]:
+                # посоката на станцията на дата: сверява се със станцията на същото тяло в рамките на един ден
+                for it in items:
+                    near = [st for st in stations if st[0] == planet
+                            and abs((date.fromisoformat(st[2][:10]) - it.dates[0]).days) <= 1]
+                    if near and not any(st[1] == c["motion"] for st in near):
+                        real = "; ".join(f"{_stamp(st[2])} ({_MOTION_BG[st[1]]})" for st in near)
+                        out.append(Violation("event", "hard", c["excerpt"],
+                                             f"Станцията на {_pl(planet)} е в обратната посока. Вярно: {real}."))
+                        break
+                continue
+            transit_ok = natal_ok = None
+            if c["kind"] in (None, "transit"):
+                transit_ok = _transit_motion_ok(seg, facts, planet, c["motion"], items)
+            if c["kind"] in (None, "natal"):
+                owners = [c["owner"]] if c["owner"] else [k for k in facts.names]
+                flags = [facts.motion.get(k, {}).get(planet) for k in owners]
+                known = [f for f in flags if f is not None]
+                natal_ok = None if not known else any((f and c["motion"] == "retrograde") or (not f and c["motion"] == "direct") for f in known)
+            if c["kind"] is None:
+                # без „транзитен/натален“: нарушение само когато транзитът е изчислен и не отговаря, а натално не оправдава твърдението
+                if transit_ok is not False or natal_ok is True or not _motion_anchor_ok(seg, facts, items):
+                    continue
+            elif (transit_ok if c["kind"] == "transit" else natal_ok) is not False:
+                continue
+            kind_text = "транзитният" if c["kind"] == "transit" else ("наталният" if c["kind"] == "natal" else "")
+            out.append(Violation("event", "hard", c["excerpt"], _motion_detail(seg, facts, planet, c, kind_text, items)))
+    return out
+
+
+def _motion_anchor_ok(seg: str, facts: Facts, items: List[DateItem]) -> bool:
+    """Твърдение за посока без „транзитен/натален“ се проверява само когато има времева опора (дата, месец, „в момента“)."""
+    if facts.mode == "snapshot":
+        return True
+    return bool(items) or bool(_MONTH_ONLY_RE.search(seg)) or bool(_PERIOD_WORD_RE.search(seg))
+
+
+def _transit_motion_ok(seg: str, facts: Facts, planet: str, claimed: str, items: List[DateItem]) -> Optional[bool]:
+    """Вярно ли е твърдението за транзитното тяло; None, когато няма данни или твърдението не се отнася за изчисленото време."""
+    if facts.mode == "snapshot":
+        flag = facts.motion.get("sky", {}).get(planet)
+        if flag is None or _FUTURE_RE.search(seg):
+            return None
+        if any(i.dates[0].isoformat() != facts.snapshot_date for i in items):
+            return None                                  # дата, различна от момента на анализа: за нея няма изчислено движение
+        return (flag and claimed == "retrograde") or (not flag and claimed == "direct")
+    lo, hi, _anchored = _claim_window(seg, facts)
+    if lo is None:
+        return None
+    rows = _timeline_in(facts, planet, lo, hi)
+    if not rows:
+        return None
+    return any(r["motion"] == claimed for r in rows)
+
+
+def _motion_detail(seg: str, facts: Facts, planet: str, c: Dict, kind_text: str, items: List[DateItem]) -> str:
+    label = f"{kind_text} {_pl(planet)}".strip()
+    if c["kind"] == "natal":
+        owners = [c["owner"]] if c["owner"] else list(facts.names)
+        return "Посоката на " + label + " не е вярна. Вярно: " + "; ".join(
+            f"{_pl(planet)} на {_who(facts, k)} е {'ретроградна' if facts.motion.get(k, {}).get(planet) else 'директна'}" for k in owners
+            if facts.motion.get(k, {}).get(planet) is not None) + "."
+    if facts.mode == "snapshot":
+        return f"Посоката на транзитния {_pl(planet)} не е вярна. Вярно: на този момент е {'ретрограден' if facts.motion['sky'][planet] else 'директен'}."
+    lo, hi, _ = _claim_window(seg, facts)
+    return f"Посоката на транзитния {_pl(planet)} не е вярна. Вярно за {_dm(lo)}–{_dm(hi)}: {_timeline_text(_timeline_in(facts, planet, lo, hi), 'motion')}."
+
+
+def _timeline_sign_violations(seg: str, c: Dict, facts: Facts) -> List[Violation]:
+    """Знак на транзитно тяло в период: сверява се с интервалите; без „транзитен“ се приема и натален знак на някого."""
+    out: List[Violation] = []
+    items = [i for i in parse_dates(seg, facts) if not i.relative]
+    lo, hi, anchored = _claim_window(seg, facts)
+    if lo is None or (c["kind"] != "transit" and not (anchored or items)):
+        return out
+    for planet in c["planets"]:
+        if planet not in facts.timeline:
+            continue
+        rows = _timeline_in(facts, planet, lo, hi)
+        if not rows:
+            continue
+        signs = {r["sign"] for r in rows}
+        if c["kind"] != "transit":
+            signs |= {d["sign"] for k in facts.names for d in [facts.natal.get(k, {}).get(planet)] if d}
+            signs |= {sg for k in facts.names for sg in facts.alt_signs.get((k, planet), [])}
+        if c["sign"] in signs:
+            continue
+        out.append(Violation("sign", "hard", c["excerpt"],
+                             f"Знакът на транзитния {_pl(planet)} не е верен за {_dm(lo)}–{_dm(hi)}. Вярно: {_timeline_text(rows, 'sign')}."))
+    return out
+
+
+# --------------------------------------------------------------------------------------------------------------
+# Изходен знак при влизане и традиционни достойнства (R04, R11)
+# --------------------------------------------------------------------------------------------------------------
+_FROM_SIGN_AFTER_RE = re.compile(
+    r"^(?:\s*,?\s*(?:на\s+)?\d{1,2}(?:\.\d{1,2}\.?|\s+[а-я]+)(?:\s+\d{4})?(?:\s*,?\s*(?:в\s+)?\d{1,2}:\d{2}(?:\s*ч\.?)?)?)?"
+    r"\s*(?:,\s*)?(?:идвайки\s+|идва\s+|като\s+идва\s+)?(?:от|напускайки)\s+(?:знака\s+)?$", re.IGNORECASE)
+_LEAVING_BEFORE_RE = re.compile(r"(?:напуска\w*|излиза\w*\s+от|оставя\w*|напуснал\w*)\s+(?:знака\s+)?$", re.IGNORECASE)
+
+
+def check_ingress_source(seg: str, mentions: List[Mention], facts: Facts) -> List[Violation]:
+    """„Марс влиза във Дева от Скорпион“, „Марс напуска Скорпион и влиза във Дева“: изходният знак е от изчисленото предишно положение."""
+    ingresses = [e for e in facts.calendar or [] if e.get("type") == "INGRESS" and e.get("from_sign")]
+    if not ingresses:
+        return []
+    out: List[Violation] = []
+    signs = [m for m in mentions if m.kind == "sign"]
+    for w in INGRESS_WORD_RE.finditer(seg):
+        to_sign = next((x for x in signs if 0 <= x.start - w.end() <= 3), None)
+        planets = [p for p in _planets_near(mentions, w.start()) if p.key not in _NO_EVENT_PLANETS]
+        if to_sign is None or not planets:
+            continue
+        planet = planets[0].key
+        claimed = next((x for x in signs if x.start > to_sign.end and _FROM_SIGN_AFTER_RE.match(seg[to_sign.end:x.start])), None)
+        if claimed is None:
+            claimed = next((x for x in signs if x.end <= w.start() and _LEAVING_BEFORE_RE.search(seg[max(0, x.start - 28):x.start])), None)
+        if claimed is None:
+            continue
+        real = {e["from_sign"] for e in ingresses if e["planet"] == planet and e["sign"] == to_sign.key}
+        if real and claimed.key not in real:
+            out.append(Violation("event", "hard", _short(seg, max(0, min(w.start(), claimed.start) - 12), min(len(seg), max(to_sign.end, claimed.end) + 10)),
+                                 f"{_pl(planet)} влиза в {SIGN_BG[to_sign.key]} от {SIGN_BG[next(iter(real))]}, не от {SIGN_BG[claimed.key]}."))
+    return out
+
+
+# Традиционни достойнства на седемте класически планети (общи за школите; без нова школа): управление, екзалтация, изгнание, падение
+DIGNITY = {
+    "domicile": {"Sun": ("Leo",), "Moon": ("Cancer",), "Mercury": ("Gemini", "Virgo"), "Venus": ("Taurus", "Libra"),
+                 "Mars": ("Aries", "Scorpio"), "Jupiter": ("Sagittarius", "Pisces"), "Saturn": ("Capricorn", "Aquarius")},
+    "exaltation": {"Sun": ("Aries",), "Moon": ("Taurus",), "Mercury": ("Virgo",), "Venus": ("Pisces",), "Mars": ("Capricorn",),
+                   "Jupiter": ("Cancer",), "Saturn": ("Libra",)},
+    "detriment": {"Sun": ("Aquarius",), "Moon": ("Capricorn",), "Mercury": ("Sagittarius", "Pisces"), "Venus": ("Scorpio", "Aries"),
+                  "Mars": ("Libra", "Taurus"), "Jupiter": ("Gemini", "Virgo"), "Saturn": ("Cancer", "Leo")},
+    "fall": {"Sun": ("Libra",), "Moon": ("Scorpio",), "Mercury": ("Pisces",), "Venus": ("Virgo",), "Mars": ("Cancer",),
+             "Jupiter": ("Capricorn",), "Saturn": ("Aries",)},
+}
+_DIGNITY_WORDS = [("exaltation", r"екзалтаци\w*|екзалтира\w*|екзалтиран\w*"), ("fall", r"падение\w*"),
+                  ("detriment", r"изгнание\w*|изгнан\w*"), ("domicile", r"(?:в|е\s+в)\s+управление|\(\s*управление\s*\)|собствения\s+си\s+знак|собствен\s+знак|дома\s+си|своя\s+дом")]
+_DIGNITY_RE = [(kind, re.compile(r"(?<![\w])(?:%s)(?![\w])" % words, re.IGNORECASE)) for kind, words in _DIGNITY_WORDS]
+_DIGNITY_BG = {"domicile": "управление", "exaltation": "екзалтация", "detriment": "изгнание", "fall": "падение"}
+
+
+def check_dignity(seg: str, mentions: List[Mention], facts: Facts) -> List[Violation]:
+    """„Венера във Везни е в екзалтация“: Везни е управление на Венера, екзалтацията ѝ е в Риби. Знакът е най-близкият до думата
+    (преди нея до 40 знака, иначе след нея), планетата - най-близката преди знака (за „екзалтацията ѝ е в Риби“ - преди думата)."""
+    out: List[Violation] = []
+    planets = [m for m in mentions if m.kind == "planet" and m.key in DIGNITY["domicile"]]
+    signs = [m for m in mentions if m.kind == "sign"]
+    if not planets or not signs:
+        return out
+    for kind, rx in _DIGNITY_RE:
+        for w in rx.finditer(seg):
+            before = [x for x in signs if x.end <= w.start() and w.start() - x.end <= 40 and not re.search(r"[.!?;]", seg[x.end:w.start()])]
+            after = [x for x in signs if x.start >= w.end() and x.start - w.end() <= 30 and not re.search(r"[.!?;,]", seg[w.end():x.start])]
+            linked = [x for x in after if re.fullmatch(r"\s*(?:(?:ѝ|му|им)\s+)?(?:(?:е|са)\s+)?(?:в|във)\s+", seg[w.end():x.start])]
+            sign = linked[0] if linked else (max(before, key=lambda x: x.end) if before else (min(after, key=lambda x: x.start) if after else None))
+            if sign is None:
+                continue
+            anchor = w.start() if sign.start >= w.end() else min(sign.start, w.start())
+            owner_planets = [p for p in planets if p.end <= anchor + 1 and anchor - p.end <= 60 and not re.search(r"[.!?;]", seg[p.end:anchor])]
+            if not owner_planets:
+                continue
+            planet = max(owner_planets, key=lambda p: p.end).key
+            if sign.key in DIGNITY[kind][planet]:
+                continue
+            true_kinds = [k for k in DIGNITY if sign.key in DIGNITY[k][planet]]
+            fact = (f"{SIGN_BG[sign.key]} е " + " и ".join(_DIGNITY_BG[k] for k in true_kinds) + f" на {_pl(planet)}") if true_kinds else \
+                f"{_pl(planet)} в {SIGN_BG[sign.key]} няма традиционно достойнство"
+            out.append(Violation("sign", "hard", _short(seg, max(0, min(anchor, w.start()) - 24), min(len(seg), max(sign.end, w.end()) + 10)),
+                                 f"Достойнство: {_pl(planet)} в {SIGN_BG[sign.key]} не е {_DIGNITY_BG[kind]}. Вярно: {fact}; "
+                                 f"{_DIGNITY_BG[kind]} на {_pl(planet)}: " + ", ".join(SIGN_BG[x] for x in DIGNITY[kind][planet]) + "."))
+    return out
+
+
+def protect_names(text: str, facts: Facts) -> str:
+    """Тире в името на човек („Тест А — одит“) не е разделител на мисли: вътре в името се заменя с интервал, преди текстът да се реже на изречения."""
+    for key in ("user", "partner"):
+        name = facts.names.get(key, "")
+        if len(re.findall(r"\w+", name)) < 2:                 # във фактите името е без тире („Тест А одит“); текстът на AI го пише и с тире
+            continue
+        rx = _name_re(name)
+        if rx:
+            text = rx.sub(lambda m: re.sub(r"\s*[—–]\s*", " ", m.group(0)), text)
+    return text
 
 
 def check_text(text: str, facts: Facts) -> List[Violation]:
@@ -1647,9 +2135,9 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
     found: List[Violation] = list(check_leaks(text or ""))
     if name_collides(facts):
         return found                          # само служебните етикети и проценти: твърденията не могат да се разпознаят сигурно
-    for seg in segments(text or ""):
+    for seg in segments(protect_names(text or "", facts)):
         mentions = find_mentions(seg)
-        groups = planet_groups(seg, mentions)
+        groups = planet_groups(seg, mentions, facts)
         found += check_houses(seg, mentions, groups, facts)
         found += check_signs(seg, mentions, groups, facts)
         found += check_aspects(seg, mentions, groups, facts)
@@ -1657,6 +2145,9 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
         found += check_event_houses(seg, mentions, groups, facts)
         found += check_unknown_time(seg, mentions, groups, facts)
         found += check_retro_count(seg, mentions, groups, facts)
+        found += check_motion(seg, mentions, groups, facts)
+        found += check_ingress_source(seg, mentions, facts)
+        found += check_dignity(seg, mentions, facts)
         found += check_dates(seg, mentions, groups, facts)
     seen: Set[Tuple[str, str, str]] = set()
     unique = []
@@ -1687,6 +2178,50 @@ def _person_facts(chart: Dict) -> Tuple[Dict, Dict, int]:
     return natal, cusps_view(view.get("houses") or {}), int(view.get("retrograde_count") or 0)
 
 
+class FactsUnavailable(Exception):
+    """Фактите за проверка не могат да се построят пълно (липсва карта, небе, куспиди или календар). reason е кратка причина без данни."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+CORE_BODIES = ("Sun", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto")
+MOTION_PLANETS = ("Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto")      # само тези могат да са ретроградни
+
+
+def validate_facts(facts: "Facts") -> None:
+    """Задължителната основа за проверка според режима. Хвърля FactsUnavailable; непознат час е отделен явен договор (no_houses), не липса."""
+    if not facts.names or "user" not in facts.natal:
+        raise FactsUnavailable("natal_missing")
+    for key in facts.names:
+        planets = facts.natal.get(key) or {}
+        # При неизвестен час тяло, което сменя знак в рамките на деня (често Слънце и Луна), е в alt_signs, не в natal
+        missing = [b for b in CORE_BODIES + ("Moon",) if b not in planets and (key, b) not in facts.alt_signs]
+        if missing:
+            raise FactsUnavailable(f"natal_bodies_missing:{key}")
+        if key not in facts.no_houses and not facts.cusps.get(key):
+            raise FactsUnavailable(f"cusps_missing:{key}")
+        if key not in facts.natal_aspects:
+            raise FactsUnavailable(f"natal_aspects_missing:{key}")
+    if facts.mode == "snapshot":
+        if not facts.sky:
+            raise FactsUnavailable("transit_sky_missing")
+        for key in facts.names:
+            if key not in facts.transit_aspects:
+                raise FactsUnavailable(f"transit_aspects_missing:{key}")
+            if key not in facts.no_houses and not facts.transit_houses.get(key):
+                raise FactsUnavailable(f"transit_houses_missing:{key}")
+    if facts.mode in ("period", "overview"):
+        if facts.calendar is None or not facts.period:
+            raise FactsUnavailable("calendar_missing")
+        if any(not facts.timeline.get(body) for body in ("Sun",) + MOTION_PLANETS):
+            raise FactsUnavailable("timeline_missing")
+        for key in facts.names:
+            if key not in facts.no_houses and any(not facts.house_timeline.get(key, {}).get(body) for body in ("Sun",) + MOTION_PLANETS):
+                raise FactsUnavailable(f"house_timeline_missing:{key}")
+
+
 def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partner_name: Optional[str] = None,
                 partner_chart: Optional[Dict] = None, transit_chart: Optional[Dict] = None, calendar=None,
                 target_date: Optional[str] = None, report_date: Optional[str] = None) -> Facts:
@@ -1703,6 +2238,8 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
     for key, chart in people:
         natal, cusps, retro = _person_facts(chart)
         facts.natal[key], facts.cusps[key], facts.retro_count[key] = natal, cusps, retro
+        facts.motion[key] = {name: bool(p.get("retrograde")) for name, p in (factpack.natal_view(chart).get("planets") or {}).items()
+                             if p.get("retrograde") is not None}
         if chart.get("time_known") is False:
             facts.no_houses.add(key)
             for planet, info in (chart.get("sign_ranges") or {}).items():
@@ -1724,6 +2261,8 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
         sky_view = factpack.transit_view(transit_chart)
         facts.sky = planets_view(sky_view["planets"])
         facts.retro_count["sky"] = int(sky_view.get("retrograde_count") or 0)
+        facts.motion["sky"] = {name: bool(p.get("retrograde")) for name, p in (sky_view.get("planets") or {}).items()
+                               if p.get("retrograde") is not None}
         for key, chart in people:
             facts.transit_houses[key] = factpack.overlay(chart, transit_chart) if factpack.has_houses(chart) else {}
             facts.transit_aspects[key] = [{"p1": a["transit_planet"], "p2": a["natal_planet"], "aspect": a["aspect"], "orb": a.get("orb")}
@@ -1736,6 +2275,10 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
         facts.calendar = calendar.public_events_with_context()
         facts.period = (calendar.start, calendar.end)
         facts.report_date = report_date
+        facts.timeline = {body: [dict(row) for row in rows] for body, rows in (getattr(calendar, "timeline", None) or {}).items()}
+        for label, bodies in (getattr(calendar, "house_timeline", None) or {}).items():
+            facts.house_timeline[_OWNER_LABEL.get(label, label)] = {body: [dict(row) for row in rows] for body, rows in bodies.items()}
+    validate_facts(facts)
     return facts
 
 

@@ -455,6 +455,9 @@ class FakeInterpreter:
     def build_text_facts(self, **kwargs):                  # проверката на текста (Фаза 10) има собствени тестове
         return None
 
+    def require_text_facts(self, facts, *, stage, checks=None):
+        return None
+
     async def guard_text(self, text, facts, *, stage, checks=None, max_tokens=None):
         return text
 

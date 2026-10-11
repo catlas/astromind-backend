@@ -678,9 +678,23 @@ class InterpreterIntegrationTest(unittest.TestCase):
         self.assertEqual(text, bad)
         self.assertEqual(fake.await_count, 1)
 
-    def test_facts_that_cannot_be_built_do_not_stop_the_report(self):
+    def test_facts_that_cannot_be_built_refuse_the_report_before_any_ai_call(self):
+        """R01 (одит 11.10.2026): без факти за проверка непроверен текст не се доставя; отказът е ПРЕДИ разход на AI заявка."""
         _, _, bad, _ = good_and_bad_text()
-        with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(return_value=bad)), \
+        fake = mock.AsyncMock(return_value=bad)
+        checks = []
+        with mock.patch.object(self.interp, "_call_api", fake), \
+                mock.patch.object(ai_interpreter.text_check, "build_facts", side_effect=KeyError("карта")):
+            with self.assertRaises(text_guard.TextCheckError) as ctx:
+                asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван", checks=checks))
+        self.assertEqual(fake.await_count, 0)
+        self.assertEqual(ctx.exception.outcome.reason, "facts_unavailable")
+        self.assertEqual([c["result"] for c in checks], ["rejected"])
+
+    def test_facts_that_cannot_be_built_let_the_text_through_only_in_warn_mode(self):
+        _, _, bad, _ = good_and_bad_text()
+        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "warn"}), \
+                mock.patch.object(self.interp, "_call_api", mock.AsyncMock(return_value=bad)), \
                 mock.patch.object(ai_interpreter.text_check, "build_facts", side_effect=KeyError("карта")):
             text = asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван"))
         self.assertEqual(text, bad)

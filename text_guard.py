@@ -11,6 +11,9 @@
 - TEXT_CHECK_IGNORE: кодове на нарушения, които се пренебрегват, например "date,event" (бърза спасителна ръчка, ако
   някой вид проверка дава фалшиви тревоги, без нов деплой на кода).
 
+Липсващи факти (MissingFacts, R01): в "enforce" анализът се отказва ПРЕДИ разход на AI заявка (код "facts_unavailable"); None
+означава „проверката не се прилага“ (текст на друг език). В "warn" и "off" текстът минава и причината се записва в телеметрията.
+
 Грешка или забавяне на самия проверител: в "enforce" текстът се отхвърля (нищо не се записва и не се таксува, код "checker"),
 защото непроверен текст не се доставя като проверен; в "warn" и "off" текстът минава и грешката се записва в телеметрията.
 В телеметрията влизат само етап, причина, кодове и броеве, никога текст на анализа.
@@ -36,6 +39,12 @@ USER_MESSAGE = "Не успяхме да завършим анализа. Нищ
 RepairCall = Callable[[str, str], Awaitable[str]]
 
 
+@dataclass(frozen=True)
+class MissingFacts:
+    """Фактите за проверка не можаха да се построят. reason е кратка причина без лични данни (напр. cusps_missing:partner)."""
+    reason: str = "facts_error"
+
+
 def check_mode() -> str:
     mode = os.getenv("TEXT_CHECK_MODE", MODE_ENFORCE).strip().lower()
     return mode if mode in (MODE_ENFORCE, MODE_WARN, MODE_OFF) else MODE_ENFORCE
@@ -57,7 +66,7 @@ class GuardOutcome:
     repaired: bool = False
     rejected: bool = False
     error: Optional[str] = None                        # грешка в проверителя (в enforce текстът се отхвърля, иначе минава непроверен)
-    reason: str = ""                                   # защо е отхвърлен: checker_error | repair_unavailable | violations_remain
+    reason: str = ""                                   # защо е отхвърлен: facts_unavailable | checker_error | repair_unavailable | violations_remain
 
     @property
     def hard_before(self) -> List[Violation]:
@@ -70,6 +79,8 @@ class GuardOutcome:
     def codes(self) -> str:
         """Кодовете на тежките нарушения (при отхвърляне: тези, които са останали след поправката), най-много 60 знака
         (границата на свойствата на събитие)."""
+        if self.reason == "facts_unavailable":
+            return "facts"
         if self.error and self.rejected:
             return "checker"
         seen: List[str] = []
@@ -160,13 +171,33 @@ async def _check(text: str, facts: Facts, ignore: Set[str]) -> List[Violation]:
     return await asyncio.wait_for(asyncio.to_thread(_check_sync, text, facts, ignore), timeout=CHECK_TIMEOUT_SECONDS)
 
 
-async def guard_text(text: str, facts: Optional[Facts], *, stage: str, repair_call: RepairCall,
+def refuse_missing_facts(facts: Any, *, stage: str, mode: Optional[str] = None, text: str = "") -> Optional[GuardOutcome]:
+    """MissingFacts в „enforce“ -> TextCheckError (reason facts_unavailable); в другите режими връща описание за телеметрията.
+    За каквото и да е друго (Facts или None) връща None. Вика се и ПРЕДИ разход на AI заявка, и като последна защита в guard_text."""
+    if not isinstance(facts, MissingFacts):
+        return None
+    mode = mode or check_mode()
+    outcome = GuardOutcome(stage=stage, mode=mode, text=text, error=f"facts:{facts.reason}"[:80])
+    if mode == MODE_ENFORCE:
+        outcome.rejected, outcome.reason = True, "facts_unavailable"
+        print(f"❌ Проверка на текста ({stage}): фактите липсват ({facts.reason}), анализът се отказва преди AI заявка")
+        raise TextCheckError(stage, outcome)
+    print(f"⚠️ Проверка на текста ({stage}): фактите липсват ({facts.reason}), текстът минава непроверен")
+    return outcome
+
+
+async def guard_text(text: str, facts: Any, *, stage: str, repair_call: RepairCall,
                      language_rules: str = "", mode: Optional[str] = None) -> GuardOutcome:
     """Проверява текста срещу фактите. Връща GuardOutcome (с поправения текст) или хвърля TextCheckError."""
     mode = mode or check_mode()
     cleaned_text, cleaned = text_check.clean_labels(text or "")
     outcome = GuardOutcome(stage=stage, mode=mode, text=cleaned_text, cleaned=cleaned)
-    if mode == MODE_OFF or facts is None:
+    if mode != MODE_OFF:
+        missing = refuse_missing_facts(facts, stage=stage, mode=mode, text=cleaned_text)
+        if missing is not None:                                  # warn: текстът минава непроверен, причината остава в резюмето
+            outcome.error = missing.error
+            return outcome
+    if mode == MODE_OFF or facts is None or isinstance(facts, MissingFacts):
         return outcome
     ignore = ignored_codes()
     try:

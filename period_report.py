@@ -19,6 +19,8 @@ import pytz
 
 import factpack
 import safety
+import text_check
+import text_guard
 from scanner import PeriodCalendar
 
 OVERVIEW_TITLE = "Общ преглед на периода"
@@ -108,9 +110,14 @@ async def run_period_report(
         facts = interpreter.build_text_facts(mode="period", user_name=user_name, natal_chart=natal_chart,
                                              partner_name=partner_name, partner_chart=partner_chart,
                                              calendar=calendar, report_date=report_date)
-    overview_facts = dataclasses.replace(facts, mode="overview") if facts is not None else None
+    overview_facts = dataclasses.replace(facts, mode="overview") if isinstance(facts, text_check.Facts) else facts
 
     checks: List[Dict] = []
+    # R01: без факти за проверка в „enforce“ нито един месец не се праща към AI (без разход и без повторни опити)
+    try:
+        interpreter.require_text_facts(facts, stage="facts", checks=checks)
+    except text_guard.TextCheckError as failure:
+        raise ForecastGenerationError("facts", failure, checks) from failure
     flagged: List[str] = []
     month_texts: List[Tuple[str, str]] = []
     try:

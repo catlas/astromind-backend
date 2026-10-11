@@ -36,6 +36,15 @@ _PLANET_RE = re.compile(_any(PLANETS))
 _ASPECT_RE = re.compile(_any(list(ASPECTS) + [k.capitalize() for k in ASPECTS]))
 _NATAL_RE = re.compile(r"(?<![\w-])([Nn]atal|NATAL|[Tt]ransit(?:ing)?)(?![\w-])(\s+)?([А-Яа-яA-Za-z]+)?")
 _PREP_RE = re.compile(r"(?<![\w-])([Вв])(\s+)(?=[ВвФф])")           # „в Везни“ → „във Везни“
+# Известни грешни думи на AI (регресионен одит 11.10.2026): знакът Везни е писан „Либра“/„Либера“, „Накратко“ е писано „Накрасо“.
+# Работи само върху цели думи; имената на хората са защитени по-горе и остават непроменени.
+TERM_FIXES = {"либера": "Везни", "либра": "Везни", "накрасо": "Накратко"}
+_TERM_RE = re.compile(r"(?<![\w-])(" + "|".join(TERM_FIXES) + r")(?![\w-])", re.IGNORECASE)
+
+
+def _term(m: re.Match) -> str:
+    fixed = TERM_FIXES[m.group(1).lower()]
+    return fixed if m.group(1)[0].isupper() else fixed[0].lower() + fixed[1:]
 
 
 def bind(names: Iterable[str]) -> Token:
@@ -109,6 +118,7 @@ def bulgarianize(text: str) -> str:
         text = re.sub(_WORD % re.escape(name), marker, text)
     text = _HEADINGS_RE.sub(lambda m: _HEADING_LOOKUP[m.group(1).lower()], text)
     text = _ZONE_RE.sub(_zone, text)
+    text = _TERM_RE.sub(_term, text)
     text = _SIGN_RE.sub(lambda m: SIGNS[m.group(1)], text)
     text = _SIGN_UPPER_RE.sub(lambda m: SIGNS[next(k for k in SIGNS if k.upper() == m.group(1))].upper(), text)
     text = _PLANET_RE.sub(lambda m: PLANETS[m.group(1)], text)

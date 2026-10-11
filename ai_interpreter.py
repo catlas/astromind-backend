@@ -2466,12 +2466,28 @@ class AIInterpreter:
 
     @staticmethod
     def build_text_facts(**kwargs):
-        """Фактите за проверката на текста; при грешка None (текстът минава непроверен, отчетът не спира)."""
+        """Фактите за проверката на текста. При грешка или непълни факти връща text_guard.MissingFacts: в „enforce“ анализът
+        се отказва (R01), в „warn“/„off“ текстът минава непроверен. В дневника влизат само типът грешка и причината, без данни."""
         try:
             return text_check.build_facts(**kwargs)
+        except text_check.FactsUnavailable as exc:
+            print(f"⚠️ Фактите за проверката на текста са непълни ({exc.reason})")
+            return text_guard.MissingFacts(exc.reason[:60])
         except Exception as exc:
-            print(f"⚠️ Фактите за проверката на текста не се построиха ({type(exc).__name__}: {str(exc)[:120]})")
-            return None
+            print(f"⚠️ Фактите за проверката на текста не се построиха ({type(exc).__name__})")
+            return text_guard.MissingFacts(f"build_error:{type(exc).__name__}"[:60])
+
+    @staticmethod
+    def require_text_facts(facts, *, stage: str, checks: Optional[List[Dict]] = None) -> None:
+        """Отказ ПРЕДИ разход на AI заявка, когато фактите за проверка липсват (само в „enforce“)."""
+        try:
+            outcome = text_guard.refuse_missing_facts(facts, stage=stage)
+        except text_guard.TextCheckError as failure:
+            if checks is not None:
+                checks.append(failure.outcome.summary())
+            raise
+        if outcome is not None and checks is not None:
+            checks.append(outcome.summary())
 
     async def _interpret_period(
         self,
@@ -2874,6 +2890,16 @@ class AIInterpreter:
             except Exception as e:
                 print(f"⚠️ Warning: Could not log prompt to output.log: {e}")
 
+        # Фактите за проверката се строят ПРЕДИ заявката към AI (R01): ако не могат, в „enforce“ анализът се отказва без разход.
+        # TextCheckError не се обвива: извикващият не записва и не таксува.
+        facts = None
+        if language == "bg":
+            facts = self.build_text_facts(
+                mode="snapshot" if transit_chart is not None else "natal", user_name=user_name, natal_chart=natal_chart,
+                partner_name=partner_name, partner_chart=partner_chart, transit_chart=transit_chart,
+                target_date=target_date)
+            self.require_text_facts(facts, stage="snapshot" if transit_chart is not None else "natal", checks=checks)
+
         try:
             # Call AI API (Ollama primary → Together fallback)
             interpretation = await self._call_api(
@@ -2884,13 +2910,6 @@ class AIInterpreter:
         except Exception as e:
             raise RuntimeError(f"Грешка при комуникация с AI API: {e}")
 
-        # Проверка на готовия текст (Фаза 10). TextCheckError не се обвива: извикващият не записва и не таксува.
-        facts = None
-        if language == "bg":
-            facts = self.build_text_facts(
-                mode="snapshot" if transit_chart is not None else "natal", user_name=user_name, natal_chart=natal_chart,
-                partner_name=partner_name, partner_chart=partner_chart, transit_chart=transit_chart,
-                target_date=target_date)
         return await self.guard_text(interpretation, facts, stage="snapshot" if transit_chart is not None else "natal",
                                      checks=checks)
 
