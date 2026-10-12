@@ -293,6 +293,7 @@ def report_mode(params: Optional[dict]) -> dict:
 def report_summary(r: Report) -> dict:
     return {
         "id": r.id, "type": r.report_type, "label": r.label, "profile": r.profile_name or "",
+        "profile_id": (r.params or {}).get("profile_id"),                      # идентичност на профила (името е само етикет)
         "cost_cents": r.cost_cents, "status": r.status,
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "legacy": report_snapshot.is_legacy(r.snapshot),          # преди запазването на изчисленията: износът е възстановен, без гаранция
