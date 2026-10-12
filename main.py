@@ -31,6 +31,7 @@ import jobs
 import time_api
 import geocode_api
 import mailer
+import deployment
 import onboarding_api
 import memory_api
 from auth import (
@@ -41,6 +42,7 @@ from http_security import SecurityMiddleware
 from rate_limit import client_ip, enforce
 
 load_dotenv()
+deployment.enforce_production_rules()
 
 # Схемата на базата се обновява с Alembic преди приемане на заявки
 run_migrations()
@@ -132,6 +134,13 @@ async def root():
             "GET /me": "Връща текущия потребител (Bearer token)"
         }
     }
+
+
+@app.get("/version")
+async def version(http_request: Request):
+    """Кое издание работи: commit и версии на правилата, без тайни и без подробности за инфраструктурата."""
+    enforce(f"version:{client_ip(http_request)}", 60, 60, "Твърде много заявки.")
+    return deployment.release_info()
 
 
 @app.get("/health")
