@@ -26,6 +26,8 @@ import engine
 import factpack
 import limits
 import memory
+import card_engine
+import period_cards
 import period_report
 import progress
 import relationship
@@ -73,12 +75,7 @@ class Outcome:
     quality: str = "full"                           # full | fallback | partial (анализ „за дата“ за двама, pair_snapshot.py); partial не се таксува
 
 
-# Бележка в началото на резервен или частичен анализ (виж pair_snapshot.py)
-QUALITY_NOTES = {
-    "fallback": "**Резервен анализ.** Обобщението и съветите са съставени наново само от проверените блокове. Всички карти са запазени.",
-    "partial": ("**Частичен анализ.** Една или повече карти не минаха проверката и са пропуснати; обобщението и съветите са съставени "
-                "само от проверените. Този анализ не се таксува."),
-}
+QUALITY_NOTES = card_engine.QUALITY_NOTES                  # бележка в началото на резервен или частичен анализ (card_engine.py)
 
 
 def has_partner(request: ChartRequest) -> bool:
@@ -487,7 +484,7 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
 
     final: Optional[Dict[str, Any]] = None
     try:
-        async for step in period_report.run_period_report(
+        async for step in period_cards.run_period_report(
                 get_interpreter(),
                 calendar=calendar,
                 natal_chart=natal,
@@ -497,7 +494,8 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
                 partner_name=request.partner_name if partner_data else None,
                 question=request.question or "",
                 gender=request.gender,
-                partner_gender=request.partner_gender):
+                partner_gender=request.partner_gender,
+                relation=relationship.current_code.get() or ""):
             if step["type"] == "finished":
                 final = step
                 continue
@@ -515,13 +513,15 @@ async def run_period(request: ChartRequest, user_id: int, emit: Emit) -> Outcome
         raise GenerationFailure("forecast_failed", period_report.USER_MESSAGE, stage="period")
 
     emit({"type": "stage", "stage": "finishing"})
+    checks = list(final.get("checks", []))
+    quality = next((c["quality"] for c in checks if c.get("quality")), "full")
     return Outcome(
         content=period_report.saved_content(final["overview"], final["month_texts"], note=time_note),
         report_type=request.report_type or "general",
         label=data_api.report_label(request.report_type or "general", request.partner_name, is_dynamic=True,
                                     question=request.question),
         params={**report_params(request), "forecast_timezone": forecast_zone(request), "months": len(months),
-                "memory_used": memory_used},
-        months=len(months), flags=list(final["flags"]), checks=list(final.get("checks", [])),
+                "memory_used": memory_used, **({"quality": quality} if quality != "full" else {})},
+        months=len(months), flags=list(final["flags"]), checks=checks, quality=quality,
         snapshot=report_snapshot.build(mode="period", request=request, natal=natal, partner=partner_data, transit=transit_chart,
                                        forecast_zone=forecast_zone(request), calendar=calendar))

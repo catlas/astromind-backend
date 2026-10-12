@@ -138,3 +138,38 @@ def pair_reply(user_prompt):
               "[[CONCLUSION]]\nДенят е подходящ за внимателен разговор и неподходящ за прибързани решения."]
     return "\n\n".join(parts)
 
+
+
+PERIOD_MARKERS = ("MODE: MONTHLY FORECAST BY FACT CARDS", "MODE: MONTH ADVICE FROM VERIFIED CARDS", "MODE: PERIOD OVERVIEW FROM VERIFIED BLOCKS",
+                  "You write ONE short interpretation for ONE pre-written fact card")
+
+
+def is_period_prompt(system_prompt):
+    return any(marker in system_prompt for marker in PERIOD_MARKERS)
+
+
+def period_reply(system_prompt, user_prompt):
+    """Подменен отговор на AI за прогноза за период по карти (period_cards.py): таг за всяка карта, съвет за месеца и затварящите секции."""
+    import re
+    card = "Това изисква търпение и ясни граници в разговорите."
+    if "MODE: MONTHLY FORECAST BY FACT CARDS" in system_prompt:
+        ids = re.findall(r"^(M\d+E\d+): ", user_prompt, re.M)
+        parts = [f"[[{i}]]\n{card}" for i in ids]
+        parts.append("[[MONTH]]\nТози месец е добре да подбирате внимателно думите и да не бързате с големи решения.")
+        return "\n\n".join(parts)
+    if "MODE: MONTH ADVICE FROM VERIFIED CARDS" in system_prompt:
+        return "[[MONTH]]\nТози месец е добре да подбирате внимателно думите и да не бързате с големи решения."
+    if "MODE: PERIOD OVERVIEW FROM VERIFIED BLOCKS" in system_prompt:
+        parts = ["[[SUMMARY]]\nПериодът е променлив и изисква търпение, а месеците следват един друг със сходни теми.",
+                 "[[ADVICE]]\n- Говорете спокойно и изчакайте, ако усетите напрежение.\n- Не бързайте с големи решения през периода."]
+        if "[[ANSWER]]" in system_prompt:
+            parts.append("[[ANSWER]]\nНай-добре е да говорите спокойно и бавно: първо изслушайте другия докрай, после кажете какво ви тежи, без да търсите "
+                         "виновен. Изберете един важен въпрос вместо много теми и оставете място за паузи. Така разговорът няма да се превърне в спор.")
+        parts.append("[[CONCLUSION]]\nПериодът е подходящ за внимателни разговори и неподходящ за прибързани решения.")
+        return "\n\n".join(parts)
+    return card
+
+
+async def period_fake(system_prompt, user_prompt, max_tokens=None, **kwargs):
+    """Подмяна на AIInterpreter._call_api за прогноза за период: patch.object(main.ai_interpreter, "_call_api", period_fake)."""
+    return period_reply(system_prompt, user_prompt)

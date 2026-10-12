@@ -14,7 +14,7 @@ import main  # noqa: E402
 from auth import create_purpose_token  # noqa: E402
 from database import Profile, Report, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, PASSWORD, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, PASSWORD, register_and_login, analyze, OVERVIEW_OK, period_fake  # noqa: E402
 
 
 def _user(email):
@@ -197,11 +197,8 @@ class ProfilesReportsTest(unittest.TestCase):
 
     def test_stream_saves_report(self):
         h = register_and_login(self.client, "stream@test.bg")
-        fake = mock.AsyncMock(return_value="<p>Месец</p>")
-        overview = mock.AsyncMock(return_value=OVERVIEW_OK)
         body = {**CHART, "name": "Аз", "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-02-28"}
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", fake), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", overview):
+        with mock.patch.object(main.ai_interpreter, "_call_api", period_fake):
             r = analyze(self.client, h, body, stream=True)
         self.assertEqual(r.status_code, 200)
         self.assertIn('"type": "complete"', r.text)
@@ -212,8 +209,9 @@ class ProfilesReportsTest(unittest.TestCase):
         db = SessionLocal()
         try:
             content = db.get(Report, reports[0]["id"]).content
-            self.assertIn("<p>Месец</p>", content)
-            self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n" + OVERVIEW_OK))
+            self.assertIn("### Съвет за месеца", content)
+            self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n"))
+            self.assertIn("### Най-силни моменти", content)
         finally:
             db.close()
 

@@ -25,7 +25,7 @@ import text_check  # noqa: E402
 from ai_interpreter import AIInterpreter  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from schemas import ChartRequest  # noqa: E402
-from testenv import CHART, register_and_login, OVERVIEW_OK, pair_reply  # noqa: E402, pair_reply
+from testenv import CHART, register_and_login, OVERVIEW_OK, pair_reply, period_reply, is_period_prompt  # noqa: E402, pair_reply
 
 SOFIA = (42.6977, 23.3219)
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn",
@@ -511,27 +511,24 @@ class JobTest(unittest.TestCase):
 
     def test_a_period_forecast_without_a_time(self):
         h = register_and_login(self.client, "ut-period@test.bg")
-        events = []
+        prompts = []
 
-        async def month(*args, **kwargs):
-            events.append(kwargs["monthly_events"])
-            assert kwargs["natal_chart"]["houses"] == {}
-            return "<p>месец</p>"
-        overview = mock.AsyncMock(return_value=OVERVIEW_OK)
+        async def fake(system_prompt, user_prompt, max_tokens=None, **kwargs):
+            prompts.append(user_prompt)
+            return period_reply(system_prompt, user_prompt)
         body = {**self.NO_TIME, "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-01-31"}
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", month), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", overview):
+        with mock.patch.object(main.ai_interpreter, "_call_api", fake):
             job = self.post(h, body).json()["job"]
         self.assertEqual(job["status"], "succeeded", job)
-        rows = [row for month_rows in events for row in month_rows if row.get("type") == "TRANSIT"]
-        self.assertTrue(rows)
-        for row in rows:
-            self.assertNotIn("transit_planet_natal_house", row)
-            self.assertNotIn("natal_planet_natal_house", row)
-            self.assertNotEqual(row["natal_planet"], "Moon")
+        headings = [line for text in prompts for line in text.splitlines() if re.match(r"^M\d+E\d+: ", line)]
+        self.assertTrue(headings)
+        for line in headings:
+            self.assertNotIn("-ти дом", line)                                          # без час няма домове
+            self.assertNotIn("-ви дом", line)
+            self.assertNotIn("наталната Луна", line)                                   # Луната без час е неточна
         content = self.client.get(f"/reports/{job['report_id']}", headers=h).json()["content"]
         self.assertIn("Бележка за часа на раждане", content)
-        self.assertLess(content.index("Бележка за часа на раждане"), content.index("Накратко"))
+        self.assertLess(content.index("Бележка за часа на раждане"), content.index("Най-силни моменти"))
 
     def test_the_calculate_endpoint(self):
         body = {"date": "1990-05-15", "lat": 42.6977, "lon": 23.3219, "birth_time_known": False}
@@ -602,8 +599,8 @@ class RealPromptTest(unittest.TestCase):
         async def record(system_prompt, user_prompt, max_tokens, **kwargs):
             calls.append({"system": system_prompt, "user": user_prompt, "rule": birthtime.current.get(),
                           "reminder": birthtime.reminder.get()})
-            if "MODE: PERIOD OVERVIEW" in system_prompt:
-                return OVERVIEW_OK
+            if is_period_prompt(system_prompt):
+                return period_reply(system_prompt, user_prompt)    # прогноза по карти: карти от кода, AI тълкува
             if "SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt:
                 return pair_reply(user_prompt)                   # анализ по карти: карти от кода, AI тълкува
             return "<p>Подменен текст.</p>"

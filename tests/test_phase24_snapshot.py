@@ -30,7 +30,7 @@ from database import Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from schemas import ChartRequest  # noqa: E402
 from test_euro_balance_migration import alembic_config, make_engine  # noqa: E402
-from testenv import CHART, OVERVIEW_OK, register_and_login  # noqa: E402
+from testenv import CHART, OVERVIEW_OK, period_fake, register_and_login  # noqa: E402
 
 VIENNA = {"date": "1985-07-12", "time": "18:45", "lat": 48.2082, "lon": 16.3738}
 NEW_YORK = {"target_lat": 40.7128, "target_lon": -74.0060}
@@ -79,8 +79,8 @@ class Base(unittest.TestCase):
 
     def generate(self, email, body):
         headers = register_and_login(self.client, email)
-        month = mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>Месец</p>"))
-        overview = mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK))
+        month = mock.patch.object(main.ai_interpreter, "_call_api", period_fake)
+        overview = mock.patch.object(main.ai_interpreter, "_call_api", period_fake)
         single = mock.patch.object(main.ai_interpreter, "interpret_chart", mock.AsyncMock(return_value="<p>Анализ на момента.</p>"))
         with month, overview, single:
             response = self.client.post("/jobs?wait=60", json=body, headers=headers)

@@ -34,7 +34,7 @@ from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import (APPLYING_ORB, ASPECTS, NATAL_TARGETS, SEPARATING_ORB, TRANSIT_PLANETS,  # noqa: E402
                      TransitScanner, utc_to_jd)
-from testenv import CHART, give_deposit, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze, OVERVIEW_OK, period_fake, period_reply  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "phase9_control")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)
@@ -627,11 +627,23 @@ class EndpointTest(unittest.TestCase):
         return {**CHART, "name": "Аз", "is_dynamic": True, "target_date": "2026-10-01", "end_date": end}
 
     def month_ok(self):
-        return mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>Месец</p>"))
+        return mock.patch.object(main.ai_interpreter, "_call_api", period_fake)
 
     def overview_ok(self):
-        return mock.patch.object(main.ai_interpreter, "compose_period_overview",
-                                 mock.AsyncMock(return_value=OVERVIEW_OK))
+        return mock.patch.object(main.ai_interpreter, "_call_api", period_fake)
+
+    @staticmethod
+    def failing(marker):
+        """Подмяна на _call_api, която се чупи при подканата, съдържаща marker, и иначе връща картов отговор."""
+        calls = []
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, **kwargs):
+            if marker in system_prompt:
+                calls.append(marker)
+                raise RuntimeError("провайдърът не отговори")
+            return period_reply(system_prompt, user_prompt)
+        fake.calls = calls
+        return fake
 
     def user_id(self, headers):
         return self.client.get("/me", headers=headers).json()["id"]
@@ -644,7 +656,9 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual([s["type"] for s in steps], ["start", "month_start", "month_complete", "month_start",
                                                       "month_complete", "overview_start", "overview_complete", "complete"])
         self.assertEqual(steps[0]["total_months"], 2)
-        self.assertEqual(steps[6]["text"], OVERVIEW_OK)
+        overview = steps[6]["text"]
+        for title in ("Най-силни моменти", "Обща картина", "Съгласуван план", "Заключение"):
+            self.assertIn(f"### {title}", overview)
         reports = self.client.get("/reports", headers=h).json()
         self.assertEqual(len(reports), 1)
         db = SessionLocal()
@@ -652,7 +666,7 @@ class EndpointTest(unittest.TestCase):
             content = db.get(Report, reports[0]["id"]).content
         finally:
             db.close()
-        self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n" + OVERVIEW_OK))
+        self.assertTrue(content.startswith("<h2>Общ преглед на периода</h2>\n" + overview))
         self.assertLess(content.index("Общ преглед"), content.index("Октомври 2026"))
 
     @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
@@ -662,7 +676,7 @@ class EndpointTest(unittest.TestCase):
         before = self.client.get("/me", headers=h).json()["balance_cents"]
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
-                mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
+                mock.patch.object(main.ai_interpreter, "_call_api", broken):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual({k: v for k, v in steps[-1].items() if k != "message"}, {"type": "error", "code": 502})
@@ -686,9 +700,8 @@ class EndpointTest(unittest.TestCase):
         h = register_and_login(self.client, "p9-overview-fail@test.bg")
         give_deposit("p9-overview-fail@test.bg", 1000)
         before = self.client.get("/me", headers=h).json()["balance_cents"]
-        broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
-        with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), self.month_ok(), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", broken):
+        with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
+                mock.patch.object(main.ai_interpreter, "_call_api", self.failing("MODE: PERIOD OVERVIEW")):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1]["type"], "error")
@@ -710,7 +723,7 @@ class EndpointTest(unittest.TestCase):
         h = register_and_login(self.client, "p9-plain-fail@test.bg")
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
-                mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), self.overview_ok():
+                mock.patch.object(main.ai_interpreter, "_call_api", broken):
             r = analyze(self.client, h, self.body("2026-10-31"))
         self.assertEqual(r.status_code, 502)
         self.assertRegex(r.json()["detail"], r"^" + re.escape(period_report.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")

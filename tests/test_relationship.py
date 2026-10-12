@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 import main  # noqa: E402
 import relationship  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, register_and_login, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, register_and_login, OVERVIEW_OK, period_reply  # noqa: E402
 
 PAIR = {"partner_name": "Втори", "partner_date": "1992-07-20", "partner_time": "09:30", "partner_lat": 43.2141,
         "partner_lon": 27.9147}
@@ -164,11 +164,11 @@ class JobTest(unittest.TestCase):
         h = register_and_login(self.client, "rel-forecast@test.bg")
         seen = []
 
-        async def month(*args, **kwargs):
-            seen.append(relationship.current.get())
-            return "<p>м</p>"
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", month), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)):
+        async def fake(system_prompt, user_prompt, max_tokens=None, **kwargs):
+            if "MODE: MONTHLY FORECAST BY FACT CARDS" in system_prompt:
+                seen.append(relationship.current.get())
+            return period_reply(system_prompt, user_prompt)
+        with mock.patch.object(main.ai_interpreter, "_call_api", fake):
             job = self.post(h, {**CHART, **PAIR, **FORECAST, "relationship": "parent_child"}).json()["job"]
         self.assertEqual(job["status"], "succeeded")
         self.assertEqual(len(seen), 2)                                        # януари и февруари

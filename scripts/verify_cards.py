@@ -11,6 +11,8 @@
 Тези неща се вземат от engine като дадени; сверката доказва съгласуваност на фактите с тях, не независимост от тях. Смисълът на
 тълкуванията и качеството на стила не се проверяват автоматично.
 
+За прогнозата за период (period_cards.py) има отделна сверка: scripts/verify_period.py (точни часове в UTC през zoneinfo, посока, приближение, интервал).
+
 Употреба (от папка backend):
   python3 scripts/verify_cards.py                      # всички фиксирани случаи, карти от кода (offline)
   python3 scripts/verify_cards.py --case natal_pair --report-file report.md [--theme love --relation romantic]

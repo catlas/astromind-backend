@@ -26,7 +26,7 @@ import main  # noqa: E402
 from billing_api import verify_signature  # noqa: E402
 from database import CoinTransaction, Purchase, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, register_and_login, analyze, OVERVIEW_OK, period_fake  # noqa: E402
 
 WEBHOOK_SECRET = "whsec_test"
 STRIPE_ENV = {"STRIPE_SECRET_KEY": "sk_test_x", "STRIPE_WEBHOOK_SECRET": WEBHOOK_SECRET}
@@ -186,8 +186,7 @@ class BillingTest(unittest.TestCase):
         return mock.patch.object(main.ai_interpreter, "interpret_chart", mock.AsyncMock(return_value=text))
 
     def stream_ai(self):
-        return (mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>m</p>")),
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)))
+        return (mock.patch.object(main.ai_interpreter, "_call_api", period_fake), mock.patch.object(main.ai_interpreter, "_call_api", period_fake))
 
     # --- подарък и регистър -------------------------------------------------------------------------------------
     def test_signup_gift_is_in_the_ledger_as_gift(self):
@@ -294,7 +293,7 @@ class BillingTest(unittest.TestCase):
         never.assert_not_called()
         limiter.reset()
         monthly = mock.AsyncMock(return_value="<p>m</p>")
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly):
+        with mock.patch.object(main.ai_interpreter, "_call_api", monthly):
             stream = analyze(self.client, h, {**CHART, **FORECAST}, stream=True)
         self.assertIn('"code": 402', stream.text)
         self.assertIn("Премиум услугите", stream.text)
@@ -364,7 +363,7 @@ class BillingTest(unittest.TestCase):
         set_balances(uid, paid=1000, gift=0)
         broken = mock.AsyncMock(side_effect=RuntimeError("провайдърът не отговори"))
         with mock.patch("period_report.RETRY_PAUSE_SECONDS", 0.0), \
-                mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken):
+                mock.patch.object(main.ai_interpreter, "_call_api", broken):
             r = analyze(self.client, h, {**CHART, **FORECAST}, stream=True)
         self.assertIn('"code": 502', r.text)
         self.assertEqual(balances(uid), (1000, 0))

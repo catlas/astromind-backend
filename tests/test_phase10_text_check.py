@@ -884,39 +884,49 @@ class EndpointTest(unittest.TestCase):
     def body(self, end="2026-11-30"):
         return {**CHART, "name": "Аз", "is_dynamic": True, "target_date": "2026-10-01", "end_date": end}
 
-    GOOD_OCT = "<p>Венера става ретроградна на 3 октомври.</p>"
-    BAD_OCT = "<p>Венера става ретроградна на 4 октомври.</p>"
+    BAD_CARD = "Точно в 13:37 ще стане ясно какво да правите."          # час в тълкуването на карта: часовете пише само кодът
+    GOOD_CARD = "Това изисква търпение и ясни граници в разговорите."
 
-    def test_stream_repairs_a_month_and_saves_the_repaired_text(self):
+    def card_ai(self, bad_everywhere=False):
+        """Подменен AI: първата карта на първия месец идва с нарушение; поправката я оправя (или не, ако bad_everywhere)."""
+        state = {"month_calls": 0}
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            if temperature is not None or system_prompt.startswith("You write ONE short interpretation"):
+                return self.BAD_CARD if bad_everywhere else self.GOOD_CARD                  # поправка / възстановяване на карта
+            reply = testenv.period_reply(system_prompt, user_prompt)
+            if "MODE: MONTHLY FORECAST BY FACT CARDS" in system_prompt:
+                state["month_calls"] += 1
+                if bad_everywhere:
+                    return reply.replace(self.GOOD_CARD, self.BAD_CARD)
+                if state["month_calls"] == 1:
+                    return reply.replace(self.GOOD_CARD, self.BAD_CARD, 1)
+            return reply
+        return fake
+
+    def test_stream_repairs_a_card_and_saves_the_repaired_text(self):
         h = register_and_login(self.client, "p10-stream-ok@test.bg")
         uid = self.client.get("/me", headers=h).json()["id"]
-        monthly = mock.AsyncMock(side_effect=[self.BAD_OCT, "<p>Ноември</p>"])
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)), \
-                mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.GOOD_OCT)):
+        with mock.patch.object(main.ai_interpreter, "_call_api", self.card_ai()):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual(steps[-1]["type"], "complete")
-        self.assertEqual(steps[2]["text"], self.GOOD_OCT)
+        self.assertNotIn("13:37", steps[2]["text"])
         db = SessionLocal()
         try:
             content = db.get(Report, self.client.get("/reports", headers=h).json()[0]["id"]).content
         finally:
             db.close()
-        self.assertIn(self.GOOD_OCT, content)
-        self.assertNotIn(self.BAD_OCT, content)
-        self.assertEqual([e.props["result"] for e in self.events(uid, "text_check")], ["repaired"])
+        self.assertNotIn("13:37", content)
+        self.assertIn("repaired", [e.props["result"] for e in self.events(uid, "text_check")])
 
     @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
     def test_stream_with_a_month_that_cannot_be_repaired_fails_without_saving_or_charging(self):
         h = register_and_login(self.client, "p10-stream-bad@test.bg")
         give_deposit("p10-stream-bad@test.bg", 1000)
         me = self.client.get("/me", headers=h).json()
-        monthly = mock.AsyncMock(return_value=self.BAD_OCT)
         with mock.patch.object(period_report, "RETRY_PAUSE_SECONDS", 0.0), \
-                mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", monthly), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)), \
-                mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(return_value=self.BAD_OCT)):
+                mock.patch.object(main.ai_interpreter, "_call_api", self.card_ai(bad_everywhere=True)):
             r = analyze(self.client, h, self.body(), stream=True)
         steps = sse_events(r.text)
         self.assertEqual({k: v for k, v in steps[-1].items() if k != "message"}, {"type": "error", "code": 502})
@@ -925,7 +935,8 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(self.client.get("/reports", headers=h).json(), [])
         self.assertEqual(self.client.get("/me", headers=h).json()["balance_cents"], me["balance_cents"])
         failed = self.events(me["id"], "analysis_failed")
-        self.assertEqual((failed[0].props["reason"], failed[0].props["stage"]), ("text_check", "month:2026-10"))
+        self.assertEqual(failed[0].props["reason"], "text_check")
+        self.assertTrue(failed[0].props["stage"].startswith("period:2026-10"), failed[0].props["stage"])
         self.assertEqual({e.props["result"] for e in self.events(me["id"], "text_check")}, {"rejected"})
 
 

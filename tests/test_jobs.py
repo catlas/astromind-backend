@@ -29,7 +29,7 @@ import main  # noqa: E402
 import scanner  # noqa: E402
 from database import CoinTransaction, Event, Job, Report, SessionLocal, User  # noqa: E402
 from rate_limit import limiter  # noqa: E402
-from testenv import CHART, give_deposit, register_and_login, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, OVERVIEW_OK, period_fake  # noqa: E402
 
 ENFORCED = {"BALANCE_ENFORCED": "1"}
 WEBHOOK_SECRET = "whsec_jobs_test"
@@ -108,8 +108,7 @@ def ok_ai(text="<p>текст</p>"):
 
 
 def month_ai():
-    return (mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", mock.AsyncMock(return_value="<p>м</p>")),
-            mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)))
+    return (mock.patch.object(main.ai_interpreter, "_call_api", period_fake), mock.patch.object(main.ai_interpreter, "_call_api", period_fake))
 
 
 class Gate:
@@ -513,9 +512,7 @@ class FakePayerTest(unittest.TestCase):
 
         # 5. Неуспешна премиум задача връща сумата
         broken = mock.AsyncMock(side_effect=RuntimeError("AI не отговаря"))
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", broken), \
-                mock.patch.object(main.ai_interpreter, "compose_period_overview", mock.AsyncMock(return_value=OVERVIEW_OK)), \
-                mock.patch("period_report.RETRY_PAUSE_SECONDS", 0.0):
+        with mock.patch.object(main.ai_interpreter, "_call_api", broken), mock.patch("period_report.RETRY_PAUSE_SECONDS", 0.0):
             failed = self.client.post("/jobs?wait=60", json={**pair_forecast, "name": "Втори"}, headers=h).json()["job"]
         self.assertEqual((failed["status"], failed["error"]["code"]), ("failed", "forecast_failed"))
         self.assertEqual(balances(uid), (840, 500))
