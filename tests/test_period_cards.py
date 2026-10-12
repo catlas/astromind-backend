@@ -266,8 +266,15 @@ class CardScopeTest(unittest.TestCase):
 
     def test_motion_signs_houses_dates_and_times_are_refused(self):
         for text in ("Ретроградният период изисква търпение.", "Директно движение помага.", "В Скорпион е по-трудно.", "В 7-ми дом е важно.",
-                     "На 24 октомври ще се реши.", "Около 24.10 бъдете внимателни.", BAD_CARD):
+                     "На 3 януари ще се реши.", "Около 3.1 бъдете внимателни.", BAD_CARD):
             self.assertTrue(self.codes(self.sextile, text), text)
+
+    def test_a_date_from_the_heading_of_the_card_is_allowed_and_no_other_date(self):
+        card = self.any
+        iso = re.findall(r"\d{4}-\d{2}-\d{2}", repr(card.row["event"]))[0]
+        own = f"{int(iso[8:10])} {tc._MONTH_NAMES[int(iso[5:7])]}"
+        self.assertEqual(self.codes(card, f"През {own} е добре да изчакате."), [])
+        self.assertTrue(self.codes(card, "През 3 януари е добре да изчакате."))
 
     def test_the_other_person_is_not_named_in_a_card_of_the_first_one(self):
         card = self.any

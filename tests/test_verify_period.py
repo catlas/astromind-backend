@@ -53,7 +53,7 @@ class OfflineVerificationTest(unittest.TestCase):
         self.assertTrue(any("знак" in p for p in self.verify(wrong_sign)[0]))
 
     def test_facts_inside_an_interpretation_are_detected(self):
-        for dirty in ("Марс е планетата на конфликтите.", "В Скорпион е по-трудно.", "Около 14:30 ще се реши.", "На 24 октомври ще се реши.",
+        for dirty in ("Марс е планетата на конфликтите.", "В Скорпион е по-трудно.", "Около 14:30 ще се реши.", "На 3 януари ще се реши.",
                       "Ретроградният период изисква търпение."):
             text = self.text.replace("Това изисква търпение и ясни граници в разговорите.", dirty, 1)
             self.assertTrue(self.verify(text)[0], dirty)
@@ -61,6 +61,23 @@ class OfflineVerificationTest(unittest.TestCase):
     def test_a_date_that_is_not_in_a_card_is_detected_in_the_closing_blocks(self):
         text = self.text.replace("- Говорете спокойно.", "- Говорете спокойно на 3 ноември.")
         self.assertTrue(any("дата" in p for p in self.verify(text)[0]))
+
+    def test_the_live_report_of_12_10_2026_matches_the_recomputation_and_passes_the_checker(self):
+        """Реален отчет от продукцията (двойка, 20–31 октомври, през смяната на часа), написан от AI върху картите на кода."""
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "live_2026_10_12_period_pair_dst.txt"), encoding="utf-8") as f:
+            live = f.read()
+        problems, counts = vp.verify_period(live, self.people[::-1], "2026-10-20", "2026-10-31")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["exact"], counts["nearest"], counts["ingress"], counts["lunation"]), (5, 1, 1, 1))
+        import regression_support as rs
+        import text_check as tc
+        import period_cards
+        from test_period_cards import dst_calendar
+        cal = dst_calendar()
+        facts = tc.build_facts(mode="period", user_name=rs.A_NAME, natal_chart=rs.chart("A"), partner_name=rs.IVAN, partner_chart=rs.chart("Ivan"),
+                               calendar=cal, report_date="2026-10-12", question="Как да говорим спокойно за очакванията си?")
+        hard = [v for v in tc.check_text(live, facts) if v.severity == "hard"]
+        self.assertEqual(hard, [])
 
     def test_all_fixed_cases_match_the_recomputation(self):
         self.assertEqual(vp.run_offline(), 0)

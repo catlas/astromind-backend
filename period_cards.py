@@ -254,10 +254,11 @@ def restrict_events(facts, cards: List[Card]):
 
 
 def period_card_scope(card: Card):
-    """extra_check за тълкуването на карта: само нейните планети и нейният аспект, без знаци, домове, дати, часове и думи за движение:
-    всичко това е в заглавието, написано от кода."""
+    """extra_check за тълкуването на карта: само нейните планети и нейният аспект, без знаци, домове, часове и думи за движение; датите
+    само от заглавието на картата (те са факт от кода). Всичко това е в заглавието, написано от кода."""
     own = set(card.row.get("planets") or [])
     own_aspect = card.row.get("aspect")
+    own_dates = {(int(i[5:7]), int(i[8:10])) for i in re.findall(r"\d{4}-\d{2}-\d{2}", repr(card.row.get("event")))}
 
     def check(text: str) -> List[Violation]:
         out: List[Violation] = []
@@ -288,10 +289,12 @@ def period_card_scope(card: Card):
             if m:
                 out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
                                      f"В тълкуването на карта не споменавай {what}: тя е в заглавието, написано от кода."))
-        m = _any_date(text or "")
-        if m:
-            out.append(Violation("date", "hard", text[max(0, m[0] - 20):m[1] + 20],
-                                 "В тълкуването на карта няма дати: датата е в заглавието, написано от кода."))
+        for start, end, day, month in _date_mentions(text or ""):
+            if (month, day) not in own_dates:
+                out.append(Violation("date", "hard", text[max(0, start - 20):end + 20],
+                                     "В тълкуването на карта споменавай само датите от заглавието ѝ (те са проверени); не добавяй други дати. "
+                                     "По-добре пиши без дата: „през тези дни“."))
+                break
         return out
     return check
 
@@ -400,8 +403,8 @@ MONTH_SYSTEM = (
     "[[MONTH]]  3-5 sentences: what to focus on and what to avoid this month, only from the cards.\n\n"
     "RULES FOR EVERY SECTION:\n"
     "1. In a card section write 2-3 sentences about THAT card only, in plain words, for the person named in the heading. The heading already "
-    "names the planets, the aspect, the date, the time, the movement and the sign: do NOT name any planet, aspect, sign, house, date, time "
-    "or movement there, and no degrees or orb numbers. Start directly with the meaning (for example: \"През тези дни...\"). A card about a "
+    "names the planets, the aspect, the date, the time, the movement and the sign: do NOT name any planet, aspect, sign, house, time "
+    "or movement there; avoid dates (if you need one, use only a date from the heading), and no degrees or orb numbers. Start directly with the meaning (for example: \"През тези дни...\"). A card about a "
     "station, a sign change or a lunation concerns every person named in its heading (or the one person, if only one is named).\n"
     "2. Never invent, compute or guess a planet, sign, house, aspect, date or time. A fact that is not in a card does not exist.\n"
     "3. In MONTH name NO planet, aspect, sign or house. Name a date only if it is a date from a card heading. Every recommendation must "

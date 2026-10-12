@@ -454,10 +454,16 @@ def verify_period(text, people, start, end):
             counts[kind] += 1
         # тълкуването на картата: без планети, аспекти, знаци, домове, часове, дати и посока на движение
         ai = " ".join(card["ai"])
-        for rx, what in ((ASPECT_WORDS, "аспект"), (SIGN_WORDS, "знак"), (HOUSE_WORDS, "дом"), (CLOCK_RE, "час"), (DATE_RX, "дата"), (MOTION_WORDS, "посока")):
+        for rx, what in ((ASPECT_WORDS, "аспект"), (SIGN_WORDS, "знак"), (HOUSE_WORDS, "дом"), (CLOCK_RE, "час"), (MOTION_WORDS, "посока")):
             found = rx.search(ai)
             if found:
                 problems.append(f"в тълкуването на картата има {what}: „{found.group(0)}“ ({title[:50]})")
+        own_dates = {(MONTHS[mo], int(d)) for d, mo in re.findall(rf"(\d{{1,2}}) ({MONTH_RX})", title + " " + detail)}
+        for dm in DATE_RX.finditer(ai):
+            month = MONTHS[dm.group(3).lower()]
+            for g in (dm.group(1), dm.group(2)):
+                if g and (month, int(g)) not in own_dates:
+                    problems.append(f"в тълкуването на картата има дата, която не е от заглавието ѝ: {dm.group(0)} ({title[:50]})")
         planets_in = [name for rx, name in FORBIDDEN_NAMES if rx.search(ai)]
         if planets_in:
             problems.append(f"в тълкуването на картата има планета: {planets_in[0]} ({title[:50]})")
