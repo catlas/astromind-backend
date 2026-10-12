@@ -295,6 +295,10 @@ def period_card_scope(card: Card):
     само от заглавието на картата (те са факт от кода). Всичко това е в заглавието, написано от кода."""
     own = set(card.row.get("planets") or [])
     own_aspect = card.row.get("aspect")
+    event = card.row.get("event") or {}
+    own_motion = None
+    if event.get("type") == "RETROGRADE":
+        own_motion = re.compile(r"ретроград\w*" if event.get("direction") == "retrograde" else r"директ\w*|директн\w*", re.IGNORECASE)
     own_dates = {(int(i[5:7]), int(i[8:10])) for i in re.findall(r"\d{4}-\d{2}-\d{2}", repr(card.row.get("event")))}
 
     def check(text: str) -> List[Violation]:
@@ -321,11 +325,16 @@ def period_card_scope(card: Card):
                     out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
                                          f"Тази карта е само за {owner}: не споменавай {other}. Принадлежността е в заглавието, написано от кода."))
                     break
-        for rx, what in ((_MOTION_WORD_RE, "посока на движение"), (_CLOCK_RE, "час")):
-            m = rx.search(text or "")
-            if m:
-                out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
-                                     f"В тълкуването на карта не споменавай {what}: тя е в заглавието, написано от кода."))
+        for m in _MOTION_WORD_RE.finditer(text or ""):
+            if own_motion is not None and own_motion.fullmatch(m.group(0)):
+                continue                                           # станция: думата за собствената ѝ посока е смисълът на картата
+            out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
+                                 "В тълкуването на карта не споменавай посока на движение: тя е в заглавието, написано от кода."))
+            break
+        m = _CLOCK_RE.search(text or "")
+        if m:
+            out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
+                                 "В тълкуването на карта не споменавай час: тя е в заглавието, написано от кода."))
         for start, end, day, month in _date_mentions(text or ""):
             if (month, day) not in own_dates:
                 out.append(Violation("date", "hard", text[max(0, start - 20):end + 20],
@@ -378,7 +387,7 @@ def dates_from_cards(allowed: set):
     return check
 
 
-_END_VERB_RE = re.compile(r"(?<![\w])(свършва\w*|приключва\w*|завършва\w*|изтича\w*|отшумява\w*|затихва\w*|отминава\w*|край на|краят на|до края на)", re.IGNORECASE)
+_END_VERB_RE = re.compile(r"(?<![\w])(свършва\w*|приключва\w*|завършва\w*|изтича\w*|отшумява\w*|затихва\w*|отминава\w*)", re.IGNORECASE)
 
 
 def window_ends(cards: List[Card]) -> set:

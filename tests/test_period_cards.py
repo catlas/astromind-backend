@@ -316,6 +316,12 @@ class CardScopeTest(unittest.TestCase):
         self.assertTrue(self.codes(self.sextile, "Директният ход помага."))
         self.assertTrue(self.codes(self.sextile, "Планетата е ретроградна."))
 
+    def test_a_station_card_may_use_the_word_of_its_own_direction_and_not_the_opposite_one(self):
+        card = next(c for c in cards_of(rs.calendar(True, "2027-01-31"), True) if c.row["event"]["type"] == "RETROGRADE" and c.row["event"]["direction"] == "retrograde")
+        self.assertEqual(self.codes(card, "Ретроградният период е време за повторно преглеждане."), [])
+        self.assertTrue(self.codes(card, "Скоро идва директният ход."))
+        self.assertTrue(self.codes(self.sextile, "Ретроградният период е време за повторно преглеждане."))          # не е станция
+
     def test_the_other_person_is_not_named_in_a_card_of_the_first_one(self):
         card = self.any
         self.assertTrue(self.codes(card, f"Това е важно за {card.row['other_person']}."))
@@ -360,6 +366,7 @@ class ClosingBlocksTest(unittest.TestCase):
         self.assertTrue(found)
         self.assertIn("не краят на житейски процес", found[0].detail)
         self.assertEqual(check("На 24 октомври финализирайте проекта."), [])             # датата може да се спомене, но не като край
+        self.assertEqual(check("В края на периода, около 24 октомври, отделете време за почивка."), [])        # „край на периода“ не е край на интервал
 
     def test_the_answer_must_cover_the_question(self):
         self.assertTrue(self.check("ANSWER", "Всичко ще е наред.", question="Как да говорим спокойно в разговор?"))

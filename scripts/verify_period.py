@@ -487,10 +487,16 @@ def verify_period(text, people, start, end):
             counts[kind] += 1
         # тълкуването на картата: без планети, аспекти, знаци, домове, часове, дати и посока на движение
         ai = " ".join(card["ai"])
+        station = TITLE_STATION_RE.match(title)
+        own = None
+        if station:      # станция: думата за собствената ѝ посока е смисълът на картата
+            own = re.compile(r"ретроград\w*" if station.group(5).startswith("ретроград") else r"директ\w*|директн\w*", re.IGNORECASE)
         for rx, what in ((ASPECT_WORDS, "аспект"), (SIGN_WORDS, "знак"), (HOUSE_WORDS, "дом"), (CLOCK_RE, "час"), (MOTION_WORDS, "посока")):
-            found = rx.search(ai)
-            if found:
+            for found in rx.finditer(ai):
+                if rx is MOTION_WORDS and own is not None and own.fullmatch(found.group(0)):
+                    continue
                 problems.append(f"в тълкуването на картата има {what}: „{found.group(0)}“ ({title[:50]})")
+                break
         own_dates = {(MONTHS[mo], int(d)) for d, mo in re.findall(rf"(\d{{1,2}}) ({MONTH_RX})", title + " " + detail)}
         for dm in DATE_RX.finditer(ai):
             month = MONTHS[dm.group(3).lower()]
