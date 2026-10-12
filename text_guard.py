@@ -109,6 +109,23 @@ class GuardOutcome:
                 "reason": self.reason}
 
 
+def _safe_detail(detail: str, facts) -> str:
+    """Какво не е наред, без имената на хората (само планети, знаци, аспекти, градуси и дати): за диагностиката при отказ."""
+    names = getattr(facts, "names", None) or {}
+    safe = detail or ""
+    for full in names.values():
+        for token in sorted({str(full), *str(full).replace("—", " ").replace("-", " ").split()}, key=len, reverse=True):
+            if len(token.strip()) >= 3:
+                safe = re.sub(re.escape(token.strip()), "[име]", safe, flags=re.IGNORECASE)
+    return " ".join(safe.split())[:150]
+
+
+def _log_remaining(stage: str, violations: Sequence[Violation], facts) -> None:
+    """Остатъчните тежки нарушения при отказ: код и верните стойности, без текст на анализа и без имена (за да се види дали грешката е в текста или в проверката)."""
+    for v in violations[:4]:
+        print(f"🔎 Остава ({stage}): {v.code}: {_safe_detail(v.detail, facts)}")
+
+
 class TextCheckError(Exception):
     """Текстът има тежко нарушение и след поправката. Не се записва и не се таксува."""
 
@@ -257,4 +274,5 @@ async def guard_text(text: str, facts: Any, *, stage: str, repair_call: RepairCa
         print(f"❌ Проверка на текста ({stage}): след {attempt}. поправка остават {len(text_check.hard(after))} тежки нарушения")
         current_text, current_violations = fixed, after
     outcome.rejected = True
+    _log_remaining(stage, outcome.hard_after, facts)
     raise TextCheckError(stage, outcome)

@@ -198,6 +198,9 @@ async def _final_guard(interpreter, facts, overview_facts, months: List[str], mo
     Месечните текстове се сменят на място (month_texts); връща (общ преглед, [(заглавие на месец, нов текст)]). Хвърля ForecastGenerationError."""
     parts: List[Tuple[str, str]] = [(f"month:{m}", text) for m, (_title, text) in zip(months, month_texts)] + [("overview", overview)]
     found = report_guard.cross_part_violations(parts, months, facts)
+    for stage, items in found.items():
+        for item in items:
+            print(f"🔎 Съгласуваност ({stage}): {item.detail[:140]}")       # само действие и дати, без изречения и имена
     replaced: List[Tuple[str, str]] = []
     for stage in [s for s, _ in parts if s in found]:
         current = dict(parts)[stage]

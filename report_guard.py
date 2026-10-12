@@ -29,7 +29,8 @@ ACTIONS = {
 }
 _ACTION_RES = [(re.compile(r"(?<![\w])(?:%s)" % pattern, re.IGNORECASE), label) for pattern, label in ACTIONS.items()]
 _AVOID_RE = re.compile(r"(?<![\w])(?:не\s+\w+|избягвайте|избягвай|без)(?![\w])", re.IGNORECASE)
-_DEFER_WORD_RE = re.compile(r"(?<![\w])(?:отложете|отлагайте|изчакайте|изчакай|по-късно|почакайте)(?![\w])", re.IGNORECASE)
+# „по-късно“ няма тук: стои в обикновени изречения („думи, които по-късно съжалявате“) и би правило фалшиви противоречия
+_DEFER_WORD_RE = re.compile(r"(?<![\w])(?:отложете|отлагайте|изчакайте|изчакай|почакайте)(?![\w])", re.IGNORECASE)
 _NO_DATA_RE = re.compile(r"(?<![\w])няма\s+(?:данни|информация|анализ|събития)\s+за\s+(?:месец\s+)?(януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември)", re.IGNORECASE)
 
 
@@ -55,10 +56,16 @@ def _statements(text: str, facts: Facts) -> List[Tuple[str, str, date, str, froz
                 continue
             day = item.dates[0]
             before = sentence[max(0, item.start - 12):item.start].lower()
-            after_word = bool(re.search(r"(?<![\w])(?:след|до)\s*$", before)) or bool(_DEFER_WORD_RE.search(sentence))
             first_action = min((m.start() for rx, _ in _ACTION_RES for m in [rx.search(sentence)] if m), default=0)
-            negated = bool(_AVOID_RE.search(sentence[max(0, first_action - 25):first_action + 1])) and not after_word
-            kind = "from" if after_word else ("avoid" if negated else "do")
+            negated = bool(_AVOID_RE.search(sentence[max(0, first_action - 25):first_action + 1]))
+            after = bool(re.search(r"(?<![\w])след\s*$", before))
+            until = bool(re.search(r"(?<![\w])до\s*$", before))
+            deferred = bool(_DEFER_WORD_RE.search(sentence))
+            # „след 14 ноември“ и „изчакайте до 14 ноември“ са отлагане. Но „финализирайте до 24 ноември“ е срок, а не отлагане:
+            # срокът не противоречи на препоръка за по-ранна дата и не се следи (иначе нормален текст се отказва).
+            if until and not (deferred or negated):
+                continue
+            kind = "from" if (after or deferred or until) else ("avoid" if negated else "do")
             for label in labels:
                 out.append((label, kind, day, sentence[:160], _who(sentence, facts)))
     return out

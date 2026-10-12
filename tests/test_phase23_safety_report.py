@@ -6,6 +6,7 @@
 """
 import asyncio
 import dataclasses
+import os
 import unittest
 from unittest import mock
 
@@ -174,6 +175,36 @@ class CrossPartTest(unittest.TestCase):
         found = report_guard.cross_part_violations(
             self.parts("<p>Не бързайте с останалото, но финализирайте проекта на 24 октомври.</p>",
                        overview=OVERVIEW_OK + "<p>Финализирайте проекта на 24 октомври.</p>"), self.months, self.facts)
+        self.assertEqual(found, {})
+
+    def test_a_deadline_with_until_is_not_a_postponement(self):
+        # Живо приемане 12.10.2026: „до 24 ноември“ е срок, а не отлагане. Препоръка на по-ранна дата не го опровергава.
+        for sentence in ("До 24 ноември финализирайте решението за връзката. На 13 ноември обсъдете решението спокойно.",
+                         "Разговорът за бъдещето да е завършен до 24 ноември. На 13 ноември е добър момент за разговор.",
+                         "До 24 ноември подпишете решението, а на 13 ноември е най-добрият момент да вземете решение.",
+                         "Започнете до 20 ноември подготовката. На 12 ноември започнете с първата стъпка."):
+            found = report_guard.cross_part_violations(self.parts("<p>Октомври е спокоен.</p>", overview="<p>%s</p>" % sentence), self.months, self.facts)
+            self.assertEqual(found, {}, msg=sentence)
+
+    def test_waiting_until_a_date_and_after_a_date_are_still_postponements(self):
+        for sentence in ("Изчакайте до 14 ноември с решението. На 31 октомври вземете решение.",
+                         "Не финализирайте проекта до 14 ноември. На 31 октомври финализирайте проекта.",
+                         "Решението вземете след 14 ноември. На 31 октомври вземете решение."):
+            found = report_guard.cross_part_violations(self.parts("<p>Октомври е спокоен.</p>", overview="<p>%s</p>" % sentence), self.months, self.facts)
+            self.assertIn("overview", found, msg=sentence)
+
+    def test_a_plain_later_in_a_sentence_is_not_a_postponement(self):
+        found = report_guard.cross_part_violations(
+            self.parts("<p>На 31 октомври е добър момент за разговор.</p>",
+                       overview="<p>Около 2 и 7 ноември Марс е напрегнат – думи, които по-късно съжалявате, и решение на 14 ноември.</p>"),
+            self.months, self.facts)
+        self.assertEqual(found, {})
+
+    def test_the_real_october_and_november_texts_from_the_live_run_are_consistent(self):
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+        october = open(os.path.join(base, "live_2026_10_12_love_october.txt"), encoding="utf-8").read()
+        november = open(os.path.join(base, "live_2026_10_12_love_november.txt"), encoding="utf-8").read()
+        found = report_guard.cross_part_violations([("month:2026-10", october), ("month:2026-11", november)], self.months, self.facts)
         self.assertEqual(found, {})
 
     def test_a_candidate_text_is_checked_against_the_other_parts(self):
