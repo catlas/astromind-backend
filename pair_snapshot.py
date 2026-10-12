@@ -55,9 +55,15 @@ def transit_heading(row: Dict, owner: str) -> str:
             f"{_adjective('натал', npl)} {PLANET_BG.get(npl, npl)} на {owner} (орб {_orb(row['orb'])}{_applying(row)}).")
 
 
+def with_word(word: str) -> str:
+    """„с“ или „със“ пред думата: със Слънцето, със Сатурн, с Луната."""
+    return "със" if word[:1] in "сСзЗ" else "с"
+
+
 def synastry_heading(row: Dict) -> str:
-    return (f"{_DEFINITE.get(row['planet1'], row['planet1'])} на {row['person1']} е в {ASPECT_BG[row['aspect']]} с "
-            f"{_OBJECT.get(row['planet2'], row['planet2'])} на {row['person2']} (орб {_orb(row['orb'])}).")
+    obj = _OBJECT.get(row['planet2'], row['planet2'])
+    return (f"{_DEFINITE.get(row['planet1'], row['planet1'])} на {row['person1']} е в {ASPECT_BG[row['aspect']]} {with_word(obj)} "
+            f"{obj} на {row['person2']} (орб {_orb(row['orb'])}).")
 
 
 def transit_card(card_id: str, group: str, row: Dict, owner_name: str, owner_key: str) -> Card:

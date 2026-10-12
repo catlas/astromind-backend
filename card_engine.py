@@ -49,6 +49,7 @@ class Card:
     key: bool = False
     removed: bool = False
     text: str = ""             # проверено тълкуване на AI
+    score: Optional[float] = None   # по-малко е по-важно: орбис при транзитите, орбис минус тежест на темата/отношенията при натала
 
 
 @dataclass
@@ -66,6 +67,8 @@ class Context:
     utc_today: str
     gender: Optional[str] = None
     partner_gender: Optional[str] = None
+    report_type: str = "general"
+    relation: str = ""                              # код на отношенията (romantic, friend, family, parent_child, work, general) или ""
 
 
 class CardMode:
@@ -73,6 +76,11 @@ class CardMode:
     name = ""
     stage = ""                                     # префикс на етапите в дневниците (pair, single)
     person_groups: Tuple[str, ...] = ("A",)        # групите, които се броят за „анализ за всеки човек“
+    groups: Tuple[str, ...] = ("A", "B", "S")      # групите карти в реда на показване
+    key_per_group: Dict[str, int] = {"A": 2, "B": 2, "S": 1}     # колко карти от групата са ключови (най-важните по score)
+    strict_cards = False                           # в тълкуването на карта: без други планети, аспекти, знаци и домове
+    closing_names_forbidden = False                # в затварящите блокове: без планети, аспекти, знаци и домове (само смисъл)
+    advice_title = "Какво да имате предвид в този ден"
 
     def build(self, ctx: Context) -> Tuple[List[Card], Dict[str, str]]:
         raise NotImplementedError
@@ -123,13 +131,16 @@ def restrict(facts, cards: List[Card]):
         return facts
     transit: Dict[str, List[Dict]] = {}
     synastry: List[Dict] = []
+    natal: Dict[str, List[Dict]] = {}
     for c in cards:
         row = c.row
-        if row.get("kind") == "transit":
+        if row.get("kind") == "natal":
+            natal.setdefault(row["owner"], []).append({k: row[k] for k in ("p1", "p2", "aspect", "orb")})
+        elif row.get("kind") == "transit":
             transit.setdefault(row["owner"], []).append({k: row[k] for k in ("p1", "p2", "aspect", "orb")})
         elif row.get("kind") == "synastry":
             synastry.append({k: row[k] for k in ("o1", "p1", "aspect", "o2", "p2", "orb")})
-    return dataclasses.replace(facts, natal_aspects={}, synastry=synastry, transit_aspects=transit)
+    return dataclasses.replace(facts, natal_aspects=natal, synastry=synastry, transit_aspects=transit)
 
 
 def question_coverage(question: str):
@@ -150,11 +161,11 @@ def question_coverage(question: str):
     return check
 
 
-def card_scope(card: Card):
-    """extra_check за тълкуването на карта: само нейните две планети и нейният аспект. Други планети и аспекти в блока на картата
+def card_scope(card: Card, strict: bool = False):
+    """extra_check за тълкуването на карта: само нейните планети и нейният аспект. Други планети и аспекти в блока на картата
     са нарушение (подканата ги забранява). Така „проверен“ блок не може да носи непроверен факт, дори планетите му да не се срещат
-    в останалите аспекти на данните."""
-    own_planets = {card.row.get("p1"), card.row.get("p2")}
+    в останалите аспекти на данните. При strict (натални режими) в блока няма и знаци, домове и градуси: те са в заглавието."""
+    own_planets = {card.row.get(k) for k in ("p1", "p2", "planet") if card.row.get(k)}
     own_aspect = card.row.get("aspect")
 
     def check(text: str) -> List[Violation]:
@@ -170,10 +181,32 @@ def card_scope(card: Card):
             m = rx.search(text or "")
             if m and key != own_aspect:
                 out.append(Violation("aspect", "hard", text[max(0, m.start() - 30):m.end() + 30],
-                                     f"В тълкуването на тази карта не споменавай {text_check.ASPECT_BG.get(key, key)}: картата е "
-                                     f"{text_check.ASPECT_BG.get(own_aspect, own_aspect)}. Не назовавай други аспекти."))
+                                     f"В тълкуването на тази карта не споменавай {text_check.ASPECT_BG.get(key, key)}: "
+                                     + (f"картата е {text_check.ASPECT_BG.get(own_aspect, own_aspect)}. Не назовавай други аспекти." if own_aspect
+                                        else "картата не е аспект. Не назовавай аспекти.")))
+        if strict:
+            out.extend(_names_in(text, "в тълкуването на карта", sign_house_only=True))
         return out
     return check
+
+
+def _names_in(text: str, where: str, sign_house_only: bool = False) -> List[Violation]:
+    """Знаци, домове (и планети, ако не е sign_house_only) в блок, където фактите са в заглавията: нарушение с поправка „със свои думи“."""
+    out: List[Violation] = []
+    patterns = [(rx, "знак") for rx in text_check.SIGN_RE.values()] + [(text_check.HOUSE_DIGIT_RE, "дом"), (text_check.HOUSE_WORD_RE, "дом")]
+    if not sign_house_only:
+        patterns += [(rx, "планета") for rx in text_check.PLANET_RE.values()] + [(rx, "аспект") for rx in text_check.ASPECT_RE.values()]
+    for rx, what in patterns:
+        m = rx.search(text or "")
+        if m:
+            out.append(Violation("aspect", "hard", text[max(0, m.start() - 30):m.end() + 30],
+                                 f"{where.capitalize()} не споменавай {what}: фактите са в заглавията на картите. Опиши само смисъла със свои думи."))
+    return out
+
+
+def closing_scope(text: str) -> List[Violation]:
+    """extra_check за затварящите блокове в режимите, където картите са размяна на домове и позиции: без планети, аспекти, знаци и домове."""
+    return _names_in(text, "в обобщението, съветите, отговора и заключението")
 
 
 def _fail(stage: str, code: str, detail: str, text: str = "") -> text_guard.TextCheckError:
@@ -195,11 +228,12 @@ def _answer_tag(question: str) -> str:
     return "[[ANSWER]]  a direct answer to the user's question in 3-5 sentences, based only on the cards.\n" if question else ""
 
 
-def mark_key_cards(cards: List[Card], person_groups: Tuple[str, ...]) -> None:
-    """Ключови са най-тесните аспекти на всеки човек (по KEY_CARDS_PER_PERSON) и най-тясното взаимодействие."""
-    for group in person_groups + ("S",):
-        limit = 1 if group == "S" else KEY_CARDS_PER_PERSON
-        for card in sorted((c for c in cards if c.group == group), key=lambda c: float(c.row.get("orb") or 0))[:limit]:
+def mark_key_cards(cards: List[Card], mode: "CardMode") -> None:
+    """Ключови са най-важните карти на групата по score (mode.key_per_group): ако една от тях не мине проверката, анализът се отказва."""
+    for group, count in mode.key_per_group.items():
+        pool = [c for c in cards if c.group == group]
+        pool.sort(key=lambda c: c.score if c.score is not None else float(c.row.get("orb") or 0))
+        for card in pool[:count]:
             card.key = True
 
 
@@ -213,14 +247,19 @@ def minimum_met(cards: List[Card], original: Dict[str, int], person_groups: Tupl
     return None
 
 
-async def _check_composition(interp, facts, sections: Dict[str, str], question: str, checks: List[Dict], stage_prefix: str) -> Dict[str, str]:
+async def _check_composition(interp, facts, sections: Dict[str, str], question: str, checks: List[Dict], stage_prefix: str,
+                             names_forbidden: bool = False) -> Dict[str, str]:
     needed = [t for t in COMPOSITION if t != "ANSWER" or question]
     missing = [t for t in needed if not sections.get(t)]
     if missing:
         raise _fail(f"{stage_prefix}:format", "complete", "Липсват задължителни секции: " + ", ".join(missing))
     out: Dict[str, str] = {}
     for tag in needed:
-        extra = question_coverage(question) if tag == "ANSWER" else None
+        coverage = question_coverage(question) if tag == "ANSWER" else None
+        if names_forbidden:
+            extra = (lambda t, c=coverage: closing_scope(t) + (c(t) if c else []))
+        else:
+            extra = coverage
         checked, codes = await _check_block(interp, facts, f"{stage_prefix}:{tag}", sections[tag], checks, extra)
         if checked is None:
             raise _fail(f"{stage_prefix}:{tag}", codes.split(",")[0] or "check", f"Блокът {tag} не мина проверката ({codes}).")
@@ -236,7 +275,8 @@ async def _compose(interp, mode: CardMode, ctx: Context, facts, cards: List[Card
     user = f"User question: {ctx.question or 'none'}\n\nVERIFIED BLOCKS:\n{blocks}Write the sections now, in Bulgarian."
     raw = await interp._call_api(system_prompt=system, user_prompt=user, max_tokens=interp.max_output_tokens)
     sections = parse_sections(raw, set(COMPOSITION))
-    return await _check_composition(interp, restrict(facts, kept), sections, ctx.question, checks, f"{mode.stage}:compose")
+    return await _check_composition(interp, restrict(facts, kept), sections, ctx.question, checks, f"{mode.stage}:compose",
+                                    mode.closing_names_forbidden)
 
 
 RESTORE_SYSTEM = (
@@ -252,7 +292,7 @@ RESTORE_SYSTEM = (
 async def _restore(interp, mode: CardMode, ctx: Context, facts, card: Card, checks: List[Dict]) -> bool:
     """Възстановяване на провалена карта: нова заявка само за нея и същата проверка. Връща дали е възстановена."""
     system = RESTORE_SYSTEM.format(theme=ctx.theme)
-    user = (f"People: {ctx.first}" + (f" and {ctx.second}" if ctx.partner_chart else "") + f". Chosen moment: {ctx.target_date}.\n"
+    user = (f"People: {ctx.first}" + (f" and {ctx.second}" if ctx.partner_chart else "") + (f". Chosen moment: {ctx.target_date}." if ctx.target_date else ".") + "\n"
             f"CARD {card.id}: {card.heading}\nWrite the interpretation now, in Bulgarian.")
     try:
         raw = await interp._call_api(system_prompt=system, user_prompt=user, max_tokens=800)
@@ -260,7 +300,7 @@ async def _restore(interp, mode: CardMode, ctx: Context, facts, card: Card, chec
         raise                                                    # спрян бюджет не е „неуспешно възстановяване“
     except Exception:
         return False
-    checked, _codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}:restore", raw, checks, card_scope(card))
+    checked, _codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}:restore", raw, checks, card_scope(card, mode.strict_cards))
     if checked is None:
         return False
     card.text, card.removed = checked, False
@@ -269,7 +309,7 @@ async def _restore(interp, mode: CardMode, ctx: Context, facts, card: Card, chec
 
 def assemble(mode: CardMode, ctx: Context, cards: List[Card], lines: Dict[str, str], blocks: Dict[str, str]) -> str:
     parts: List[str] = []
-    for group in ("A", "B", "S"):
+    for group in mode.groups:
         shown = [c for c in cards if c.group == group and not c.removed]
         in_mode = any(c.group == group for c in cards) or group in mode.person_groups
         if not in_mode:
@@ -280,7 +320,7 @@ def assemble(mode: CardMode, ctx: Context, cards: List[Card], lines: Dict[str, s
             parts.append(lines[group])
         parts.extend(f"### {c.heading}\n{c.text}" for c in shown)
     parts.append(f"## Обща картина\n{blocks['SUMMARY']}")
-    parts.append(f"## Какво да имате предвид в този ден\n{blocks['ADVICE']}")
+    parts.append(f"## {mode.advice_title}\n{blocks['ADVICE']}")
     if ctx.question:
         parts.append(f"## Отговор на въпроса\n{blocks['ANSWER']}")
     parts.append(f"## Заключение\n{blocks['CONCLUSION']}")
@@ -292,8 +332,8 @@ async def run(interp, mode: CardMode, ctx: Context, checks: List[Dict]) -> str:
     interp.require_text_facts(facts, stage="snapshot", checks=checks)
 
     cards, lines = mode.build(ctx)
-    original = {g: sum(1 for c in cards if c.group == g) for g in ("A", "B", "S")}
-    mark_key_cards(cards, mode.person_groups)
+    original = {g: sum(1 for c in cards if c.group == g) for g in mode.groups}
+    mark_key_cards(cards, mode)
 
     system = mode.system_prompt(ctx, cards, _answer_tag(ctx.question))
     user = mode.user_prompt(interp, ctx, cards, lines)
@@ -315,7 +355,7 @@ async def run(interp, mode: CardMode, ctx: Context, checks: List[Dict]) -> str:
         if not raw_text:
             card.removed, failed[card.id] = True, "missing"
         else:
-            checked, codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}", raw_text, checks, card_scope(card))
+            checked, codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}", raw_text, checks, card_scope(card, mode.strict_cards))
             if checked is None:
                 card.removed, failed[card.id] = True, codes
             else:
@@ -344,7 +384,8 @@ async def run(interp, mode: CardMode, ctx: Context, checks: List[Dict]) -> str:
     blocks: Dict[str, str] = {}
     if not removed:
         try:
-            blocks = await _check_composition(interp, restrict(facts, kept), sections, ctx.question, checks, f"{mode.stage}")
+            blocks = await _check_composition(interp, restrict(facts, kept), sections, ctx.question, checks, f"{mode.stage}",
+                                              mode.closing_names_forbidden)
         except text_guard.TextCheckError as failure:
             checks.append({"stage": f"{mode.stage}:composition", "mode": "enforce", "result": "fallback", "codes": failure.outcome.codes()[:60]})
             blocks = {}

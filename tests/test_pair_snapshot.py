@@ -299,7 +299,7 @@ class SignificanceAndCoverageTest(unittest.TestCase):
             marked = sorted((c for c in built if c.group == group), key=lambda c: c.row["orb"])
             self.assertEqual([c.id for c in marked[:count]], [c.id for c in built if c.group == group and c.key] if False else [c.id for c in marked[:count]])
         import card_engine
-        card_engine.mark_key_cards(built, ("A", "B"))
+        card_engine.mark_key_cards(built, ps.MODE)
         self.assertEqual({c.id for c in built if c.key}, {"A1", "A2", "B1", "B2", "S1"})
 
     def test_a_key_card_that_cannot_be_checked_is_a_refusal_even_with_many_cards_left(self):

@@ -4,6 +4,7 @@
 Часът не се измисля: без час няма Асцендент, МС, домове и управители на домове, Луната няма позиция и аспекти, а телата,
 които сменят знак през деня, се описват с възможните знаци. Пускане: python -m unittest discover -s tests -p "test_unknown_time.py"
 """
+import re
 import unittest
 from datetime import datetime, timedelta
 from unittest import mock
@@ -603,8 +604,8 @@ class RealPromptTest(unittest.TestCase):
                           "reminder": birthtime.reminder.get()})
             if "MODE: PERIOD OVERVIEW" in system_prompt:
                 return OVERVIEW_OK
-            if "SNAPSHOT for ONE chosen" in system_prompt:
-                return pair_reply(user_prompt)                   # анализ „за дата“: карти от кода, AI тълкува
+            if "SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt:
+                return pair_reply(user_prompt)                   # анализ по карти: карти от кода, AI тълкува
             return "<p>Подменен текст.</p>"
         with mock.patch.object(main.ai_interpreter, "_call_api", record):
             response = self.client.post("/jobs?wait=60", json=body, headers=h)
@@ -652,9 +653,11 @@ class RealPromptTest(unittest.TestCase):
             "partner_name": "Мария", "partner_date": "1992-07-20", "partner_lat": 43.2141, "partner_lon": 27.9147,
             "partner_time_known": False})
         user = calls[0]["user"]
-        self.assertTrue('"houses"' in user)                                   # Иван има домове
-        self.assertTrue("--- PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED) ---" in user)
-        self.assertFalse("--- ИВАН PLANETS IN МАРИЯ'S NATAL HOUSES (CALCULATED) ---" in user)   # Мария няма домове
+        overlays = [l for l in user.splitlines() if re.match(r"^H\d+: ", l)]
+        self.assertTrue(overlays)                                                    # планетите на Мария са в домовете на Иван
+        self.assertTrue(all(l.endswith("дом на Иван.") for l in overlays))             # домовете на Мария не съществуват
+        self.assertFalse(any("дом на Мария" in l for l in overlays))
+        self.assertNotIn("NATAL CHART ---", user)
         self.assertTrue(calls[0]["reminder"].startswith("REMINDER (birth time unknown for: Мария)"))
         self.assertIn("BIRTH TIME UNKNOWN", calls[0]["rule"])
 

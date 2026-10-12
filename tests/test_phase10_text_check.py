@@ -675,14 +675,24 @@ class InterpreterIntegrationTest(unittest.TestCase):
                 natal_chart=chart(IVAN_BIRTH), transit_chart=transit, target_date=SNAPSHOT, user_name="Иван"))
         self.assertIn(good, text)
         self.assertNotIn(bad, text)
-        pair_facts = tc.build_facts(mode="natal", user_name="Мария", natal_chart=chart(A_BIRTH), partner_name="Иван", partner_chart=chart(IVAN_BIRTH))
-        h = pair_facts.overlays[("partner", "user")]["Mars"]
-        good_pair = f"Марс на Иван е във вашия {hb(h)} дом."
-        bad_pair = f"Марс на Иван е във вашия {hb((h % 12) + 1)} дом."
-        with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(side_effect=[bad_pair, good_pair])):
+        # Натален анализ за двама е по карти (natal_pair.py): блок с дом в тълкуването на карта е нарушение и се връща за поправка
+        replies = []
+
+        def natal_fake(system_prompt=None, user_prompt=None, **kwargs):
+            replies.append(system_prompt)
+            if "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt:
+                ids = re.findall(r"^([ABSH]\d+): ", user_prompt, re.M)
+                parts = [f"[[{i}]]\n" + ("Това усилва близостта в 7-ми дом и носи топлина." if i == "A5" else "Така двамата се допълват и се разбират по-леко.")
+                         for i in ids]
+                return "\n\n".join(parts + ["[[SUMMARY]]\nДвамата се допълват и се разбират по-леко, когато говорят открито и не бързат.",
+                                             "[[ADVICE]]\n- Говорете открито и спокойно.",
+                                             "[[CONCLUSION]]\nВръзката има добра основа и иска търпение от двамата."])
+            return "Това усилва близостта и носи топлина."                  # поправка на блока: без дом
+        with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(side_effect=natal_fake)):
             text = asyncio.run(self.interp.interpret_chart(
                 natal_chart=chart(A_BIRTH), partner_chart=chart(IVAN_BIRTH), user_name="Мария", partner_name="Иван"))
-        self.assertEqual(text, good_pair)
+        self.assertNotIn("7-ми дом и носи", text)
+        self.assertIn("Това усилва близостта и носи топлина.", text)
 
     def test_a_text_in_another_language_is_not_checked(self):
         _, _, bad, _ = good_and_bad_text()

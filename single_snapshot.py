@@ -59,6 +59,8 @@ class SingleSnapshot(CardMode):
     name = "single_snapshot"
     stage = "single"
     person_groups: Tuple[str, ...] = ("A",)
+    groups: Tuple[str, ...] = ("A",)
+    key_per_group = {"A": 2}
 
     def build(self, ctx: Context):
         rows = sorted(factpack.transit_aspects(ctx.natal_chart, ctx.transit_chart), key=lambda r: r["orb"])[:CARD_LIMIT]

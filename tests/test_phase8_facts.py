@@ -285,8 +285,8 @@ class PromptPayloadTest(Phase8Base):
 
         async def fake_call(_self, system_prompt, user_prompt, max_tokens, **kw):
             calls.append((system_prompt, user_prompt, kw))
-            if "SNAPSHOT for ONE chosen" in system_prompt:
-                return testenv.pair_reply(user_prompt)              # анализ „за дата“ (един или двама): карти от кода, AI тълкува
+            if "SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt:
+                return testenv.pair_reply(user_prompt)              # анализ по карти (за дата; натален за двама): карти от кода, AI тълкува
             return "<p>ok</p>"
 
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
@@ -333,33 +333,42 @@ class PromptPayloadTest(Phase8Base):
                                 self.assertNotIn('"second_person"', user)
 
     def test_every_natal_block_has_twelve_cusps_with_ruler(self):
-        for target in ("single", "pair"):
-            for theme in THEMES:
-                with self.subTest(target=target, theme=theme):
-                    _, user, _ = self.case(target, "natal", theme)[0]
-                    sections = parse_sections(user)
-                    charts = [p for t, p in sections.items() if t.endswith("NATAL CHART")]
-                    self.assertEqual(len(charts), 2 if target == "pair" else 1)
-                    for chart in charts:
-                        self.assertEqual(len(chart["houses"]), 12)
-                        for row in chart["houses"].values():
-                            self.assertEqual(set(row), {"cusp", "ruler"})
-                            self.assertTrue(row["cusp"].split()[0] in SIGNS)
+        """Единичният натален анализ носи наталния блок; двамата са по карти (natal_pair.py): картите за собствената карта са от кода."""
+        for theme in THEMES:
+            with self.subTest(target="single", theme=theme):
+                _, user, _ = self.case("single", "natal", theme)[0]
+                charts = [p for t, p in parse_sections(user).items() if t.endswith("NATAL CHART")]
+                self.assertEqual(len(charts), 1)
+                for chart in charts:
+                    self.assertEqual(len(chart["houses"]), 12)
+                    for row in chart["houses"].values():
+                        self.assertEqual(set(row), {"cusp", "ruler"})
+                        self.assertTrue(row["cusp"].split()[0] in SIGNS)
+            with self.subTest(target="pair", theme=theme):
+                _, user, _ = self.case("pair", "natal", theme)[0]
+                own = [l for l in user.splitlines() if re.match(r"^[AB]\d+: ", l)]
+                self.assertTrue(any("на A " in l or "на A е" in l or "на A (" in l for l in own) or any(" на A" in l for l in own))
+                self.assertTrue(any("на Иван" in l for l in own))
+                self.assertNotIn("NATAL CHART ---", user)                          # без сурови карти, от които AI да смята
 
     def test_pair_natal_has_both_overlay_directions_with_reference_numbers(self):
+        """Домовете на другия: всяка карта „планета на X попада в N-ти дом на Y“ има посока и номер като в еталона."""
+        ordinal = {v: k for k, v in pair_snapshot._ORDINAL.items()}
         for theme in THEMES:
             with self.subTest(theme=theme):
                 _, user, _ = self.case("pair", "natal", theme)[0]
-                sections = parse_sections(user)
-                primary = find_section(sections, "PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)")
-                reverse = find_section(sections, "A PLANETS IN ИВАН'S NATAL HOUSES (CALCULATED)")
-                for name, house in mapped(REF["overlays"]["IVAN_in_A"]).items():
-                    self.assertEqual(primary[name], house, name)
-                for name, house in mapped(REF["overlays"]["A_in_IVAN"]).items():
-                    self.assertEqual(reverse[name], house, name)
-                self.assertEqual(primary["Sun"], 2)       # Слънцето на Иван е във 2-ри дом на A, не в 8-ми
-                aspects = find_section(sections, "SYNASTRY ASPECTS (CALCULATED)")
-                self.assertTrue(all(row["person1"] == "A" and row["person2"] == "Иван" for row in aspects))
+                refs = {("Иван", "A"): mapped(REF["overlays"]["IVAN_in_A"]), ("A", "Иван"): mapped(REF["overlays"]["A_in_IVAN"])}
+                found = set()
+                for line in (l for l in user.splitlines() if re.match(r"^H\d+: ", l)):
+                    m = re.match(r"^H\d+: (.+?) на (.+?) попада в (\S+) дом на (.+?)\.$", line)
+                    self.assertTrue(m, line)
+                    planet = next(k for k, v in text_check.PLANET_BG.items() if m.group(1) in (v, pair_snapshot._DEFINITE.get(k)))
+                    reference = refs[(m.group(2), m.group(4))]
+                    if planet in reference:                                       # еталонът е за основните тела
+                        self.assertEqual(reference[planet], ordinal[m.group(3)], line)
+                    found.add((m.group(2), m.group(4)))
+                self.assertEqual(found, {("Иван", "A"), ("A", "Иван")})            # и двете посоки са налични
+                self.assertEqual(mapped(REF["overlays"]["IVAN_in_A"])["Sun"], 2)       # Слънцето на Иван е във 2-ри дом на A, не в 8-ми
 
     def test_single_snapshot_houses_and_aspects_match_reference(self):
         """Анализ „за дата“ за един човек (single_snapshot.py): редът за домовете и картите с аспекти са от кода и съвпадат с еталона."""
