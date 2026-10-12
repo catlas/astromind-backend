@@ -60,8 +60,42 @@ def _day(iso: str) -> str:
     return f"{int(iso[8:10])} {_MONTHS[int(iso[5:7])]}"
 
 
-def _moment(iso: str) -> str:
-    return f"{_day(iso)}, {iso[11:16]}"
+class TimeNotes:
+    """Часовете са местни. В единствения повтарящ се час при връщане на часовника („03:30“ се случва два пъти) към часа се добавя
+    „(лятно време)“ или „(зимно време)“; иначе местният час е еднозначен. utc: местен час на събитието -> UTC момент от календара."""
+
+    def __init__(self, zone: str, utc_by_local: Dict[str, str]):
+        self.zone, self.utc_by_local = zone, utc_by_local
+
+    @classmethod
+    def of(cls, calendar: PeriodCalendar) -> "TimeNotes":
+        utc: Dict[str, str] = {}
+        for e in calendar.events:
+            if e.get("type") == "TRANSIT":
+                for item, moment in zip(e.get("exact") or [], e.get("_exact_utc") or []):
+                    utc[item["when"]] = moment
+            elif e.get("when") and e.get("_utc"):
+                utc[e["when"]] = e["_utc"]
+        return cls(calendar.timezone, utc)
+
+    def season(self, local: str) -> str:
+        """„“, „ (лятно време)“ или „ (зимно време)“ за местен час „YYYY-MM-DD HH:MM“."""
+        moment = self.utc_by_local.get(local[:16])
+        if not moment:
+            return ""
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+        zone = ZoneInfo(self.zone)
+        naive = datetime.strptime(local[:16], "%Y-%m-%d %H:%M")
+        first, second = naive.replace(tzinfo=zone, fold=0).utcoffset(), naive.replace(tzinfo=zone, fold=1).utcoffset()
+        if first == second:
+            return ""
+        actual = datetime.strptime(moment, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).astimezone(zone).utcoffset()
+        return " (лятно време)" if actual == max(first, second) else " (зимно време)"
+
+
+def _moment(iso: str, notes: Optional[TimeNotes] = None) -> str:
+    return f"{_day(iso)}, {iso[11:16]}{notes.season(iso) if notes else ''}"
 
 
 def _orb(value) -> str:
@@ -85,7 +119,7 @@ def _gendered(planet: str, masculine: str, feminine: str) -> str:
     return feminine if planet == "Venus" or planet == "Moon" else masculine
 
 
-def transit_parts(row: Dict, owner: str) -> Tuple[str, str]:
+def transit_parts(row: Dict, owner: str, notes: Optional[TimeNotes] = None) -> Tuple[str, str]:
     """(заглавие, подробности) на карта за транзит. Точният момент е във заглавието; най-близкото приближение и интервалът са подробности."""
     tp, npl = row["planet"], row["natal_planet"]
     aspect = ASPECT_BG[row["aspect"].lower()]
@@ -93,15 +127,15 @@ def transit_parts(row: Dict, owner: str) -> Tuple[str, str]:
             f"{PLANET_BG.get(npl, npl)} на {owner}")
     exact = row.get("exact") or []
     if len(exact) == 1:
-        title = f"{_moment(exact[0]['when'])} – {base}"
+        title = f"{_moment(exact[0]['when'], notes)} – {base}"
         detail = f"точен аспект, движение: {_RETRO_MOTION.get(exact[0]['motion'], exact[0]['motion'])}."
     elif exact:
-        title = f"{_moment(exact[0]['when'])} – {base}"
-        detail = "точен аспект на " + ", ".join(f"{_moment(x['when'])} ({_RETRO_MOTION.get(x['motion'], x['motion'])})" for x in exact) + "."
+        title = f"{_moment(exact[0]['when'], notes)} – {base}"
+        detail = "точен аспект на " + ", ".join(f"{_moment(x['when'], notes)} ({_RETRO_MOTION.get(x['motion'], x['motion'])})" for x in exact) + "."
     elif row.get("closest_in_period"):
         closest = row["closest_in_period"]
         if closest.get("when"):
-            when = f"на {_moment(closest['when'])}"
+            when = f"на {_moment(closest['when'], notes)}"
         else:
             when = "в " + ("началото" if closest.get("at") == "start_of_period" else "края") + " на периода"
         title = base
@@ -117,24 +151,24 @@ def transit_parts(row: Dict, owner: str) -> Tuple[str, str]:
     return title, detail
 
 
-def transit_heading(row: Dict, owner: str) -> str:
-    title, detail = transit_parts(row, owner)
+def transit_heading(row: Dict, owner: str, notes: Optional[TimeNotes] = None) -> str:
+    title, detail = transit_parts(row, owner, notes)
     return f"{title}: {detail}"
 
 
-def station_heading(row: Dict, first: str, second: str) -> str:
+def station_heading(row: Dict, first: str, second: str, notes: Optional[TimeNotes] = None) -> str:
     planet = row["planet"]
     word = _gendered(planet, "директен", "директна") if row["direction"] == "direct" else _gendered(planet, "ретрограден", "ретроградна")
     position = row.get("position") or ""
     sign = position.split(" ", 1)[0]
     where = f" {_in_sign(SIGN_BG[sign])}" if sign in SIGN_BG else ""
-    return f"{_moment(row['when'])} – {PLANET_BG.get(planet, planet)} става {word}{where}{_houses_clause(row, first, second)}."
+    return f"{_moment(row['when'], notes)} – {PLANET_BG.get(planet, planet)} става {word}{where}{_houses_clause(row, first, second)}."
 
 
-def ingress_heading(row: Dict, first: str, second: str) -> str:
+def ingress_heading(row: Dict, first: str, second: str, notes: Optional[TimeNotes] = None) -> str:
     planet = row["planet"]
     origin = f", идвайки от {SIGN_BG[row['from_sign']]}" if row.get("from_sign") in SIGN_BG else ""
-    return (f"{_moment(row['when'])} – {_DEFINITE_PLANET(planet)} навлиза {_in_sign(SIGN_BG.get(row['sign'], row['sign']))}"
+    return (f"{_moment(row['when'], notes)} – {_DEFINITE_PLANET(planet)} навлиза {_in_sign(SIGN_BG.get(row['sign'], row['sign']))}"
             f"{origin}{_houses_clause(row, first, second)}.")
 
 
@@ -143,7 +177,7 @@ def _DEFINITE_PLANET(planet: str) -> str:
     return _DEFINITE.get(planet, PLANET_BG.get(planet, planet))
 
 
-def lunation_heading(row: Dict, first: str, second: str) -> str:
+def lunation_heading(row: Dict, first: str, second: str, notes: Optional[TimeNotes] = None) -> str:
     event = row.get("event", "")
     if row.get("type") == "ECLIPSE":
         kind = "Слънчево затъмнение" if event.startswith("Solar") else "Лунно затъмнение"
@@ -152,7 +186,7 @@ def lunation_heading(row: Dict, first: str, second: str) -> str:
     position = row.get("position") or ""
     sign = position.split(" ", 1)[0]
     where = f" {_in_sign(SIGN_BG[sign])}" if sign in SIGN_BG else ""
-    return f"{_moment(row['when'])} – {kind}{where}{_houses_clause(row, first, second)}."
+    return f"{_moment(row['when'], notes)} – {kind}{where}{_houses_clause(row, first, second)}."
 
 
 def event_planets(row: Dict) -> set:
@@ -207,6 +241,7 @@ def event_sort_key(row: Dict, calendar: PeriodCalendar) -> str:
 
 def build_month_cards(calendar: PeriodCalendar, month: str, month_index: int, first: str, second: str, rel: natal_pair.Relevance,
                       limit: int = CARDS_PER_MONTH) -> List[Card]:
+    notes = TimeNotes.of(calendar)
     kinds = ("TRANSIT", "RETROGRADE", "INGRESS", "LUNATION", "ECLIPSE")
     events = [r for r in calendar.public_events() if r["type"] in kinds]
     rows = [r for r in events if event_month(r, calendar) == month]
@@ -222,14 +257,14 @@ def build_month_cards(calendar: PeriodCalendar, month: str, month_index: int, fi
         title, detail = "", ""
         if row["type"] == "TRANSIT":
             owner = first if row["target"] == "User" else second
-            title, detail = transit_parts(row, owner)
+            title, detail = transit_parts(row, owner, notes)
             heading = f"{title}: {detail}"
         elif row["type"] == "RETROGRADE":
-            heading = station_heading(row, first, second)
+            heading = station_heading(row, first, second, notes)
         elif row["type"] == "INGRESS":
-            heading = ingress_heading(row, first, second)
+            heading = ingress_heading(row, first, second, notes)
         else:
-            heading = lunation_heading(row, first, second)
+            heading = lunation_heading(row, first, second, notes)
         if not title:
             title = heading
         other = ""
@@ -390,13 +425,11 @@ def closing_checks(question: str, tag: str, allowed: set, facts, prior_parts: Li
     coverage = question_coverage(question) if tag == "ANSWER" else None
     dates = dates_from_cards(allowed)
     ends_check = window_end_claims(set(ends))
+    cross = cross_check(facts, prior_parts, stage, months)
 
     def check(text: str) -> List[Violation]:
         out = card_engine.closing_scope(text) + dates(text) + ends_check(text) + (coverage(text) if coverage else [])
-        if isinstance(facts, text_check.Facts):
-            found = report_guard.cross_part_violations(prior_parts + [(stage, text)], months, facts)
-            out += found.get(stage, [])
-        return out
+        return out + cross(text)
     return check
 
 

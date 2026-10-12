@@ -56,6 +56,8 @@ TITLE_STATION_RE = re.compile(rf"^(\d{{1,2}}) ({MONTH_RX}), (\d{{2}}:\d{{2}}) �
 TITLE_INGRESS_RE = re.compile(rf"^(\d{{1,2}}) ({MONTH_RX}), (\d{{2}}:\d{{2}}) – (.+?) навлиза (?:в|във) (\S+)(?:, идвайки от (\S+))?(?: \((.+)\))?\.$")
 TITLE_LUNATION_RE = re.compile(rf"^(\d{{1,2}}) ({MONTH_RX}), (\d{{2}}:\d{{2}}) – (Новолуние|Пълнолуние|Слънчево затъмнение|Лунно затъмнение)(?: (?:в|във) (\S+))?(?: \((.+)\))?\.$")
 HOUSE_PART_RE = re.compile(r"в (\S+) дом на (.+)")
+SEASON_FULL_RE = re.compile(rf"(\d{{1,2}}) ({MONTH_RX}), (\d{{2}}:\d{{2}}) \((лятно|зимно) време\)")
+SEASON_RE = re.compile(r"(\d{2}:\d{2}) \((лятно|зимно) време\)")
 MOMENT_RE = re.compile(rf"(\d{{1,2}}) ({MONTH_RX}), (\d{{2}}:\d{{2}})")
 DAY_RE = re.compile(rf"(\d{{1,2}}) ({MONTH_RX})(?:\s+\d{{4}})?")
 DETAIL_EXACT_ONE = re.compile(r"^Точен аспект, движение: (директно|ретроградно)\.")
@@ -83,9 +85,15 @@ class Sky:
         self.tz = ZoneInfo(zone)
         self.cache = {}
 
-    def utc(self, year, month, day, clock):
-        local = datetime(year, month, day, int(clock[:2]), int(clock[3:5]), tzinfo=self.tz)
+    def utc(self, year, month, day, clock, season=""):
+        """season: „лятно“ (първото появяване на повтарящия се час, fold=0) или „зимно“ (второто, fold=1); без означение - fold=0."""
+        local = datetime(year, month, day, int(clock[:2]), int(clock[3:5]), tzinfo=self.tz, fold=1 if season == "зимно" else 0)
         return local.astimezone(timezone.utc)
+
+    def ambiguous(self, year, month, day, clock):
+        a = datetime(year, month, day, int(clock[:2]), int(clock[3:5]), tzinfo=self.tz, fold=0)
+        b = a.replace(fold=1)
+        return a.utcoffset() != b.utcoffset()
 
     def jd(self, moment):
         return swe.julday(moment.year, moment.month, moment.day, moment.hour + moment.minute / 60 + moment.second / 3600)
@@ -180,6 +188,14 @@ def parse_report(text):
 # --------------------------------------------------------------------------------------------------------------
 # Сверка
 # --------------------------------------------------------------------------------------------------------------
+def moment_of(sky, card, year, month, day, clock, problems):
+    """UTC на посочения местен час; в повтарящия се час при смяна на часа е нужно означение „(лятно време)“ или „(зимно време)“."""
+    season = card.get("smap", {}).get((day, month, clock), "")
+    if not season and sky.ambiguous(year, month, day, clock):
+        problems.append(f"повтарящ се час без означение за лятно или зимно време: {day}.{month} {clock} ({card['title'][:50]})")
+    return sky.utc(year, month, day, clock, season)
+
+
 def person_by_name(people, name):
     return next((p for p in people if p["name"] == name), None)
 
@@ -278,12 +294,12 @@ def verify_transit(card, m, sky, people, year_of, start, end, problems, counts):
     anchor = None
     if stated:
         day, month, clock = stated[0]
-        anchor = sky.utc(year_for(month, year_of, start, end), month, day, clock)
+        anchor = moment_of(sky, card, year_for(month, year_of, start, end), month, day, clock, problems)
     else:
         closest = DETAIL_CLOSEST.match(detail)
         if closest and closest.group(1):
             month = MONTHS[closest.group(2)]
-            anchor = sky.utc(year_for(month, year_of, start, end), month, int(closest.group(1)), closest.group(3))
+            anchor = moment_of(sky, card, year_for(month, year_of, start, end), month, int(closest.group(1)), closest.group(3), problems)
         elif closest:
             anchor = start_dt if closest.group(4) == "началото" else end_dt - timedelta(minutes=1)
     if anchor is None:
@@ -312,7 +328,7 @@ def verify_transit(card, m, sky, people, year_of, start, end, problems, counts):
         if len(stated) != len(passes):
             problems.append(f"брой точни моменти {card['title'][:60]}: написани {len(stated)}, изчислени {len(passes)}")
         for i, (day, month, clock) in enumerate(stated):
-            moment = sky.utc(year_for(month, year_of, start, end), month, day, clock)
+            moment = moment_of(sky, card, year_for(month, year_of, start, end), month, day, clock, problems)
             off = abs(f(moment))
             if off > TOLERANCE:
                 problems.append(f"аспект {card['title'][:70]}: на {day} {month} {clock} разстоянието е {off:.3f}° от аспекта")
@@ -402,6 +418,9 @@ def verify_period(text, people, start, end):
         allowed_dates.add((int(d[5:7]), int(d[8:10])))
     for card in cards:
         title, detail = card["title"], card["detail"]
+        card["smap"] = {(int(d), MONTHS[mo], clock): season for d, mo, clock, season in SEASON_FULL_RE.findall(title + " " + detail)}
+        title, detail = SEASON_RE.sub(r"\1", title), SEASON_RE.sub(r"\1", detail)
+        card["title"], card["detail"] = title, detail
         for day, month in re.findall(rf"(\d{{1,2}}) ({MONTH_RX})", title + " " + detail):
             allowed_dates.add((MONTHS[month], int(day)))
         m = TITLE_TRANSIT_RE.match(title)
@@ -417,7 +436,7 @@ def verify_period(text, people, start, end):
                 problems.append(f"заглавието не се разчита: {title[:80]}")
                 continue
             day, month, clock = int(moment_m.group(1)), MONTHS[moment_m.group(2)], moment_m.group(3)
-            moment = sky.utc(year_for(month, year_of, start, end), month, day, clock)
+            moment = moment_of(sky, card, year_for(month, year_of, start, end), month, day, clock, problems)
             if kind == "station":
                 planet = vc.find_planet(moment_m.group(4))[0]
                 if planet not in PLANET_IDS:

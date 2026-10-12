@@ -132,6 +132,41 @@ class HeadingsTest(unittest.TestCase):
         self.assertTrue(any(" – Новолуние" in h or " – Пълнолуние" in h for h in headings))
 
 
+class RepeatedHourTest(unittest.TestCase):
+    """В нощта на връщането на часовника (25.10.2026 в София: 04:00 -> 03:00) „03:30“ се случва два пъти: часът се означава."""
+
+    def notes(self):
+        return period_cards.TimeNotes(ZONE, {"2026-10-25 03:30": "2026-10-25T00:30:00Z", "2026-10-25 03:31": "2026-10-25T01:31:00Z",
+                                             "2026-10-24 12:00": "2026-10-24T09:00:00Z", "2026-10-25 12:00": "2026-10-25T10:00:00Z",
+                                             "2026-10-25 02:30": "2026-10-24T23:30:00Z"})
+
+    def test_the_repeated_hour_is_marked_summer_or_winter_and_nothing_else_is(self):
+        n = self.notes()
+        self.assertEqual(n.season("2026-10-25 03:30"), " (лятно време)")          # 00:30 UTC = 03:30 EEST (първото)
+        self.assertEqual(n.season("2026-10-25 03:31"), " (зимно време)")          # 01:31 UTC = 03:31 EET (второто)
+        for plain in ("2026-10-24 12:00", "2026-10-25 12:00", "2026-10-25 02:30", "2026-10-25 09:09"):
+            self.assertEqual(n.season(plain), "", plain)
+
+    def test_the_marker_is_in_the_heading_and_the_two_moments_are_one_hour_apart_in_utc(self):
+        row = {"type": "TRANSIT", "target": "User", "planet": "Mars", "natal_planet": "Pluto", "aspect": "Square",
+               "exact": [{"when": "2026-10-25 03:31", "motion": "direct"}], "active_from": "2026-10-23", "active_to": "2026-10-27"}
+        heading = period_cards.transit_heading(row, "Иван", self.notes())
+        self.assertIn("25 октомври, 03:31 (зимно време) – Транзитният Марс", heading)
+        self.assertNotIn("(лятно време)", heading)
+        self.assertEqual(utc_of("2026-10-25 03:30").hour, 0)                          # лятно (fold=0)
+        second = datetime(2026, 10, 25, 3, 30, tzinfo=SOFIA, fold=1).astimezone(timezone.utc)
+        self.assertEqual(second.hour, 1)                                              # зимно (fold=1): точно един час по-късно
+
+    def test_the_checker_accepts_a_heading_with_the_marker(self):
+        facts = rs.facts("period", True, "2026-10-31")
+        cal = rs.calendar(True, "2026-10-31")
+        card = next(c for c in cards_of(cal, True, limit=8) if re.match(r"\d{1,2} \S+, \d{2}:\d{2} – ", c.heading))
+        time = re.search(r"\d{2}:\d{2}", card.heading).group(0)
+        marked = card.heading.replace(time, f"{time} (зимно време)", 1)
+        self.assertNotEqual(marked, card.heading)
+        self.assertEqual([v for v in tc.check_text(marked, period_cards.restrict_events(facts, [card])) if v.severity == "hard"], [])
+
+
 class EclipseTest(unittest.TestCase):
     def test_eclipses_are_cards_and_not_lost_among_the_lunations(self):
         cal = TransitScanner(engine_instance=engine.get_engine()).build_calendar(
@@ -519,6 +554,65 @@ class RepairFallbackPartialTest(FlowBase):
         with self.assertRaises(period_report.ForecastGenerationError):
             self.run_report(self.ai(month=lambda _s: f"Финализирайте проекта на {day}.", overview=bad_overview,
                                     repair=lambda p: f"Не финализирайте проекта на {day}."))
+
+
+class OrderIndependenceTest(FlowBase):
+    """Резултатът не зависи от реда, в който AI връща секциите, и от това коя от две противоречиви карти е първа; крайната проверка на целия
+    отчет остава и хваща противоречие, което поетапната проверка е пропуснала."""
+
+    WORDS = ["първо", "второ", "трето", "четвърто", "пето", "шесто", "седмо", "осмо"]
+
+    def distinct(self):
+        return lambda card_id: f"Тук е важно да има {self.WORDS[(int(card_id.split('E')[1]) - 1) % 8]} внимание към разговора."
+
+    def reversed_ai(self, card):
+        base = self.ai(card=card)
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            reply = await base(system_prompt, user_prompt, max_tokens, temperature, **kwargs)
+            if "MODE: MONTHLY FORECAST BY FACT CARDS" in system_prompt:
+                blocks = re.split(r"(?m)^(?=\[\[)", reply)
+                reply = "".join(b if b.endswith("\n") else b + "\n" for b in reversed([b for b in blocks if b.strip()]))
+            return reply
+        return fake
+
+    def test_the_report_is_the_same_when_the_model_returns_the_cards_in_another_order(self):
+        card = self.distinct()
+        normal = self.run_report(self.ai(card=card))[-1]
+        reverse = self.run_report(self.reversed_ai(card))[-1]
+        self.assertEqual(normal["month_texts"], reverse["month_texts"])
+        self.assertEqual(normal["overview"], reverse["overview"])
+        titles = re.findall(r"(?m)^### (.+)$", normal["month_texts"][0][1])
+        dated = [t for t in titles if re.match(r"\d{1,2} \S+, \d{2}:\d{2}", t)]
+        self.assertEqual(dated, sorted(dated, key=lambda t: (tc.MONTHS[t.split()[1].rstrip(",")], int(t.split()[0]), t.split()[2])))   # редът е хронологичен, не този на AI
+
+    def contradictory_pair(self):
+        cal = rs.calendar(False)
+        cards = [c for c in cards_of(cal, False, limit=8) if c.row["event"]["type"] == "TRANSIT" and c.row["event"].get("exact")]
+        by_day = {}
+        for c in cards:
+            by_day.setdefault(c.row["event"]["exact"][0]["when"][:10], []).append(c)
+        first, second = next(v for v in by_day.values() if len(v) >= 2)[:2]
+        iso = first.row["event"]["exact"][0]["when"]
+        return cal, first, second, f"{int(iso[8:10])} {tc._MONTH_NAMES[int(iso[5:7])]}"
+
+    def test_a_contradiction_between_two_cards_is_found_whichever_comes_first(self):
+        cal, first, second, day = self.contradictory_pair()
+        for recommend, forbid in ((first, second), (second, first)):
+            texts = {recommend.id: f"Финализирайте проекта на {day}.", forbid.id: f"Не финализирайте проекта на {day}."}
+            steps = self.run_report(self.ai(card=lambda i: texts.get(i), repair=lambda _p: GOOD_CARD))
+            whole = steps[-1]["overview"] + "".join(t for _t, t in steps[-1]["month_texts"])
+            self.assertFalse(f"Финализирайте проекта на {day}." in whole and f"Не финализирайте проекта на {day}." in whole)   # остава най-много едното
+            parts = [(f"month:{m}", t) for m, (_ti, t) in zip(cal.months_with_events(), steps[-1]["month_texts"])] + [("overview", steps[-1]["overview"])]
+            self.assertEqual(report_guard.cross_part_violations(parts, cal.months_with_events(), rs.facts("period", False)), {})
+
+    def test_the_final_check_of_the_whole_report_still_refuses_what_the_step_checks_missed(self):
+        cal, first, second, day = self.contradictory_pair()
+        texts = {first.id: f"Финализирайте проекта на {day}.", second.id: f"Не финализирайте проекта на {day}."}
+        with mock.patch.object(period_cards, "cross_check", lambda *a, **k: (lambda text: [])):                # поетапната проверка е изключена
+            with self.assertRaises(period_report.ForecastGenerationError) as caught:
+                self.run_report(self.ai(card=lambda i: texts.get(i)))
+        self.assertEqual(caught.exception.stage, "period:final")
 
 
 ENFORCED = {"BALANCE_ENFORCED": "1"}

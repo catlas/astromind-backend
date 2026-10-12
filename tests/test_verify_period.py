@@ -97,6 +97,18 @@ class OfflineVerificationTest(unittest.TestCase):
                                question="Кога е подходящо да започна разговор за промяна в работата?")
         self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [])
 
+    def test_the_verifier_demands_the_marker_in_the_repeated_hour_and_uses_it(self):
+        sky = vp.Sky("Europe/Sofia")
+        self.assertTrue(sky.ambiguous(2026, 10, 25, "03:30"))
+        self.assertFalse(sky.ambiguous(2026, 10, 25, "12:00"))
+        self.assertEqual((sky.utc(2026, 10, 25, "03:30", "зимно") - sky.utc(2026, 10, 25, "03:30", "лятно")).total_seconds(), 3600)
+        problems = []
+        vp.moment_of(sky, {"title": "x", "smap": {}}, 2026, 10, 25, "03:30", problems)
+        self.assertTrue(any("повтарящ се час" in p for p in problems))
+        problems = []
+        vp.moment_of(sky, {"title": "x", "smap": {(25, 10, "03:30"): "зимно"}}, 2026, 10, 25, "03:30", problems)
+        self.assertEqual(problems, [])
+
     def test_the_other_live_reports_of_12_10_2026_match_the_recomputation(self):
         """Работна двойка (20–31 октомври) и двойка за два месеца (20 октомври – 30 ноември): реални текстове от продукцията."""
         import regression_support as rs
