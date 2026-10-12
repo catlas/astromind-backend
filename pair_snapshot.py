@@ -146,7 +146,8 @@ SYSTEM_PROMPT = (
     "3. Every planet belongs to ONE person and is either natal or transiting: whenever you name a planet in an aspect, say whose it is.\n"
     "4. In SUMMARY, ADVICE, ANSWER and CONCLUSION rely only on the cards: every recommendation must follow from a card. No orb numbers, "
     "no times of day, no health diagnoses.\n"
-    "5. Be direct and concrete. No filler, no mystic phrases, no promises about the future.\n"
+    "5. Refer to the chosen date only as \"в този ден\" or \"на избраната дата\": never \"днес\", \"утре\" or \"вчера\".\n"
+    "6. Be direct and concrete. No filler, no mystic phrases, no promises about the future.\n"
 )
 
 COMPOSE_SYSTEM = (
@@ -160,7 +161,8 @@ COMPOSE_SYSTEM = (
     "[[CONCLUSION]]  2-3 sentences with a reasoned overall conclusion.\n\n"
     "RULES: use no aspect, planet position, house, sign, degree or date that is not in the verified blocks. Whenever you name a planet "
     "in an aspect, say whose it is and whether it is natal or transiting. No orb numbers, no times of day. Every recommendation must "
-    "follow from a block. Direct, concrete style, no filler.\n"
+    "follow from a block. Refer to the chosen date only as \"в този ден\" or \"на избраната дата\": never \"днес\", \"утре\" or \"вчера\". "
+    "Direct, concrete style, no filler.\n"
 )
 
 
@@ -174,7 +176,8 @@ async def _check_block(interp, facts, block_id: str, text: str, checks: List[Dic
     """Проверява един блок (най-много 2 поправки). Връща (проверен текст или None, кодовете на нарушенията при провал)."""
     text = TAG_RE.sub("", text or "").strip()                    # забъркан таг в текста на блока не е част от анализа
     try:
-        return await interp.guard_text(text, facts, stage=f"pair:{block_id}", checks=checks), ""
+        stage = block_id if ":" in block_id else f"pair:{block_id}"
+        return await interp.guard_text(text, facts, stage=stage, checks=checks), ""
     except text_guard.TextCheckError as failure:
         return None, failure.outcome.codes() or "check"
 

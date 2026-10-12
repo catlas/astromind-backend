@@ -197,6 +197,13 @@ class FullAndRepairTest(unittest.TestCase):
         self.assertNotIn("наталната Венера на Иван, затова", text)
         self.assertIn(GOOD, text)
 
+    def test_the_stages_of_the_blocks_are_named_once(self):
+        _, checks = run(Script(card_text={"A2": WRONG}, repair={"наталната Венера на Иван": GOOD}))
+        stages = [c["stage"] for c in checks]
+        self.assertIn("pair:A2", stages)
+        self.assertIn("pair:SUMMARY", stages)
+        self.assertFalse([s for s in stages if s.startswith("pair:pair") or s.startswith("compose:compose")])
+
     def test_the_question_is_answered_only_when_one_was_asked(self):
         text, _ = run(Script(), question="")
         self.assertNotIn("Отговор на въпроса", text)
