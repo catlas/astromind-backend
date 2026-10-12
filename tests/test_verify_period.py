@@ -97,6 +97,24 @@ class OfflineVerificationTest(unittest.TestCase):
                                question="Кога е подходящо да започна разговор за промяна в работата?")
         self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [])
 
+    def test_the_other_live_reports_of_12_10_2026_match_the_recomputation(self):
+        """Работна двойка (20–31 октомври) и двойка за два месеца (20 октомври – 30 ноември): реални текстове от продукцията."""
+        import regression_support as rs
+        import text_check as tc
+        from scanner import TransitScanner
+        import engine
+        for name, end, question in (("live_2026_10_12_period_pair_work.txt", "2026-10-31", "Как да си разпределим задачите, за да не се дразним?"),
+                                    ("live_2026_10_12_period_pair_two_months.txt", "2026-11-30", "")):
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
+                live = f.read()
+            problems, counts = vp.verify_period(live, self.people, "2026-10-20", end)
+            self.assertEqual(problems, [], name)
+            cal = TransitScanner(engine_instance=engine.get_engine()).build_calendar(
+                rs.chart("A"), "2026-10-20", end, rs.A_BIRTH["lat"], rs.A_BIRTH["lon"], partner_chart=rs.chart("Ivan"), tz_name="Europe/Sofia")
+            facts = tc.build_facts(mode="period", user_name=rs.A_NAME, natal_chart=rs.chart("A"), partner_name=rs.IVAN, partner_chart=rs.chart("Ivan"),
+                                   calendar=cal, report_date="2026-10-12", question=question)
+            self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
+
     def test_all_fixed_cases_match_the_recomputation(self):
         self.assertEqual(vp.run_offline(), 0)
 
