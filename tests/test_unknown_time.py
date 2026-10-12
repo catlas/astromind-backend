@@ -603,8 +603,8 @@ class RealPromptTest(unittest.TestCase):
                           "reminder": birthtime.reminder.get()})
             if "MODE: PERIOD OVERVIEW" in system_prompt:
                 return OVERVIEW_OK
-            if "TWO-PERSON SNAPSHOT for ONE chosen" in system_prompt:
-                return pair_reply(user_prompt)                   # анализ „за дата“ за двама: карти от кода, AI тълкува
+            if "SNAPSHOT for ONE chosen" in system_prompt:
+                return pair_reply(user_prompt)                   # анализ „за дата“: карти от кода, AI тълкува
             return "<p>Подменен текст.</p>"
         with mock.patch.object(main.ai_interpreter, "_call_api", record):
             response = self.client.post("/jobs?wait=60", json=body, headers=h)

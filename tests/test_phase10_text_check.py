@@ -657,12 +657,24 @@ class InterpreterIntegrationTest(unittest.TestCase):
         transit = sky(IVAN_BIRTH)
         facts = tc.build_facts(mode="snapshot", user_name="Иван", natal_chart=chart(IVAN_BIRTH), transit_chart=transit, target_date=SNAPSHOT)
         planet, house = next((p, h) for p, h in facts.transit_houses["user"].items() if p == "Saturn")
-        good = f"Транзитният Сатурн е в {hb(house)} дом и иска търпение."
-        bad = f"Транзитният Сатурн е в {hb((house % 12) + 1)} дом и иска търпение."
-        with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(side_effect=[bad, good])):
+        good = f"Транзитният Сатурн е в {hb(house)} дом и иска търпение, затова в този ден е разумно да се действа бавно и без напрежение."
+        bad = f"Транзитният Сатурн е в {hb((house % 12) + 1)} дом и иска търпение, затова в този ден е разумно да се действа бавно и без напрежение."
+        calls = []
+
+        def fake(system_prompt=None, user_prompt=None, **kwargs):
+            """Анализ „за дата“ е по карти (single_snapshot.py): грешният дом е в обобщението; поправката го връща верен."""
+            calls.append(system_prompt)
+            if "ONE-PERSON SNAPSHOT" in system_prompt:
+                ids = re.findall(r"^(A\d): ", user_prompt, re.M)
+                parts = [f"[[{i}]]\nТова напрежение изисква търпение и яснота в мислите в този ден." for i in ids]
+                return "\n\n".join(parts + [f"[[SUMMARY]]\n{bad}", "[[ADVICE]]\n- Планирайте деня с повече пауза.",
+                                             "[[CONCLUSION]]\nДенят е подходящ за внимателна работа и неподходящ за прибързани решения."])
+            return good                                                      # поправка на обобщението
+        with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(side_effect=fake)):
             text = asyncio.run(self.interp.interpret_chart(
                 natal_chart=chart(IVAN_BIRTH), transit_chart=transit, target_date=SNAPSHOT, user_name="Иван"))
-        self.assertEqual(text, good)
+        self.assertIn(good, text)
+        self.assertNotIn(bad, text)
         pair_facts = tc.build_facts(mode="natal", user_name="Мария", natal_chart=chart(A_BIRTH), partner_name="Иван", partner_chart=chart(IVAN_BIRTH))
         h = pair_facts.overlays[("partner", "user")]["Mars"]
         good_pair = f"Марс на Иван е във вашия {hb(h)} дом."

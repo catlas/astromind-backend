@@ -51,7 +51,7 @@ def fund(email, paid):
 class Scenario:
     def __init__(self, wrong_cards=(), summary=SUMMARY, compose=None):
         self.wrong, self.summary, self.compose = set(wrong_cards), summary, compose or {}
-        self.calls = {"main": 0, "compose": 0, "repair": 0}
+        self.calls = {"main": 0, "compose": 0, "repair": 0, "restore": 0}
 
     async def __call__(self, system_prompt, user_prompt, max_tokens, **kwargs):
         blocks = {"SUMMARY": self.summary, "ADVICE": ADVICE, "CONCLUSION": CONCLUSION}
@@ -64,6 +64,10 @@ class Scenario:
             parts = [f"[[{i}]]\n{WRONG if i in self.wrong else GOOD}" for i in ids]
             parts += [f"[[{k}]]\n{v}" for k, v in blocks.items()]
             return "\n\n".join(parts)
+        if "You write ONE short interpretation" in system_prompt:
+            self.calls["restore"] += 1
+            card_id = re.search(r"CARD ([A-Z]\d):", user_prompt).group(1)
+            return WRONG if card_id in self.wrong else GOOD
         self.calls["repair"] += 1
         return WRONG if "наталната Венера на Иван" in user_prompt else user_prompt
 
@@ -107,7 +111,7 @@ class PairSnapshotJobsTest(unittest.TestCase):
         self.assertEqual(report["params"]["quality"], "fallback")
 
     def test_a_partial_analysis_is_not_charged_and_is_labelled(self):
-        scenario = Scenario(wrong_cards={"A2"})
+        scenario = Scenario(wrong_cards={"A4"})
         job, report, (paid, gift) = self.run_job("ps-partial@test.bg", scenario)
         self.assertEqual(job["status"], "succeeded")
         self.assertEqual(job["charged_cents"], 0)
@@ -131,6 +135,41 @@ class PairSnapshotJobsTest(unittest.TestCase):
         self.assertIsNone(job["report_id"])
         self.assertEqual((paid, gift), (1000, 0))
         self.assertIn("код:", job["error"] if isinstance(job.get("error"), str) else str(job))
+
+    def test_the_refund_of_a_partial_analysis_and_the_final_charge_are_protected_from_a_second_run(self):
+        import generation
+        import jobs
+        from schemas import ChartRequest
+        job, report, before = self.run_job("ps-repeat@test.bg", Scenario(wrong_cards={"A4"}))
+        self.assertEqual(job["charged_cents"], 0)
+        uid = None
+        db = SessionLocal()
+        try:
+            uid = db.query(User.id).filter(User.email == "ps-repeat@test.bg").scalar()
+            again = billing.release(db, uid, 180, 0, ref=f"job:{job['id']}:partial")          # същата справка втори път
+            db.commit()
+        finally:
+            db.close()
+        self.assertIsNone(again)                                                                # връщането е записано веднъж
+        self.assertEqual(balances(uid), before)
+        replay = generation.Outcome(content="x", report_type="general", label="x", params={}, quality="partial")
+        self.assertFalse(jobs._finalize(job["id"], ChartRequest(**BODY), replay))             # задача, която не е „running“, не се довършва пак
+        self.assertEqual(balances(uid), before)
+
+    def test_a_full_analysis_is_charged_exactly_once_even_if_the_job_is_finalised_again(self):
+        import generation
+        import jobs
+        from schemas import ChartRequest
+        job, report, before = self.run_job("ps-once@test.bg", Scenario())
+        db = SessionLocal()
+        try:
+            uid = db.query(User.id).filter(User.email == "ps-once@test.bg").scalar()
+        finally:
+            db.close()
+        self.assertEqual(before, (1000 - 180, 0))
+        replay = generation.Outcome(content="x", report_type="general", label="x", params={}, quality="full")
+        self.assertFalse(jobs._finalize(job["id"], ChartRequest(**BODY), replay))
+        self.assertEqual(balances(uid), (1000 - 180, 0))
 
 
 if __name__ == "__main__":

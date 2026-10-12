@@ -285,8 +285,8 @@ class PromptPayloadTest(Phase8Base):
 
         async def fake_call(_self, system_prompt, user_prompt, max_tokens, **kw):
             calls.append((system_prompt, user_prompt, kw))
-            if "TWO-PERSON SNAPSHOT for ONE chosen" in system_prompt:
-                return testenv.pair_reply(user_prompt)              # анализ „за дата“ за двама: карти от кода, AI тълкува
+            if "SNAPSHOT for ONE chosen" in system_prompt:
+                return testenv.pair_reply(user_prompt)              # анализ „за дата“ (един или двама): карти от кода, AI тълкува
             return "<p>ok</p>"
 
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
@@ -362,20 +362,19 @@ class PromptPayloadTest(Phase8Base):
                 self.assertTrue(all(row["person1"] == "A" and row["person2"] == "Иван" for row in aspects))
 
     def test_single_snapshot_houses_and_aspects_match_reference(self):
+        """Анализ „за дата“ за един човек (single_snapshot.py): редът за домовете и картите с аспекти са от кода и съвпадат с еталона."""
         for theme in THEMES:
             with self.subTest(theme=theme):
                 system, user, _ = self.case("single", "snapshot", theme)[0]
-                sections = parse_sections(user)
-                houses = find_section(sections, "TRANSIT PLANETS IN USER'S NATAL HOUSES (CALCULATED)")
+                self.assertIn(f"THEME: {ai_interpreter.THEME_FOCUS[theme]}", system)
+                line = next(l for l in user.splitlines() if l.startswith("Транзитните планети в домовете на Иван:"))
                 for name, house in mapped(REF["overlays"]["T_IVAN_in_IVAN"]).items():
-                    self.assertEqual(houses[name], house, name)
-                self.assertEqual((houses["Sun"], houses["Mercury"], houses["Saturn"]), (9, 10, 3))
-                positions = find_section(sections, "TRANSIT PLANETARY POSITIONS")
-                self.assertNotIn("house", json.dumps(positions))
-                aspects = find_section(sections, "TRANSIT ASPECTS TO USER'S NATAL CHART (CALCULATED)")
-                self.assertTrue(any(r["transit_planet"] == "Neptune" and r["natal_planet"] == "Neptune" for r in aspects))
-                self.assertFalse(any(r["transit_planet"] == "Saturn" and r["natal_planet"] in ("Moon", "Mercury") for r in aspects))
-                self.assertIn("TRANSIT ASPECTS TO USER'S NATAL CHART (CALCULATED)", system)
+                    self.assertIn(f"{text_check.PLANET_BG.get(name, name)} — {pair_snapshot._ORDINAL[house]} дом", line, name)
+                self.assertIn("9-ти дом", line.split("Слънце —")[1].split(";")[0])           # Слънцето е в 9-и дом (еталон: 9, 10, 3)
+                cards = [l for l in user.splitlines() if re.match(r"^A\d: ", l)]
+                self.assertTrue(any("Транзитният Нептун" in l and "наталния Нептун" in l for l in cards))
+                self.assertFalse(any("Транзитният Сатурн" in l and ("наталната Луна" in l or "наталния Меркурий" in l) for l in cards))
+                self.assertNotIn("TRANSIT PLANETARY POSITIONS", user)            # няма сурови позиции, от които AI да смята
 
     def test_pair_snapshot_has_theme_houses_and_aspects_for_both_people(self):
         """Анализ „за дата“ за двама (pair_snapshot.py): фактите са карти и редове за домовете, написани от кода; натъл е в подканата."""
