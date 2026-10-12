@@ -53,7 +53,8 @@ class OfflineVerificationTest(unittest.TestCase):
         self.assertTrue(any("знак" in p for p in self.verify(wrong_sign)[0]))
 
     def test_facts_inside_an_interpretation_are_detected(self):
-        for dirty in ("Марс е планетата на конфликтите.", "В Скорпион е по-трудно.", "Около 14:30 ще се реши.", "На 3 януари ще се реши.",
+        self.assertEqual(self.verify(self.text.replace("Това изисква търпение и ясни граници в разговорите.", "Очакванията към общия ви дом излизат напред.", 1))[0], [])
+        for dirty in ("Марс е планетата на конфликтите.", "Планетата е в 7-ми дом.", "В Скорпион е по-трудно.", "Около 14:30 ще се реши.", "На 3 януари ще се реши.",
                       "Ретроградният период изисква търпение."):
             text = self.text.replace("Това изисква търпение и ясни граници в разговорите.", dirty, 1)
             self.assertTrue(self.verify(text)[0], dirty)
@@ -116,6 +117,7 @@ class OfflineVerificationTest(unittest.TestCase):
         from scanner import TransitScanner
         import engine
         for name, end, question in (("live_2026_10_12_period_pair_work.txt", "2026-10-31", "Как да си разпределим задачите, за да не се дразним?"),
+                                    ("live_2026_10_12_period_pair_dst_second.txt", "2026-10-31", "Как да говорим спокойно за очакванията си?"),
                                     ("live_2026_10_12_period_pair_two_months.txt", "2026-11-30", "")):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
                 live = f.read()

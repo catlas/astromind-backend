@@ -89,7 +89,7 @@ class _AspectWords:
 
 ASPECT_WORDS = _AspectWords()
 SIGN_WORDS = re.compile(r"(?<![\w])(" + "|".join(SIGNS) + r")(?![\w])")
-HOUSE_WORDS = re.compile(r"(?<![\w])(\d{1,2}-?(?:ви|ри|ти|ми|и)\s+дом|\d{1,2}\s*дом|[а-я]+\s+дом)(?![\w])", re.IGNORECASE)
+HOUSE_WORDS = re.compile(r"(?<![\w])(\d{1,2}-?(?:ви|ри|ти|ми|и)\s+дом|\d{1,2}\s*дом|(?:първ|втор|трет|четвърт|пет|шест|седм|осм|девет|десет|единадесет|дванадесет)\w*\s+(?:натален\s+)?дом)(?![\w])", re.IGNORECASE)  # „ви дом“ (вашия дом) е обикновена дума
 CLOCK_RE = re.compile(r"(?<![\d:])\d{1,2}:\d{2}(?![\d:])")
 DATE_RX = re.compile(rf"(?<![\w.])(\d{{1,2}})(?:\s*[-–]\s*(\d{{1,2}}))?\s+({MONTH_RX})(?![\w])", re.IGNORECASE)
 MOTION_WORDS = re.compile(r"(?<![\w])(ретроград\w*|директен|директна|директни|директн\w*\s+(?:ход|движение)|директно\s+(?:движение|ход))(?![\w])", re.IGNORECASE)
