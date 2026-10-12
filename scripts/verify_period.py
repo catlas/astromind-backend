@@ -67,7 +67,27 @@ DETAIL_NONE = re.compile(r"^Точен аспект в периода няма\.
 DETAIL_OUTSIDE = re.compile(rf"Точен аспект извън периода: (.+?)\. ?(?:Интервал|$)")
 DETAIL_INTERVAL = re.compile(rf"Интервал на действие: от (\d{{1,2}}) ({MONTH_RX}) до (\d{{1,2}}) ({MONTH_RX})( \(интервалът излиза извън периода\))?\.")
 FORBIDDEN_NAMES = [(re.compile(rf"(?<![\w]){re.escape(n)}(?![\w])", re.IGNORECASE), n) for n in sorted(PLANETS, key=len, reverse=True)]
-ASPECT_WORDS = re.compile(r"(?<![\w])(съвпад\w*|секстил\w*|квадратур\w*|тригон\w*|опозиц\w*|аспект\w*)", re.IGNORECASE)
+ASPECT_DEFINITE = re.compile(r"(?<![\w])(секстил\w*|тригон\w*|квадратур\w*|конюнкци\w*|аспект\w*)", re.IGNORECASE)
+ASPECT_AMBIGUOUS = re.compile(r"(?<![\w])(съвпад\w*|опозиц\w*|съединение\w*|квадрат\w*)", re.IGNORECASE)      # и обикновени думи
+ASTRO_CUE = re.compile(r"транзит|натал|аспект|орбис|ретроград", re.IGNORECASE)
+
+
+class _AspectWords:
+    """Като останалите регулярни изрази тук: .search(текст) -> съвпадение или None. Двусмислените думи се броят само в изречение с астрологична
+    следа (транзит, натален, аспект, орбис, ретрограден или име на планета)."""
+
+    def finditer(self, text):
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+            cue = bool(ASTRO_CUE.search(sentence)) or any(rx.search(sentence) for rx, _n in FORBIDDEN_NAMES)
+            yield from ASPECT_DEFINITE.finditer(sentence)
+            if cue:
+                yield from ASPECT_AMBIGUOUS.finditer(sentence)
+
+    def search(self, text):
+        return next(self.finditer(text), None)
+
+
+ASPECT_WORDS = _AspectWords()
 SIGN_WORDS = re.compile(r"(?<![\w])(" + "|".join(SIGNS) + r")(?![\w])")
 HOUSE_WORDS = re.compile(r"(?<![\w])(\d{1,2}-?(?:ви|ри|ти|ми|и)\s+дом|\d{1,2}\s*дом|[а-я]+\s+дом)(?![\w])", re.IGNORECASE)
 CLOCK_RE = re.compile(r"(?<![\d:])\d{1,2}:\d{2}(?![\d:])")

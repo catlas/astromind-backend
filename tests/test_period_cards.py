@@ -299,6 +299,11 @@ class CardScopeTest(unittest.TestCase):
         foreign = "Плутон" if "Pluto" not in planets else "Нептун"
         self.assertTrue(self.codes(self.sextile, f"{foreign} променя нещата."))
 
+    def test_an_ordinary_word_that_looks_like_an_aspect_is_not_refused_in_a_card(self):
+        self.assertEqual(self.codes(self.sextile, "Очакванията ви съвпадат повече, отколкото си мислите."), [])
+        self.assertEqual(self.codes(self.sextile, "Това съвпада с желанието ви за спокойствие."), [])
+        self.assertTrue(self.codes(self.sextile, "Транзитният аспект тук е опозиция."))
+
     def test_motion_signs_houses_dates_and_times_are_refused(self):
         for text in ("Ретроградният период изисква търпение.", "Директно движение помага.", "В Скорпион е по-трудно.", "В 7-ми дом е важно.",
                      "На 3 януари ще се реши.", "Около 3.1 бъдете внимателни.", BAD_CARD):
@@ -343,6 +348,14 @@ class ClosingBlocksTest(unittest.TestCase):
     def test_planets_aspects_signs_and_houses_are_refused(self):
         for text in ("Марс помага.", "Тригонът е хубав.", "В Скорпион е добре.", "В 7-ми дом е важно."):
             self.assertTrue(self.check("SUMMARY", text), text)
+
+    def test_ordinary_words_that_look_like_aspects_are_allowed_and_real_terms_are_not(self):
+        for fine in ("Очакванията ви съвпадат, когато говорите бавно.", "Това съвпада с желанието ви за спокойствие.",
+                     "Ако няма съвпадение на мненията, не настоявайте.", "Не влизайте в опозиция един на друг."):
+            self.assertEqual(self.check("SUMMARY", fine), [], fine)
+        for term in ("Тригонът дава лекота.", "Квадратурата носи напрежение.", "Транзитната опозиция тежи.", "Марс в съвпад помага.",
+                     "Натален секстил ви подкрепя."):
+            self.assertTrue(self.check("SUMMARY", term), term)
 
     def test_only_dates_of_the_included_cards_may_be_named(self):
         self.assertEqual(self.check("ADVICE", "На 24 октомври финализирайте проекта."), [])

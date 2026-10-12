@@ -290,6 +290,42 @@ def restrict_events(facts, cards: List[Card]):
     return dataclasses.replace(facts, natal_aspects={}, synastry=[], transit_aspects={}, calendar=[c.row["event"] for c in cards], question="")
 
 
+_DEFINITE_ASPECT = ("секстил", "тригон", "квадратур", "конюнкци")
+_ASTRO_CUE_RE = re.compile(r"транзит|натал|аспект|орбис|ретроград", re.IGNORECASE)
+
+
+def aspect_terms(text: str, card: bool = False) -> List[Tuple[str, "re.Match"]]:
+    """Астрологическите термини за аспект в текста. „Секстил“, „тригон“, „квадратура“ и „конюнкция“ са винаги термин; „съвпада“, „съвпадение“,
+    „опозиция“, „съединение“ и „квадрат…“ са и обикновени думи („очакванията ви съвпадат“) и се броят само в изречение с астрологична
+    следа (транзит, натален, аспект, орбис или планета). В тълкуване на карта „опозиция“ и „квадрат…“ са винаги термин (опитът показа, че
+    моделът ги назовава като аспект на картата); в затварящите блокове и те са двусмислени."""
+    out: List[Tuple[str, "re.Match"]] = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        cue = bool(_ASTRO_CUE_RE.search(sentence)) or any(rx.search(sentence) for rx in text_check.PLANET_RE.values())
+        for key, rx in text_check.ASPECT_RE.items():
+            for m in rx.finditer(sentence):
+                if m.group(0).lower().startswith(_DEFINITE_ASPECT) or cue or (card and key in ("opposition", "square")):
+                    out.append((key, m))
+    return out
+
+
+def closing_scope(text: str) -> List[Violation]:
+    """Затварящ блок: без планети, знаци, домове и астрологични термини за аспект (обикновените думи „съвпада“, „опозиция“ са позволени)."""
+    out = card_engine._names_in(text, "в обобщението, съветите, отговора и заключението", sign_house_only=True)
+    for key, rx in text_check.PLANET_RE.items():
+        m = rx.search(text or "")
+        if m:
+            out.append(Violation("aspect", "hard", text[max(0, m.start() - 30):m.end() + 30],
+                                 f"В обобщението, съветите, отговора и заключението не споменавай планета („{m.group(0)}“): фактите са в заглавията на "
+                                 "картите. Опиши само смисъла със свои думи."))
+            break
+    for key, m in aspect_terms(text)[:1]:
+        out.append(Violation("aspect", "hard", text[max(0, m.start() - 30):m.end() + 30],
+                             f"В обобщението, съветите, отговора и заключението не споменавай аспект („{m.group(0)}“): фактите са в заглавията на "
+                             "картите. Опиши само смисъла със свои думи."))
+    return out
+
+
 def period_card_scope(card: Card):
     """extra_check за тълкуването на карта: само нейните планети и нейният аспект, без знаци, домове, часове и думи за движение; датите
     само от заглавието на картата (те са факт от кода). Всичко това е в заглавието, написано от кода."""
@@ -309,11 +345,11 @@ def period_card_scope(card: Card):
                 out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
                                      f"В тълкуването на тази карта не споменавай {PLANET_BG.get(key, key)}: картата е само за "
                                      f"{' и '.join(PLANET_BG.get(p, p) for p in sorted(own))}. Не назовавай други планети и аспекти."))
-        for key, rx in text_check.ASPECT_RE.items():
-            m = rx.search(text or "")
-            if m and key != own_aspect:
+        for key, m in aspect_terms(text, card=True):
+            if key != own_aspect:
                 out.append(Violation("event", "hard", text[max(0, m.start() - 30):m.end() + 30],
-                                     f"В тълкуването на тази карта не споменавай {ASPECT_BG.get(key, key)}: картата не е такъв аспект."))
+                                     f"В тълкуването на тази карта не споменавай {ASPECT_BG.get(key, key)} („{m.group(0)}“): картата не е такъв аспект."))
+                break
         out.extend(card_engine._names_in(text, "в тълкуването на карта", sign_house_only=True))
         other = card.row.get("other_person") or ""
         owner = card.row.get("owner") or ""
@@ -437,7 +473,7 @@ def closing_checks(question: str, tag: str, allowed: set, facts, prior_parts: Li
     cross = cross_check(facts, prior_parts, stage, months)
 
     def check(text: str) -> List[Violation]:
-        out = card_engine.closing_scope(text) + dates(text) + ends_check(text) + (coverage(text) if coverage else [])
+        out = closing_scope(text) + dates(text) + ends_check(text) + (coverage(text) if coverage else [])
         return out + cross(text)
     return check
 
