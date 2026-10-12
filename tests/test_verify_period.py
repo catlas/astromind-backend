@@ -79,6 +79,24 @@ class OfflineVerificationTest(unittest.TestCase):
         hard = [v for v in tc.check_text(live, facts) if v.severity == "hard"]
         self.assertEqual(hard, [])
 
+    def test_the_live_single_report_in_vienna_matches_the_recomputation_and_passes_the_checker(self):
+        """Реален отчет за един човек (Виена, 20–31 октомври): зоната е записана с българското име на града."""
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "live_2026_10_12_period_single_dst.txt"), encoding="utf-8") as f:
+            live = f.read()
+        ivan = [p for p in self.people if p["name"] == "Иван"]
+        problems, counts = vp.verify_period(live, ivan, "2026-10-20", "2026-10-31")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["exact"], counts["nearest"], counts["station"], counts["ingress"], counts["lunation"]), (3, 1, 1, 2, 1))
+        import engine
+        import regression_support as rs
+        import text_check as tc
+        from scanner import TransitScanner
+        cal = TransitScanner(engine_instance=engine.get_engine()).build_calendar(
+            rs.chart("Ivan"), "2026-10-20", "2026-10-31", rs.IVAN_BIRTH["lat"], rs.IVAN_BIRTH["lon"], tz_name="Europe/Vienna")
+        facts = tc.build_facts(mode="period", user_name=rs.IVAN, natal_chart=rs.chart("Ivan"), calendar=cal, report_date="2026-10-12",
+                               question="Кога е подходящо да започна разговор за промяна в работата?")
+        self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [])
+
     def test_all_fixed_cases_match_the_recomputation(self):
         self.assertEqual(vp.run_offline(), 0)
 

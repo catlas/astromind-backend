@@ -276,6 +276,11 @@ class CardScopeTest(unittest.TestCase):
         self.assertEqual(self.codes(card, f"През {own} е добре да изчакате."), [])
         self.assertTrue(self.codes(card, "През 3 януари е добре да изчакате."))
 
+    def test_the_adverb_directly_is_an_ordinary_word_and_the_planet_movement_is_not(self):
+        self.assertEqual(self.codes(self.sextile, "Кажете го директно и спокойно, без да мерите кой е по-прав."), [])
+        self.assertTrue(self.codes(self.sextile, "Директният ход помага."))
+        self.assertTrue(self.codes(self.sextile, "Планетата е ретроградна."))
+
     def test_the_other_person_is_not_named_in_a_card_of_the_first_one(self):
         card = self.any
         self.assertTrue(self.codes(card, f"Това е важно за {card.row['other_person']}."))

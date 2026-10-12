@@ -70,7 +70,7 @@ SIGN_WORDS = re.compile(r"(?<![\w])(" + "|".join(SIGNS) + r")(?![\w])")
 HOUSE_WORDS = re.compile(r"(?<![\w])(\d{1,2}-?(?:ви|ри|ти|ми|и)\s+дом|\d{1,2}\s*дом|[а-я]+\s+дом)(?![\w])", re.IGNORECASE)
 CLOCK_RE = re.compile(r"(?<![\d:])\d{1,2}:\d{2}(?![\d:])")
 DATE_RX = re.compile(rf"(?<![\w.])(\d{{1,2}})(?:\s*[-–]\s*(\d{{1,2}}))?\s+({MONTH_RX})(?![\w])", re.IGNORECASE)
-MOTION_WORDS = re.compile(r"(?<![\w])(ретроград\w*|директн\w*|директен|директна|директно)", re.IGNORECASE)
+MOTION_WORDS = re.compile(r"(?<![\w])(ретроград\w*|директен|директна|директни|директн\w*\s+(?:ход|движение)|директно\s+(?:движение|ход))(?![\w])", re.IGNORECASE)
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -126,10 +126,24 @@ def year_for(month, months_years, start, end):
     return int(start[:4])
 
 
+def zone_from_label(label):
+    """„Europe/Vienna“ или българското име на града („Виена“: езиковата поправка след генерирането заменя имената на зоните)."""
+    if "/" in label:
+        return label
+    import zoneinfo
+    from bg_text import ZONE_CITIES
+    for city, bg in ZONE_CITIES.items():
+        if bg == label:
+            for name in sorted(zoneinfo.available_timezones()):
+                if name.endswith("/" + city):
+                    return name
+    raise SystemExit(f"непозната зона в отчета: {label}")
+
+
 def parse_report(text):
     """-> (cards, closing, zone, months_years). Картата е {title, detail, ai: [редове], line}; затварящите блокове са {name, text}."""
-    zone_match = re.search(r"местно време \(([A-Za-z_]+/[A-Za-z_]+)\)", text)
-    zone = zone_match.group(1) if zone_match else "Europe/Sofia"
+    zone_match = re.search(r"местно време \(([^)]+)\)", text)
+    zone = zone_from_label(zone_match.group(1)) if zone_match else "Europe/Sofia"
     months_years = {}
     for m in re.finditer(rf"<h2>({MONTH_RX.title().replace('|', '|')}|{MONTH_RX}) (\d{{4}})</h2>", text, re.IGNORECASE):
         months_years[MONTHS[m.group(1).lower()]] = int(m.group(2))

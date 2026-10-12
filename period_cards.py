@@ -42,7 +42,9 @@ MAX_FAILED_CARDS = 4                 # за целия отчет: повече 
 _MONTHS = text_check._MONTH_NAMES
 _SLOW = {"Pluto": 0.0, "Neptune": 0.0, "Uranus": 0.0, "Saturn": 0.2, "Jupiter": 0.3, "Mars": 0.6, "Venus": 0.7, "Mercury": 0.8,
          "Sun": 1.0, "Moon": 1.2, "Chiron": 0.5, "Node": 0.4}
-_MOTION_WORD_RE = re.compile(r"(?<![\w])(?:ретроград\w*|директн\w*|директен|директна|директно)(?![\w])", re.IGNORECASE)
+# „директно“ като наречие („кажете го директно“) е обикновена дума; забранени са ретроградният/директният ход като движение на планета
+_MOTION_WORD_RE = re.compile(r"(?<![\w])(?:ретроград\w*|директен|директна|директни|директн\w*\s+(?:ход|движение)|директно\s+(?:движение|ход))(?![\w])",
+                             re.IGNORECASE)
 _CLOCK_RE = re.compile(r"(?<![\d:])\d{1,2}:\d{2}(?![\d:])")
 WINDOW_NOTE = (f"Интервалът на действие е прозорец при орбис до {str(APPLYING_ORB).replace('.', ',')}° при приближаване и до "
                f"{str(SEPARATING_ORB).replace('.', ',')}° при отдалечаване; краят му е край на въздействието при този орбис, не край на "
@@ -412,6 +414,7 @@ MONTH_SYSTEM = (
     "4. The window of action is not the end of a life process: never say that something \"ends\" on the last day of a window.\n"
     "5. Respect the relationship: never use a romantic or sexual frame unless it is romantic.\n"
     "6. Be direct and concrete. No filler, no mystic phrases.\n"
+    "7. Address the reader consistently with the polite plural \"вие\" (ваш, ви, вас); never switch to \"ти\" (твой, те) in any section.\n"
 )
 
 OVERVIEW_SYSTEM = (
@@ -427,7 +430,7 @@ OVERVIEW_SYSTEM = (
     "RULES: name NO planet, aspect, sign or house: write only the meaning. Every recommendation must follow from a block. The same date "
     "may not be recommended and forbidden for the same action, and a task postponed until a later date may not be recommended earlier. "
     "The window of a transit is not the end of a life process. Respect the relationship (no romantic or sexual frame unless it is "
-    "romantic). Direct, concrete style, no filler.\n"
+    "romantic). Direct, concrete style, no filler. Address the reader consistently with the polite plural \"вие\", never \"ти\".\n"
 )
 
 MONTH_COMPOSE_SYSTEM = (
@@ -435,7 +438,7 @@ MONTH_COMPOSE_SYSTEM = (
     "THEME: {theme}{relation_line}. People: {people}. Month: {month}. All times are local time ({zone}).\n"
     "Below are the ONLY verified cards of this month. Write ONE section: [[MONTH]]  3-5 sentences on what to focus on and what to avoid "
     "this month, only from them. Name NO planet, aspect, sign or house; name a date only if it is a date from a card heading; every "
-    "recommendation must follow from a card. Direct, concrete style.\n"
+    "recommendation must follow from a card. Direct, concrete style. Address the reader consistently with the polite plural \"вие\", never \"ти\".\n"
 )
 
 RESTORE_SYSTEM = (
@@ -443,7 +446,7 @@ RESTORE_SYSTEM = (
     "THEME: {theme}\n"
     "Write 2-3 sentences about THAT card only, in plain words, for the person named in the heading. The heading already names the planets, the "
     "aspect, the date, the time, the movement and the sign: do NOT name any planet, aspect, sign, house, date, time or movement. Start "
-    "directly with the meaning. Be direct and concrete, no filler, no predictions. Write in Bulgarian.\n"
+    "directly with the meaning. Be direct and concrete, no filler, no predictions. Address the reader with the polite plural \"вие\", never \"ти\". Write in Bulgarian.\n"
 )
 
 
