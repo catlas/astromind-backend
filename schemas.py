@@ -104,6 +104,8 @@ class ChartRequest(BaseModel):
     partner_fold: Optional[int] = Field(default=None, ge=0, le=1, description="Същото за втория човек")
     # Контекст на отношенията между двамата (Фаза 12): friend, family, parent_child, work, romantic; без избор: общо взаимодействие
     relationship: Optional[str] = Field(default=None, max_length=20, description="Отношенията между двамата души")
+    # При „Родител и дете“: кой от двамата е родителят (user = първият, partner = вторият). Без избор ролите не се гадаят.
+    parent_role: Optional[str] = Field(default=None, max_length=10, description="Родителят при отношения „родител и дете“: user или partner")
     # Номерата на избраните профили: един и същ профил не може да е и първи, и втори човек
     profile_id: Optional[int] = Field(default=None, ge=1, description="Профил на първия човек, ако е избран")
     partner_profile_id: Optional[int] = Field(default=None, ge=1, description="Профил на втория човек, ако е избран")
@@ -130,6 +132,21 @@ class ChartRequest(BaseModel):
         if value not in relationship.CONTEXTS:
             raise ValueError("Непознат вид отношения")
         return value
+
+    @field_validator("parent_role")
+    @classmethod
+    def _known_parent_role(cls, value):
+        if value in (None, ""):
+            return None
+        if value not in relationship.PARENT_ROLES:
+            raise ValueError("Родителят е първият (user) или вторият (partner) човек")
+        return value
+
+    @model_validator(mode="after")
+    def _parent_role_needs_parent_child(self):
+        if self.parent_role and self.relationship != "parent_child":
+            self.parent_role = None                    # роля без „Родител и дете“ няма смисъл и не се пази
+        return self
 
     @model_validator(mode="after")
     def _birth_times(self):

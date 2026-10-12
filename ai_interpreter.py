@@ -1542,7 +1542,7 @@ class AIInterpreter:
 
         if add_context:
             # Правилата за безопасност важат за всеки анализ, независимо от режима
-            system_prompt = f"{system_prompt}\n\n{SAFETY_RULES}\n\n{QUALITY_RULES}"
+            system_prompt = f"{relationship.adapt(system_prompt)}\n\n{SAFETY_RULES}\n\n{QUALITY_RULES}"
             # Контекстът на отношенията между двамата души (Фаза 12), ако анализът е за двама
             relation_context = relationship.current.get()
             if relation_context:

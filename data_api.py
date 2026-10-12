@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import bg_text
+import engine
 import report_export
 import report_snapshot
 from database import MemoryNote, Profile, Report, User, get_db
@@ -63,17 +64,42 @@ def profile_payload(p: Profile) -> dict:
     }
 
 
+def _real_birth_date(value: str) -> str:
+    """Истинска календарна дата (не само YYYY-MM-DD): 2023-02-30 е невалидна; не е в бъдещето и е в диапазона на ефемеридите."""
+    if not DATE_RE.match(value or ""):
+        raise HTTPException(status_code=400, detail="Невалидна дата на раждане")
+    try:
+        born = datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Невалидна дата на раждане: такъв ден не съществува в календара")
+    low, high = engine.supported_year_range()
+    if high >= low and not low <= born.year <= high:
+        raise HTTPException(status_code=400, detail=f"Датата на раждане е извън поддържания диапазон от години: {low}–{high}.")
+    if born > datetime.utcnow().date():
+        raise HTTPException(status_code=400, detail="Датата на раждане не може да е в бъдещето")
+    return value
+
+
+def _real_birth_time(value: str) -> str:
+    """Час HH:MM или HH:MM:SS със стойности в реалните граници (часове до 23, минути и секунди до 59)."""
+    if not TIME_RE.match(value):
+        raise HTTPException(status_code=400, detail="Невалиден час на раждане")
+    parts = [int(x) for x in value.split(":")]
+    if parts[0] > 23 or parts[1] > 59 or (len(parts) > 2 and parts[2] > 59):
+        raise HTTPException(status_code=400, detail="Невалиден час на раждане: часове до 23, минути до 59")
+    return value
+
+
 def _clean_profile(data: ProfileIn) -> dict:
     name = data.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Въведете име на профила")
-    if not DATE_RE.match(data.birth_date or ""):
-        raise HTTPException(status_code=400, detail="Невалидна дата на раждане")
+    birth_date = _real_birth_date(data.birth_date)
     birth_time = (data.birth_time or "").strip()
     if data.unknown_time:
         birth_time = ""
-    elif birth_time and not TIME_RE.match(birth_time):
-        raise HTTPException(status_code=400, detail="Невалиден час на раждане")
+    elif birth_time:
+        birth_time = _real_birth_time(birth_time)
     if data.settings is not None and len(json.dumps(data.settings, ensure_ascii=False).encode()) > MAX_SETTINGS_BYTES:
         raise HTTPException(status_code=400, detail="Настройките на профила са твърде големи")
     return {

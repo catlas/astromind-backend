@@ -165,10 +165,12 @@ def verified_candidates(typed_city: str, ai: Optional[dict], typed_country: str 
 
 
 def verified_answer(place, typed_city: str, typed_country: str, ai: Optional[dict]) -> dict:
-    return {"status": "resolved", "verified": True, "source": "geonames", "lat": round(place.lat, 4),
+    # Един избран кандидат е една стойност: идентификатор, каноничен град и държава, координати, зона и източник (R07)
+    return {"status": "resolved", "verified": True, "source": "geonames", "geoname_id": place.id, "lat": round(place.lat, 4),
             "lon": round(place.lon, 4), "city": (ai or {}).get("city") or typed_city,
             "country": (ai or {}).get("country") or typed_country, "country_code": place.country,
-            "timezone": place.timezone, "attribution": places.ATTRIBUTION}
+            "canonical_city": place.name, "timezone": place.timezone, "data_version": places.source_info()["version"],
+            "attribution": places.ATTRIBUTION}
 
 
 def ambiguous_answer(typed_city: str, typed_country: str, candidates: list) -> dict:
@@ -224,5 +226,5 @@ async def geocode(data: GeocodeIn, current_user: User = Depends(get_current_user
     # Мястото го няма в базата: резултатът на AI, но непроверен
     if ai is None or (is_bulgaria(country) and not within_bulgaria(ai["lat"], ai["lon"])):
         raise HTTPException(status_code=404, detail=NOT_FOUND_MESSAGE)
-    return {"status": "resolved", "verified": False, "source": "ai", "lat": ai["lat"], "lon": ai["lon"],
+    return {"status": "resolved", "verified": False, "source": "ai", "needs_confirmation": True, "lat": ai["lat"], "lon": ai["lon"],
             "city": ai["city"] or city, "country": ai["country"] or country}

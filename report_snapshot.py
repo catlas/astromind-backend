@@ -81,7 +81,8 @@ def build(*, mode: str, request: Any, natal: Dict, partner: Optional[Dict] = Non
                       "missing": sorted({n for c in (natal, partner, transit) for n in engine.missing_bodies(c)})},
         "house_systems": {p["role"]: p["chart"].get("house_system") for p in people},
         "people": people,
-        "relationship": {"kind": relationship.normalize(request.relationship)} if partner is not None else None,
+        "relationship": ({"kind": relationship.normalize(request.relationship), "parent": request.parent_role or None}
+                         if partner is not None else None),
         "forecast_zone": forecast_zone,
     }
     if mode == "snapshot" and transit is not None:

@@ -233,9 +233,11 @@ class ReservationTest(unittest.TestCase):
             self.assertEqual(reservations(), 0)
 
     def test_an_abandoned_reservation_is_uncertain_not_free_and_is_written_off_later(self):
-        """R10: изтекла резервация не е доказан неплатим опит: още се брои, а след UNCERTAIN_HOURS се отчита по резервираната сума."""
+        """R10: изтекла резервация не е доказан неплатим опит: още се брои, а след UNCERTAIN_HOURS се отчита по резервираната сума.
+        Моментите са фиксирани (не зависят от часа на денонощието)."""
         with env(AI_DAILY_BUDGET_CENTS=1, AI_MONTHLY_BUDGET_CENTS=100000, **PRICES):
-            old = datetime.utcnow() - timedelta(minutes=ai_budget.RESERVATION_TTL_MINUTES + 5)
+            now = datetime(2026, 10, 12, 12, 0, 0)
+            old = now - timedelta(minutes=ai_budget.RESERVATION_TTL_MINUTES + 5)
             db = SessionLocal()
             try:
                 db.add(AIReservation(day=old.strftime("%Y-%m-%d"), millicents=900, created_at=old))
@@ -243,9 +245,9 @@ class ReservationTest(unittest.TestCase):
             finally:
                 db.close()
             with self.assertRaises(ai_budget.BudgetExceeded):                            # старата още пречи: цената е неизвестна
-                ai_budget.reserve(0, 400, now=datetime.utcnow())
+                ai_budget.reserve(0, 400, now=now)
             self.assertEqual(ai_budget.uncertain_summary()["uncertain_attempts"], 1)
-            later = datetime.utcnow() + timedelta(hours=ai_budget.UNCERTAIN_HOURS + 1)
+            later = now + timedelta(hours=ai_budget.UNCERTAIN_HOURS + 1)
             self.assertIsNotNone(ai_budget.reserve(0, 50, now=later))                    # отписана: 900 са разход на старата дата
             self.assertEqual(ai_budget.uncertain_summary()["uncertain_attempts"], 0)
             db = SessionLocal()

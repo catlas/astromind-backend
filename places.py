@@ -40,6 +40,29 @@ def _unpacked_path() -> Optional[str]:
     return target
 
 
+# Критерий за координатите (документиран, R07): GeoNames дава за всяко населено място една точка (latitude/longitude на GeoNames
+# записа), която е центърът на селището (обикновено централната градска част или административният център), закръглена до 4 знака.
+# Градовете от фиксирания списък във фронтенда (src/utils/bulgarianCities.js) ползват същия критерий и са проверени срещу тази база.
+COORDINATE_CRITERION = "GeoNames: точка на селището (център), 4 знака след десетичната запетая"
+
+
+def source_info() -> dict:
+    """Източник и версия на базата с места: име, лиценз, отпечатък на изходния файл (от таблицата meta), критерий за координатите."""
+    info = {"source": "GeoNames cities15000", "license": "CC BY 4.0", "criterion": COORDINATE_CRITERION, "version": ""}
+    path = _unpacked_path()
+    if path:
+        try:
+            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            try:
+                meta = dict(db.execute("SELECT key, value FROM meta").fetchall())
+            finally:
+                db.close()
+            info["version"] = str(meta.get("sha256") or meta.get("source_sha256") or next(iter(meta.values()), ""))[:12]
+        except Exception:
+            pass
+    return info
+
+
 def normalize(text: str) -> str:
     """Ключ за търсене: без диакритики, малки букви, интервали вместо препинателни знаци ("Wien", "wien", "Wïen" са едно)."""
     kept: List[str] = []

@@ -109,6 +109,8 @@ def report_params(request: ChartRequest) -> dict:
         params["partner_time_known"] = False
     if has_partner(request):
         params["relationship"] = relationship.normalize(request.relationship)
+        if request.parent_role:
+            params["parent_role"] = request.parent_role
     return params
 
 
@@ -213,6 +215,24 @@ def time_note_for(request: ChartRequest, natal: Dict, partner_data: Optional[Dic
     return birthtime.note(people)
 
 
+def relationship_names(request: ChartRequest):
+    return (factpack.display_name(request.name, factpack.FIRST_PERSON_DEFAULT),
+            factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT))
+
+
+def child_is_minor(request: ChartRequest, today: Optional[str] = None) -> bool:
+    """„Родител и дете“ с избрана роля: детето е ненавършило 18 години към днешния ден (по рождената му дата)."""
+    if request.relationship != "parent_child" or request.parent_role not in relationship.PARENT_ROLES:
+        return False
+    child_birth = request.partner_date if request.parent_role == "user" else request.date
+    try:
+        born = datetime.strptime(str(child_birth).replace("/", "-")[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return False
+    now = datetime.strptime(today, "%Y-%m-%d").date() if today else datetime.utcnow().date()
+    return (now.year - born.year - ((now.month, now.day) < (born.month, born.day))) < 18
+
+
 def house_system_note(people) -> str:
     """Бележка в началото, когато за мястото на раждане Placidus не е определена (над полярния кръг) и домовете са по Porphyry."""
     fallback = [name for name, chart in people if chart and chart.get("house_system") == "porphyry_fallback"]
@@ -303,7 +323,8 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
     """Генерира анализа по заявката. Единичният и периодичният анализ имат отделни пътища."""
     emit({"type": "stage", "stage": "calculating"})
     # Контекстът на отношенията важи за целия анализ (и за всеки месец), само когато има втори човек
-    context_token = relationship.bind(request.relationship) if has_partner(request) else None
+    context_token = relationship.bind(request.relationship, request.parent_role, relationship_names(request), child_is_minor(request)) \
+        if has_partner(request) else None
     # Човекът без известен час: правило към системния промпт на всяка AI заявка (Асцендент, МС и домове не се измислят)
     unknown_names = []
     if not request.birth_time_known:

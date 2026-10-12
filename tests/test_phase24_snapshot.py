@@ -140,7 +140,7 @@ class SnapshotSavedTest(Base):
         snap = load(report_id).snapshot
         self.assertEqual([p["role"] for p in snap["people"]], ["user", "partner"])
         self.assertEqual(report_snapshot.person(snap, "partner")["birth"]["zone"], "Europe/Sofia")
-        self.assertEqual(snap["relationship"], {"kind": "friend"})
+        self.assertEqual(snap["relationship"], {"kind": "friend", "parent": None})
 
 
 class ExportFromSnapshotTest(Base):

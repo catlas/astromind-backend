@@ -70,7 +70,11 @@ def notes_by_person(db: Session, user: User, people: List[Tuple[str, Optional[in
         if pid is not None:
             mine += [n for n in notes if n.profile_id == pid]
         if mine:
-            groups[name] = mine
+            # Идентичността е по номер на профил; показаното име е само етикет. Двама души с едно име получават различни етикети
+            label = name
+            if label in groups:
+                label = f"{name} (профил №{pid})" if pid else f"{name} (ръчно въведен)"
+            groups[label] = mine
     return groups
 
 
