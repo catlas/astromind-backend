@@ -29,7 +29,8 @@ CARD_LIMITS = {"A": 6, "B": 6, "S": 4}            # най-много карти
 MIN_KEPT_PER_PERSON = 2                           # най-малко проверени транзитни карти за човек (ако е имал поне толкова)
 MAX_FAILED_CARDS = 4                              # повече провалени карти значи, че AI е объркан: отказ без още заявки
 COMPOSITION = ("SUMMARY", "ADVICE", "ANSWER", "CONCLUSION")
-TAG_RE = re.compile(r"^[\s*#>_-]*\[\[([A-Z][A-Z0-9_]*)\]\][\s*:_-]*$", re.MULTILINE)
+# Таг в началото на ред: [[A1]], **[[A1]]**, ### [[A1]], [A1] или [[A1]]: текст на същия ред (моделите го пишат по различен начин)
+TAG_RE = re.compile(r"^[ \t*#>_-]*\[{1,2}\s*([A-Za-z][A-Za-z0-9_]*)\s*\]{1,2}[ \t*:_.-]*", re.MULTILINE)
 
 _NEUTER = {"Sun"}
 _FEMININE = {"Moon", "Venus"}
@@ -104,16 +105,24 @@ def houses_line(chart: Dict, transit: Dict, owner: str) -> str:
     return f"Транзитните планети в домовете на {owner}: " + "; ".join(parts) + "." if parts else ""
 
 
-def parse_sections(text: str) -> Dict[str, str]:
-    """Секциите на отговора по таговете [[A1]], [[SUMMARY]]… Текст преди първия таг се пренебрегва."""
-    found = list(TAG_RE.finditer(text or ""))
+def parse_sections(text: str, known=None) -> Dict[str, str]:
+    """Секциите на отговора по таговете [[A1]], [[SUMMARY]]… Текст преди първия таг се пренебрегва; тагове извън known (ако е дадено)
+    не отварят секция. Текстът на секцията е останалото от реда на тага и следващите редове до следващия таг."""
+    found = [m for m in TAG_RE.finditer(text or "") if known is None or m.group(1).upper() in known]
     out: Dict[str, str] = {}
     for i, m in enumerate(found):
         end = found[i + 1].start() if i + 1 < len(found) else len(text)
         body = text[m.end():end].strip()
-        if body and m.group(1) not in out:
-            out[m.group(1)] = body
+        tag = m.group(1).upper()
+        if body and tag not in out:
+            out[tag] = body
     return out
+
+
+def _shape(raw: str) -> str:
+    """Формата на неправилен отговор за журнала: брой тагове и първите знаци, без текст на анализа."""
+    first = (raw or "").strip().splitlines()[0][:50] if (raw or "").strip() else ""
+    return f"len={len(raw or '')} tags={len(TAG_RE.findall(raw or ''))} brackets={(raw or '').count('[[')} first={first!r}"
 
 
 SYSTEM_PROMPT = (
@@ -186,7 +195,7 @@ async def _compose(interp, facts, cards: List[Card], *, theme: str, first: str, 
     user = (f"User question: {question or 'none'}\n\nVERIFIED BLOCKS:\n{blocks}"
             "Write the sections now, in Bulgarian.")
     raw = await interp._call_api(system_prompt=system, user_prompt=user, max_tokens=interp.max_output_tokens)
-    sections = parse_sections(raw)
+    sections = parse_sections(raw, {c.id for c in cards} | set(COMPOSITION))
     return await _check_composition(interp, facts, sections, question, checks, stage_prefix="compose")
 
 
@@ -261,10 +270,13 @@ async def interpret(interp, *, natal_chart: Dict, partner_chart: Dict, transit_c
     user += "\n" + interp._natal_block(first, natal_chart) + interp._natal_block(second, partner_chart)
     user += "Write the sections now, in Bulgarian."
 
+    known = {c.id for c in cards} | set(COMPOSITION)
     sections: Dict[str, str] = {}
     for attempt in (1, 2):                                      # неправилен формат: най-много една нова заявка
         raw = await interp._call_api(system_prompt=system, user_prompt=user, max_tokens=interp.max_output_tokens)
-        sections = parse_sections(raw)
+        sections = parse_sections(raw, known)
+        if not (sum(1 for c in cards if sections.get(c.id)) >= max(1, len(cards) // 2) and sections.get("CONCLUSION")):
+            print(f"🔎 Формат на отговора (опит {attempt}): {_shape(raw)}")
         if sum(1 for c in cards if sections.get(c.id)) >= max(1, len(cards) // 2) and sections.get("CONCLUSION"):
             break
     else:

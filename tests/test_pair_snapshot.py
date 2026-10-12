@@ -116,6 +116,25 @@ class CardsTest(unittest.TestCase):
         self.assertIn("на Иван", by_id["S1"])
         self.assertNotIn("Транзитн", by_id["S1"])
 
+    def test_the_tag_variants_models_write_are_all_parsed(self):
+        known = {"A1", "B2", "SUMMARY"}
+        for text in ("[[A1]] Първо.\n[[B2]] Второ.\n[[SUMMARY]] Обобщение.",
+                     "**[[A1]]** Първо.\n\n**[[B2]]**\nВторо.\n\n[[SUMMARY]]:\nОбобщение.",
+                     "### [[A1]]\nПърво.\n### [B2]\nВторо.\n### [[summary]]\nОбобщение.",
+                     "Увод.\n[[ A1 ]]\nПърво.\n[[B2]]\nВторо.\n[[SUMMARY]]\nОбобщение."):
+            self.assertEqual(ps.parse_sections(text, known), {"A1": "Първо.", "B2": "Второ.", "SUMMARY": "Обобщение."}, msg=text)
+        self.assertEqual(ps.parse_sections("[[X9]] чуждо\n[[A1]] Първо.", known), {"A1": "Първо."})        # непознат таг не отваря секция
+
+    def test_a_bad_format_logs_only_its_shape(self):
+        import contextlib
+        import io
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer), self.assertRaises(text_guard.TextCheckError):
+            run(Script(composition={"SUMMARY": SUMMARY, "ADVICE": ADVICE, "CONCLUSION": ""}))
+        out = buffer.getvalue()
+        self.assertIn("🔎 Формат на отговора (опит 1):", out)
+        self.assertNotIn("Денят е напрегнат", out)                          # текстът на анализа не се логва
+
     def test_the_tags_are_parsed_and_unknown_text_is_ignored(self):
         parsed = ps.parse_sections("увод\n[[A1]]\nПърво.\n\n**[[B2]]**\nВторо.\n[[SUMMARY]]\nОбобщение.")
         self.assertEqual(parsed, {"A1": "Първо.", "B2": "Второ.", "SUMMARY": "Обобщение."})
