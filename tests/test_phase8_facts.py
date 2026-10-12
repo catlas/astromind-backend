@@ -21,6 +21,8 @@ import ai_interpreter  # noqa: E402
 import engine  # noqa: E402
 import factpack  # noqa: E402
 import limits  # noqa: E402
+import pair_snapshot  # noqa: E402
+import text_check  # noqa: E402
 import main  # noqa: E402
 from aspects_engine import TRANSIT_SNAPSHOT_MAX_ORB  # noqa: E402
 from rate_limit import limiter  # noqa: E402
@@ -283,6 +285,8 @@ class PromptPayloadTest(Phase8Base):
 
         async def fake_call(_self, system_prompt, user_prompt, max_tokens, **kw):
             calls.append((system_prompt, user_prompt, kw))
+            if "TWO-PERSON SNAPSHOT for ONE chosen" in system_prompt:
+                return testenv.pair_reply(user_prompt)              # анализ „за дата“ за двама: карти от кода, AI тълкува
             return "<p>ok</p>"
 
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
@@ -374,19 +378,26 @@ class PromptPayloadTest(Phase8Base):
                 self.assertIn("TRANSIT ASPECTS TO USER'S NATAL CHART (CALCULATED)", system)
 
     def test_pair_snapshot_has_theme_houses_and_aspects_for_both_people(self):
+        """Анализ „за дата“ за двама (pair_snapshot.py): фактите са карти и редове за домовете, написани от кода; натъл е в подканата."""
         for theme in THEMES:
             with self.subTest(theme=theme):
                 system, user, _ = self.case("pair", "snapshot", theme)[0]
-                self.assertIn(f"REPORT THEME: {ai_interpreter.THEME_FOCUS[theme]}", system)
+                self.assertIn(f"THEME: {ai_interpreter.THEME_FOCUS[theme]}", system)
                 sections = parse_sections(user)
-                for owner, key in (("A", "T_PAIR_in_A"), ("ИВАН", "T_PAIR_in_IVAN")):
-                    houses = find_section(sections, f"TRANSIT PLANETS IN {owner}'S NATAL HOUSES (CALCULATED)")
+                for owner, key in (("A", "T_PAIR_in_A"), ("Иван", "T_PAIR_in_IVAN")):
+                    line = next(l for l in user.splitlines() if l.startswith(f"Транзитните планети в домовете на {owner}:"))
                     for name, house in mapped(REF["overlays"][key]).items():
-                        self.assertEqual(houses[name], house, (owner, name))
-                    find_section(sections, f"TRANSIT ASPECTS TO {owner}'S NATAL CHART (CALCULATED)")
+                        bg = text_check.PLANET_BG.get(name, name)
+                        self.assertIn(f"{bg} — {pair_snapshot._ORDINAL[house]} дом", line, (owner, name))
+                self.assertIn("FACT CARDS (written by the code", user)
+                cards_a = [l for l in user.splitlines() if re.match(r"^A\d: ", l)]
+                cards_b = [l for l in user.splitlines() if re.match(r"^B\d: ", l)]
+                self.assertTrue(cards_a and cards_b)
+                self.assertTrue(all("на A (орб" in l for l in cards_a))
+                self.assertTrue(all("на Иван (орб" in l for l in cards_b))
                 find_section(sections, "A NATAL ASPECTS (CALCULATED)")
                 find_section(sections, "ИВАН NATAL ASPECTS (CALCULATED)")       # преди липсваше за втория човек
-                self.assertNotIn("house", json.dumps(find_section(sections, "TRANSIT PLANETARY POSITIONS")))
+                self.assertNotIn("TRANSIT PLANETARY POSITIONS", user)            # няма сурови позиции, от които AI да смята
 
     def test_period_prompts_have_separate_house_fields_and_both_overlays(self):
         for target in ("single", "pair"):

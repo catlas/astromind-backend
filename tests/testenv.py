@@ -125,3 +125,16 @@ def analyze(client, headers, body, stream=False, key=None, wait=120):
                    "balance_cents": complete.get("balance_cents"), "paid_cents": complete.get("paid_cents"),
                    "gift_cents": complete.get("gift_cents"), "crisis": False, "job_id": job["id"]})
     return LegacyResponse(200, result)
+
+
+def pair_reply(user_prompt):
+    """Подменен отговор на AI за анализ „за дата“ за двама (pair_snapshot.py): таг за всяка карта от подканата и затварящите секции."""
+    import re
+    ids = re.findall(r"^([ABS]\d): ", user_prompt, re.M)
+    parts = [f"[[{i}]]\nТова напрежение изисква търпение и ясни граници в разговорите в този ден." for i in ids]
+    parts += ["[[SUMMARY]]\nДенят е напрегнат и за двамата, затова е разумно да се говори бавно и да се изчаква, ако нещо тежи.",
+              "[[ADVICE]]\n- Говорете спокойно и изчакайте, ако усетите напрежение.\n- Не бързайте с големи решения през този ден.",
+              "[[ANSWER]]\nНай-добре е да подходите спокойно, като първо изслушате другия и после кажете какво ви тежи.",
+              "[[CONCLUSION]]\nДенят е подходящ за внимателен разговор и неподходящ за прибързани решения."]
+    return "\n\n".join(parts)
+

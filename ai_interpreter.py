@@ -4,6 +4,7 @@ AI Интерпретатор за астрологични карти
 """
 
 from safety import QUALITY_RULES, SAFETY_RULES
+import pair_snapshot
 import memory
 import os
 import asyncio
@@ -2616,6 +2617,14 @@ class AIInterpreter:
                 calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart, question=question,
                 report_type=report_type, user_name=user_name, partner_name=partner_name, language=language,
                 gender=gender, partner_gender=partner_gender, checks=checks)
+
+        if partner_chart and transit_chart and language == "bg":
+            # Анализ „за дата“ за двама: фактите са карти, написани от кода; AI само тълкува (pair_snapshot.py)
+            return await pair_snapshot.interpret(
+                self, natal_chart=natal_chart, partner_chart=partner_chart, transit_chart=transit_chart, user_name=user_name,
+                partner_name=partner_name, question=question or "", target_date=target_date, report_type=report_type,
+                checks=checks if checks is not None else [], theme=THEME_FOCUS.get(report_type, THEME_FOCUS["general"]),
+                utc_today=_utc_today(), gender=gender, partner_gender=partner_gender)
 
         if partner_chart and transit_chart:
             # PRIORITY 3: RELATIONSHIP TRANSIT FORECAST (Snapshot - Single Date)

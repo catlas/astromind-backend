@@ -363,6 +363,12 @@ def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome",
                 billing.release(db, job.user_id, give_paid, give_gift, ref=f"job:{job.id}:adjust",
                                 description="Върната разлика: по-малко месеци от резервираните")
                 charged = real
+        if getattr(outcome, "quality", "full") == "partial" and billing.balance_enforced() and charged > 0:
+            # Частичен анализ не се таксува: резервираната сума се връща изцяло (правило на собственика, 12.10.2026)
+            give_paid = min(charged, job.reserved_paid or 0)
+            billing.release(db, job.user_id, give_paid, charged - give_paid, ref=f"job:{job.id}:partial",
+                            description="Върната сума: частичен анализ")
+            charged = 0
         report = data_api.save_report(
             db, user, content=outcome.content, report_type=outcome.report_type, profile_name=request.name,
             label=outcome.label, cost_cents=charged, params=outcome.params, snapshot=outcome.snapshot)
@@ -380,6 +386,8 @@ def _finalize(job_id: int, request: ChartRequest, outcome: "generation.Outcome",
                      "cents": charged, "sku": job.sku}
         if job.kind == "forecast":
             telemetry["months"] = final_months
+        if getattr(outcome, "quality", "full") != "full":
+            telemetry["quality"] = outcome.quality                 # fallback | partial: броят им се вижда в статистиката
         user_id, report_type = job.user_id, outcome.report_type
     _track("analysis_completed", user_id, telemetry)
     _diagnostics(user_id, _snapshot_times(job_id), "", "", "done", usage or {}, "succeeded")

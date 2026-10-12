@@ -70,6 +70,15 @@ class Outcome:
     flags: List[str] = field(default_factory=list)
     checks: List[Dict] = field(default_factory=list)
     snapshot: Optional[Dict[str, Any]] = None       # неизменяем изчислителен снимка (report_snapshot.py), записва се с отчета
+    quality: str = "full"                           # full | fallback | partial (анализ „за дата“ за двама, pair_snapshot.py); partial не се таксува
+
+
+# Бележка в началото на резервен или частичен анализ (виж pair_snapshot.py)
+QUALITY_NOTES = {
+    "fallback": "**Резервен анализ.** Обобщението и съветите са съставени наново само от проверените блокове. Всички карти са запазени.",
+    "partial": ("**Частичен анализ.** Една или повече карти не минаха проверката и са пропуснати; обобщението и съветите са съставени "
+                "само от проверените. Този анализ не се таксува."),
+}
 
 
 def has_partner(request: ChartRequest) -> bool:
@@ -422,6 +431,9 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         progress.unbind(token)
     interpretation, flags = safety.check_output(interpretation, request.report_type or "general")
 
+    quality = next((c["quality"] for c in checks if c.get("quality")), "full")
+    if quality != "full":
+        interpretation = f"{QUALITY_NOTES[quality]}\n\n{interpretation}"
     if time_note:
         interpretation = f"{time_note}\n\n{interpretation}"
     emit({"type": "stage", "stage": "finishing"})
@@ -431,8 +443,9 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         report_type=request.report_type or "general",
         label=data_api.report_label(request.report_type or "general", request.partner_name, question=request.question,
                                     is_snapshot=request.target_date is not None),
-        params={**report_params(request), **moment_params, "memory_used": memory_used},
-        months=0, flags=list(flags), checks=checks,
+        params={**report_params(request), **moment_params, "memory_used": memory_used,
+                **({"quality": quality} if quality != "full" else {})},
+        months=0, flags=list(flags), checks=checks, quality=quality,
         snapshot=report_snapshot.build(mode="snapshot" if transit_chart is not None else "natal", request=request, natal=natal,
                                        partner=partner_data, transit=transit_chart, forecast_zone=forecast_zone(request),
                                        target_lat=request.target_lat, target_lon=request.target_lon))

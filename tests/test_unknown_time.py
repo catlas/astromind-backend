@@ -24,7 +24,7 @@ import text_check  # noqa: E402
 from ai_interpreter import AIInterpreter  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from schemas import ChartRequest  # noqa: E402
-from testenv import CHART, register_and_login, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, register_and_login, OVERVIEW_OK, pair_reply  # noqa: E402, pair_reply
 
 SOFIA = (42.6977, 23.3219)
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn",
@@ -603,6 +603,8 @@ class RealPromptTest(unittest.TestCase):
                           "reminder": birthtime.reminder.get()})
             if "MODE: PERIOD OVERVIEW" in system_prompt:
                 return OVERVIEW_OK
+            if "TWO-PERSON SNAPSHOT for ONE chosen" in system_prompt:
+                return pair_reply(user_prompt)                   # анализ „за дата“ за двама: карти от кода, AI тълкува
             return "<p>Подменен текст.</p>"
         with mock.patch.object(main.ai_interpreter, "_call_api", record):
             response = self.client.post("/jobs?wait=60", json=body, headers=h)
