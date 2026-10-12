@@ -1019,7 +1019,7 @@ def check_aspects(seg: str, mentions: List[Mention], groups: List[Group], facts:
             if orbs and min(abs(o - c["orb"]) for o in orbs) > 0.15:
                 out.append(Violation("orb", "hard", c["excerpt"],
                                      f"Орбисът не съвпада с данните за {_pl(c['p1'])} – {_pl(c['p2'])} ({ASPECT_BG[c['aspect']]}). "
-                                     f"Вярно: {', '.join(f'{o:.2f}°' for o in orbs[:3])}."))
+                                     f"В текста: {c['orb']:g}°. Вярно: {', '.join(f'{o:.2f}°' for o in orbs[:3])}."))
             elif not orbs and any(r["kind"] == "calendar" for r in orb_rows):
                 out.append(Violation("orb", "soft", c["excerpt"], "За аспектите в периода няма орбис в данните: не посочвай орбис."))
         if c["exact_word"] and not _exact_has_date(seg, facts, c["exact_spans"]):
