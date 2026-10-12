@@ -493,6 +493,23 @@ class RepairFallbackPartialTest(FlowBase):
         parts = [(f"month:{m}", t) for m, (_ti, t) in zip(cal.months_with_events(), steps[-1]["month_texts"])] + [("overview", steps[-1]["overview"])]
         self.assertEqual(report_guard.cross_part_violations(parts, cal.months_with_events(), rs.facts("period", False)), {})
 
+    def test_two_cards_of_the_report_cannot_recommend_and_forbid_the_same_action_on_the_same_date(self):
+        cal = rs.calendar(False)
+        cards = [c for c in cards_of(cal, False, limit=8) if c.row["event"]["type"] == "TRANSIT" and c.row["event"].get("exact")]
+        by_day = {}
+        for c in cards:
+            by_day.setdefault(c.row["event"]["exact"][0]["when"][:10], []).append(c)
+        first, second = next(v for v in by_day.values() if len(v) >= 2)[:2]
+        iso = first.row["event"]["exact"][0]["when"]
+        day = f"{int(iso[8:10])} {tc._MONTH_NAMES[int(iso[5:7])]}"
+        texts = {first.id: f"Финализирайте проекта на {day}.", second.id: f"Не финализирайте проекта на {day}."}
+        steps = self.run_report(self.ai(card=lambda i: texts.get(i), repair=lambda _p: GOOD_CARD))
+        whole = steps[-1]["overview"] + "".join(t for _t, t in steps[-1]["month_texts"])
+        self.assertIn(f"Финализирайте проекта на {day}.", whole)
+        self.assertNotIn(f"Не финализирайте проекта на {day}", whole)
+        parts = [(f"month:{m}", t) for m, (_ti, t) in zip(cal.months_with_events(), steps[-1]["month_texts"])] + [("overview", steps[-1]["overview"])]
+        self.assertEqual(report_guard.cross_part_violations(parts, cal.months_with_events(), rs.facts("period", False)), {})
+
     def test_an_unresolved_contradiction_refuses_the_report(self):
         cal = rs.calendar(False)
         card = next(c for c in cards_of(cal, False, limit=8) if c.row["event"]["type"] == "TRANSIT" and c.row["event"].get("exact"))

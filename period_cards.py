@@ -374,6 +374,15 @@ def window_end_claims(ends: set):
     return check
 
 
+def cross_check(facts, prior_parts: List[Tuple[str, str]], stage: str, months: List[str]):
+    """extra_check: противоречие на кандидат-блока с вече проверените блокове на отчета (препоръка и забрана на една дата за едно действие)."""
+    def check(text: str) -> List[Violation]:
+        if not isinstance(facts, text_check.Facts):
+            return []
+        return report_guard.cross_part_violations(prior_parts + [(stage, text)], months, facts).get(stage, [])
+    return check
+
+
 def closing_checks(question: str, tag: str, allowed: set, facts, prior_parts: List[Tuple[str, str]], stage: str, months: List[str],
                    ends: frozenset = frozenset()):
     """Всичко за един затварящ блок: без планети/аспекти/знаци/домове, само дати от картите, покритие на въпроса и съгласуваност с
@@ -477,18 +486,22 @@ async def _ai(interpreter, system: str, user: str, stage: str, retry_pause: floa
 
 
 async def _check_cards(interpreter, facts, cards: List[Card], sections: Dict[str, str], checks: List[Dict], failed: Dict[str, str],
-                       month: str) -> None:
+                       month: str, prior: List[Tuple[str, str]], months: List[str]) -> None:
+    stage = f"month:{month}"
     for card in cards:
         raw = sections.get(card.id)
         if not raw:
             card.removed, failed[card.id] = True, "missing"
         else:
-            checked, codes = await card_engine._check_block(interpreter, restrict_events(facts, [card]), f"period:{month}:{card.id}", raw,
-                                                            checks, period_card_scope(card))
+            scope = period_card_scope(card)
+            cross = cross_check(facts, prior, stage, months)
+            checked, codes = await card_engine._check_block(interpreter, restrict_events(facts, [card]), f"period:{month}:{card.id}", raw, checks,
+                                                            lambda text: scope(text) + cross(text))
             if checked is None:
                 card.removed, failed[card.id] = True, codes
             else:
                 card.text = checked
+                prior.append((stage, checked))
         if len(failed) > MAX_FAILED_CARDS:
             raise text_guard.TextCheckError(f"period:{month}:too_many", _outcome(f"period:{month}:too_many", "complete",
                                                                                   f"{len(failed)} карти не минаха проверката."))
@@ -499,7 +512,8 @@ def _outcome(stage: str, code: str, detail: str) -> text_guard.GuardOutcome:
                                    rejected=True, reason="violations_remain")
 
 
-async def _restore(interpreter, facts, card: Card, theme: str, checks: List[Dict], month: str, retry_pause: float) -> bool:
+async def _restore(interpreter, facts, card: Card, theme: str, checks: List[Dict], month: str, retry_pause: float,
+                   prior: List[Tuple[str, str]], months: List[str]) -> bool:
     system = RESTORE_SYSTEM.format(theme=theme)
     user = f"CARD {card.id}: {card.heading}\nWrite the interpretation now, in Bulgarian."
     try:
@@ -509,11 +523,14 @@ async def _restore(interpreter, facts, card: Card, theme: str, checks: List[Dict
         if isinstance(exc, ai_budget.BudgetExceeded):
             raise
         return False
+    scope = period_card_scope(card)
+    cross = cross_check(facts, prior, f"month:{month}", months)
     checked, _codes = await card_engine._check_block(interpreter, restrict_events(facts, [card]), f"period:{month}:{card.id}:restore", raw,
-                                                     checks, period_card_scope(card))
+                                                     checks, lambda text: scope(text) + cross(text))
     if checked is None:
         return False
     card.text, card.removed = checked, False
+    prior.append((f"month:{month}", checked))
     return True
 
 
@@ -577,9 +594,9 @@ async def run_period_report(
                 print(f"🔎 Формат на отговора (месец {month}, опит {attempt}): {card_engine._shape(raw)}")
             else:
                 raise text_guard.TextCheckError(f"period:{month}:format", _outcome(f"period:{month}:format", "complete", "Неправилен формат."))
-            await _check_cards(interpreter, facts, cards, sections, checks, failed, month)
+            await _check_cards(interpreter, facts, cards, sections, checks, failed, month, verified_parts, months)
             for card in [c for c in cards if c.removed]:
-                if await _restore(interpreter, facts, card, theme, checks, month, retry_pause):
+                if await _restore(interpreter, facts, card, theme, checks, month, retry_pause, verified_parts, months):
                     restored.append(card.id)
                     failed.pop(card.id, None)
             lost_key = [c.id for c in cards if c.removed and c.key]
@@ -678,6 +695,7 @@ async def run_period_report(
         for stage_name, violations in report_guard.cross_part_violations(parts, months, facts).items():
             final += violations
     if final:
+        text_guard._log_remaining("period:final", final, facts)
         outcome = text_guard.GuardOutcome(stage="period:final", mode=text_guard.MODE_ENFORCE, text="", after=final, rejected=True,
                                           reason="violations_remain")
         checks.append(outcome.summary())
