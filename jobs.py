@@ -48,6 +48,7 @@ from schemas import ChartRequest
 router = APIRouter(prefix="/jobs")
 
 ACTIVE = ("queued", "running")
+HIDEABLE = ("failed", "cancelled")                    # само тях потребителят може да скрие от История
 STAGES = ("queued", "calculating", "analyzing", "checking", "finishing", "done")
 
 JOB_DEADLINE_SECONDS = int(os.getenv("JOB_DEADLINE_SECONDS", "900"))
@@ -628,11 +629,38 @@ def limits(user: User = Depends(get_current_user), db: Session = Depends(get_db)
 @router.get("")
 def list_jobs(status: str = "", limit: int = 20, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Последните задачи на потребителя. status=active връща само активните."""
-    query = db.query(Job).filter(Job.user_id == user.id)
+    query = db.query(Job).filter(Job.user_id == user.id, Job.hidden.is_(False))
     if status == "active":
         query = query.filter(Job.status.in_(ACTIVE))
     rows = query.order_by(Job.id.desc()).limit(max(1, min(limit, 50))).all()
     return {"jobs": [serialize(j) for j in rows]}
+
+
+HIDE_REFUSED = "Могат да се скрият само неуспешни или отказани анализи."
+
+
+@router.post("/hide-failed")
+def hide_failed(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Скрива от История всички неуспешни и отказани задачи на потребителя (активните и успешните не се пипат)."""
+    rows = db.query(Job).filter(Job.user_id == user.id, Job.hidden.is_(False), Job.status.in_(HIDEABLE)).all()
+    for job in rows:
+        job.hidden = True
+    db.commit()
+    return {"hidden": len(rows)}
+
+
+@router.post("/{job_id}/hide")
+def hide_job(job_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Скрива една неуспешна или отказана задача от История. Повторното скриване е безобидно. Парите и отчетите не се променят."""
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Задачата не е намерена")
+    if job.status not in HIDEABLE:
+        raise HTTPException(status_code=409, detail=HIDE_REFUSED)
+    if not job.hidden:
+        job.hidden = True
+        db.commit()
+    return {"hidden": True, "id": job.id}
 
 
 @router.get("/{job_id}")

@@ -417,7 +417,6 @@ async def run_plain(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
             language="bg",
             report_type=request.report_type or "general",
             user_name=request.name,
-            calendar=None,
             gender=request.gender,
             partner_gender=request.partner_gender,
             checks=checks,

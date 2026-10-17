@@ -1,0 +1,996 @@
+АРХИВ: старият ход на прогнозата за период (до 12.10.2026)
+
+Това е запис на кода, който е махнат от проекта и НЕ се изпълнява, не се импортира и не се тества. Прогнозата за период се прави от
+period_cards.py (карти: фактите ги пише кодът, AI само тълкува). Старият ход караше AI да пише свободно целия месец
+(_process_monthly_chunk, подканата от _build_dynamic_system_prompt), после общия преглед (compose_period_overview) и накрая
+оправяше противоречията (_final_guard). Той остана недостижим от приложението, след като generation.run_period премина към
+period_cards.run_period_report.
+
+Пълният проект със стария код е запазен и в git: таг archive/legacy-period-flow-2026-10-12 (комит 4c6595a). Да се види цял файл:
+  git show archive/legacy-period-flow-2026-10-12:ai_interpreter.py
+  git show archive/legacy-period-flow-2026-10-12:period_report.py
+Текстът по-долу е извадка на отделните функции от този комит (с номерата на редовете в него). В тестовете от онова време са
+tests/test_phase9_calendar.py, test_phase10_text_check.py, test_phase22_facts.py, test_phase23_safety_report.py (в същия таг).
+
+
+
+======================================================================================================================
+# period_report.py :: run_period_report  (редове 80-192 в комит 4c6595a)
+======================================================================================================================
+async def run_period_report(
+    interpreter,
+    *,
+    calendar: PeriodCalendar,
+    natal_chart: Dict,
+    partner_chart: Optional[Dict],
+    report_type: str,
+    user_name: Optional[str],
+    partner_name: Optional[str],
+    question: str,
+    gender: Optional[str] = None,
+    partner_gender: Optional[str] = None,
+    language: str = "bg",
+    report_date: Optional[str] = None,
+    retry_pause: Optional[float] = None,
+) -> AsyncIterator[Dict[str, Any]]:
+    """
+    Стъпките на отчета като събития: month_start, month_complete (за всеки месец), overview_start,
+    overview_complete и накрая finished (със събраните текстове). Хвърля ForecastGenerationError.
+    """
+    has_partner = partner_chart is not None
+    user_display = factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT)
+    partner_display = factpack.display_name(partner_name, factpack.SECOND_PERSON_DEFAULT)
+    months = calendar.months_with_events()
+    report_date = report_date or today_in_zone(calendar.timezone)
+    retry_pause = RETRY_PAUSE_SECONDS if retry_pause is None else retry_pause
+    period = (calendar.start, calendar.end)
+
+    # Фактите за проверката на готовите текстове (Фаза 10): строят се веднъж; при грешка текстовете минават непроверени
+    facts = None
+    if language == "bg":
+        facts = interpreter.build_text_facts(mode="period", user_name=user_name, natal_chart=natal_chart,
+                                             partner_name=partner_name, partner_chart=partner_chart,
+                                             calendar=calendar, report_date=report_date, question=question)
+    overview_facts = dataclasses.replace(facts, mode="overview") if isinstance(facts, text_check.Facts) else facts
+
+    checks: List[Dict] = []
+    # R01: без факти за проверка в „enforce“ нито един месец не се праща към AI (без разход и без повторни опити)
+    try:
+        interpreter.require_text_facts(facts, stage="facts", checks=checks)
+    except text_guard.TextCheckError as failure:
+        raise ForecastGenerationError("facts", failure, checks) from failure
+    flagged: List[str] = []
+    month_texts: List[Tuple[str, str]] = []
+    try:
+        for idx, month in enumerate(months):
+            title = month_title(month)
+            yield {"type": "month_start", "month": title, "index": idx, "total": len(months)}
+
+            async def month_call(m=month) -> str:
+                raw = await interpreter._process_monthly_chunk(
+                    month=m,
+                    monthly_events=calendar.month_events(m),
+                    report_type=report_type,
+                    language=language,
+                    natal_chart=natal_chart,
+                    partner_chart=partner_chart,
+                    user_display_name=user_display,
+                    partner_display_name=partner_display,
+                    question=question,
+                    has_partner=has_partner,
+                    gender=gender,
+                    partner_gender=partner_gender,
+                    zone=calendar.timezone,
+                    report_date=report_date,
+                    period=period)
+                if not (raw and raw.strip()):
+                    return raw
+                return await interpreter.guard_text(raw, facts, stage=f"month:{m}", checks=checks)
+
+            text = await _attempt(f"month:{month}", month_call, retry_pause)
+            text, flags = safety.check_output(text, report_type)
+            flagged.extend(flags)
+            month_texts.append((title, text))
+            yield {"type": "month_complete", "month": title, "text": text, "index": idx, "total": len(months)}
+            await asyncio.sleep(0.1)
+
+        yield {"type": "overview_start", "title": OVERVIEW_TITLE}
+
+        async def overview_call() -> str:
+            raw = await interpreter.compose_period_overview(
+                calendar_rows=calendar.public_events_with_context(),
+                month_texts=month_texts,
+                report_type=report_type,
+                user_display_name=user_display,
+                partner_display_name=partner_display,
+                has_partner=has_partner,
+                question=question,
+                gender=gender,
+                partner_gender=partner_gender,
+                zone=calendar.timezone,
+                report_date=report_date,
+                period=period)
+            if not (raw and raw.strip()):
+                return raw
+            return await interpreter.guard_text(raw, overview_facts, stage="overview", checks=checks, max_tokens=4000)
+
+        overview = await _attempt("overview", overview_call, retry_pause)
+        overview, flags = safety.check_output(overview, report_type)
+        flagged.extend(flags)
+        # R03: финална съгласуваност на целия отчет преди запис, показване като готов и такса
+        replaced: List[Tuple[str, str]] = []
+        if isinstance(facts, text_check.Facts):
+            overview, replaced = await _final_guard(interpreter, facts, overview_facts, months, month_texts, overview, checks,
+                                                    retry_pause, report_type)
+    except ForecastGenerationError as failure:
+        failure.checks = checks
+        raise
+    for title, text in replaced:
+        yield {"type": "part_replaced", "title": title, "text": text}
+    yield {"type": "overview_complete", "title": OVERVIEW_TITLE, "text": overview}
+    yield {"type": "finished", "overview": overview, "month_texts": month_texts, "flags": sorted(set(flagged)),
+           "months": months, "checks": checks}
+
+
+
+======================================================================================================================
+# period_report.py :: _final_guard  (редове 195-222 в комит 4c6595a)
+======================================================================================================================
+async def _final_guard(interpreter, facts, overview_facts, months: List[str], month_texts: List[Tuple[str, str]], overview: str,
+                       checks: List[Dict], retry_pause: float, report_type: str) -> Tuple[str, List[Tuple[str, str]]]:
+    """Противоречие между частите на отчета (report_guard): засегнатата част се връща на поправка и се проверява и срещу другите.
+    Месечните текстове се сменят на място (month_texts); връща (общ преглед, [(заглавие на месец, нов текст)]). Хвърля ForecastGenerationError."""
+    parts: List[Tuple[str, str]] = [(f"month:{m}", text) for m, (_title, text) in zip(months, month_texts)] + [("overview", overview)]
+    found = report_guard.cross_part_violations(parts, months, facts)
+    for stage, items in found.items():
+        for item in items:
+            print(f"🔎 Съгласуваност ({stage}): {item.detail[:140]}")       # само действие и дати, без изречения и имена
+    replaced: List[Tuple[str, str]] = []
+    for stage in [s for s, _ in parts if s in found]:
+        current = dict(parts)[stage]
+        stage_facts = overview_facts if stage == "overview" else facts
+        extra = report_guard.part_check(parts, stage, months, facts)
+
+        async def call(text=current, stage=stage, stage_facts=stage_facts, extra=extra) -> str:
+            return await interpreter.guard_text(text, stage_facts, stage=f"final:{stage}", checks=checks, extra_check=extra)
+
+        fixed = await _attempt(f"final:{stage}", call, retry_pause)
+        fixed, _flags = safety.check_output(fixed, report_type)
+        parts = [(s, fixed if s == stage else t) for s, t in parts]
+        if stage == "overview":
+            overview = fixed
+        else:
+            index = months.index(stage[6:])
+            month_texts[index] = (month_texts[index][0], fixed)
+            replaced.append((month_texts[index][0], fixed))
+    return overview, replaced
+
+
+
+======================================================================================================================
+# period_report.py :: markdown_report  (редове 234-247 в комит 4c6595a)
+======================================================================================================================
+def markdown_report(overview: str, month_texts: List[Tuple[str, str]], *, has_partner: bool, question: str,
+                    user_display: str, partner_display: str) -> str:
+    """Целият отчет като един текст (обикновената заявка, без стрийминг)."""
+    first, last = month_texts[0][0], month_texts[-1][0]
+    title = "Прогноза за Връзка" if has_partner else "Астрологична Прогноза"
+    text = f"# {title} ({first} - {last})\n\n"
+    if question:
+        text += f"**Въпрос:** {question}\n\n"
+    if has_partner:
+        text += f"**Анализ за {user_display} и {partner_display}**\n\n"
+    text += f"---\n\n## {OVERVIEW_TITLE}\n\n{overview}\n\n---\n"
+    for month_title_text, month_text in month_texts:
+        text += f"\n\n## Прогноза за {month_title_text}\n\n{month_text}\n\n---\n"
+    return text
+
+
+
+======================================================================================================================
+# ai_interpreter.py :: _build_dynamic_system_prompt  (редове 2026-2247 в комит 4c6595a)
+======================================================================================================================
+def _build_dynamic_system_prompt(
+    self, 
+    report_type: str, 
+    language: str,
+    natal_chart: Dict,
+    partner_chart: Optional[Dict] = None,
+    user_display_name: str = "User",
+    partner_display_name: str = "Partner",
+    has_partner: bool = False,
+    user_question: Optional[str] = None,
+    house_rulers: Optional[Dict[str, str]] = None,
+    partner_house_rulers: Optional[Dict[str, str]] = None
+) -> str:
+    """
+    Build system prompt for dynamic (monthly chunked) forecasts.
+
+    Args:
+        report_type: Type of report (career, love, health, money, general)
+        language: Language for response
+        natal_chart: User's natal chart data
+        partner_chart: Optional partner's natal chart data
+        user_display_name: Display name for user
+        partner_display_name: Display name for partner
+        has_partner: Whether partner chart is present
+        user_question: Optional user question that must be answered in each monthly chunk
+
+    Returns:
+        Formatted system prompt string
+    """
+    # Calculate house rulers if not provided
+    if house_rulers is None:
+        houses = natal_chart.get("houses", {})
+        house_rulers = self.engine.get_house_rulers(houses) if houses else {}
+
+    base_persona = DYNAMIC_PROMPT_TEMPLATES.get(report_type, DYNAMIC_PROMPT_TEMPLATES["general"])
+
+    # Build global house rulers context block (applies to ALL report types)
+    house_rulers_context = ""
+    if house_rulers:
+        house_rulers_context = (
+            f"\n\n*** ASTROLOGICAL CONTEXT (APPLIES TO ALL SECTIONS) ***\n"
+            f"- **Health Ruler (6th House):** {house_rulers.get('house_6_ruler', 'unknown')} (Prioritize for health questions)\n"
+            f"- **Career Ruler (10th House):** {house_rulers.get('house_10_ruler', 'unknown')}\n"
+            f"- **Money Ruler (2nd House):** {house_rulers.get('house_2_ruler', 'unknown')}\n"
+            f"- **Love Ruler (7th House):** {house_rulers.get('house_7_ruler', 'unknown')}\n\n"
+            f"If the user asks a specific question, USE THESE RULERS to answer accurately.\n"
+        )
+
+    # Build partner house rulers context block (for couples analysis)
+    partner_rulers_context = ""
+    if partner_house_rulers:
+        partner_rulers_context = (
+            f"\n\n*** PARTNER CONTEXT (Use when analyzing events with target='Partner') ***\n"
+            f"- **Partner's Health Ruler (6th House):** {partner_house_rulers.get('house_6_ruler', 'unknown')}\n"
+            f"- **Partner's Career Ruler (10th House):** {partner_house_rulers.get('house_10_ruler', 'unknown')}\n"
+            f"- **Partner's Money Ruler (2nd House):** {partner_house_rulers.get('house_2_ruler', 'unknown')}\n"
+            f"- **Partner's Love Ruler (7th House):** {partner_house_rulers.get('house_7_ruler', 'unknown')}\n\n"
+            f"**INSTRUCTION FOR COUPLES:**\n"
+            f"When comparing, look for CONFLICTS or SYNERGY between the User's rulers and the Partner's rulers.\n"
+            f"Example: If User's Career Ruler is blocked but Partner's Money Ruler is active -> \"One earns while the other struggles.\"\n"
+        )
+
+    # Inject house rulers into the prompt based on report type
+    if house_rulers:
+        if report_type == "health":
+            house_6_ruler = house_rulers.get("house_6_ruler", "unknown")
+            base_persona = base_persona.replace("{house_6_ruler}", house_6_ruler)
+        elif report_type == "career":
+            house_10_ruler = house_rulers.get("house_10_ruler", "unknown")
+            base_persona = base_persona.replace("{house_10_ruler}", house_10_ruler)
+        elif report_type == "love":
+            house_7_ruler = house_rulers.get("house_7_ruler", "unknown")
+            base_persona = base_persona.replace("{house_7_ruler}", house_7_ruler)
+        elif report_type == "money":
+            house_2_ruler = house_rulers.get("house_2_ruler", "unknown")
+            base_persona = base_persona.replace("{house_2_ruler}", house_2_ruler)
+    else:
+        # Fallback if house_rulers is None or empty
+        base_persona = base_persona.replace("{house_6_ruler}", "unknown")
+        base_persona = base_persona.replace("{house_10_ruler}", "unknown")
+        base_persona = base_persona.replace("{house_7_ruler}", "unknown")
+        base_persona = base_persona.replace("{house_2_ruler}", "unknown")
+
+    # Build context based on whether partner is present
+    if has_partner and partner_chart:
+        context = (
+            f"\nCONTEXT: You are analyzing a TIMELINE for TWO people ({user_display_name} and {partner_display_name}). "
+            f"For each month, analyze how the astrological events affect BOTH individuals and their relationship interaction. "
+            f"Focus on how their simultaneous transits create harmony or tension."
+        )
+    else:
+        context = (
+            f"\nCONTEXT: You are analyzing a TIMELINE for {user_display_name}. "
+            f"For each month, focus specifically on how the astrological events relate to the report type ({report_type})."
+        )
+
+    # Add common rules including STRICT TITLE FORMAT
+    type_bg_map = {
+        "health": "ЗДРАВЕ",
+        "career": "КАРИЕРА", 
+        "love": "ЛЮБОВ",
+        "money": "ПАРИ И УСПЕХ",
+        "karmic": "КАРМА И РОД",
+        "general": "ОБЩ АНАЛИЗ"
+    }
+
+    type_title = type_bg_map.get(report_type, report_type.upper())
+
+    # Determine title format based on whether partner is present
+    if has_partner and partner_chart:
+        title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ] И [ИМЕ НА ПАРТНЬОРА]**"
+        title_examples = (
+            f"Use the real names ({user_display_name.upper()} И {partner_display_name.upper()}) and the month and year named in the request, with the month in capital letters.\n\n"
+        )
+        title_instruction = f"✅ FORMAT WITH PARTNER: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ] И [ИМЕ НА ПАРТНЬОРА]**"
+    else:
+        title_format = f"**{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ НА ПОТРЕБИТЕЛЯ]**"
+        title_examples = (
+            f"Use the real name ({user_display_name.upper()}) and the month and year named in the request, with the month in capital letters.\n\n"
+        )
+        title_instruction = f"✅ ONLY USE: **{type_title}: АНАЛИЗ ЗА [МЕСЕЦ] [ГОДИНА] Г. – [ИМЕ]**"
+
+    common_rules = (
+        f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🚨 MANDATORY TITLE FORMAT (DO NOT DEVIATE!):\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"You MUST start EVERY monthly analysis with EXACTLY this format:\n\n"
+        f"{title_format}\n\n"
+        f"{title_examples}"
+        f"❌ DO NOT USE:\n"
+        f"- \"МЕДИКО-АСТРОЛОГИЧЕСКИ ЗДРАВЕН ПРОГНОЗ\"\n"
+        f"- \"МЕДИЦИНСКА АСТРОЛОГИЧЕСКА АНАЛИЗА\"\n"
+        f"- \"Астрологически здравен прогноз\"\n"
+        f"- Or any other variations!\n\n"
+        f"{title_instruction}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🚨 ASPECT INTERPRETATION - NON-NEGOTIABLE RULES:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"**FUNDAMENTAL PRINCIPLE:**\n"
+        f"The ASPECT TYPE determines the interpretation, NOT the planet's nature.\n"
+        f"Planetary symbolism NEVER overrides aspect type.\n\n"
+        f"**TRADITIONAL ASTROLOGICAL CLASSIFICATION:**\n"
+        f"Use traditional astrological principles: Hard aspects = challenging, Soft aspects = flowing.\n"
+        f"Do NOT apply modern 'positive reframing' or 'growth mindset' to inherently difficult aspects.\n\n"
+        f"| Aspect      | Meaning       | Interpretation                              | Override by planet? |\n"
+        f"|-------------|---------------|---------------------------------------------|---------------------|\n"
+        f"| Trine       | HARMONIOUS    | Easy, flowing, supportive, natural talents  | ❌ NEVER            |\n"
+        f"| Sextile     | OPPORTUNITY   | Mild support, potential for growth          | ❌ NEVER            |\n"
+        f"| Conjunction | INTENSE       | Blending, amplification, strong focus       | ❌ NEVER            |\n"
+        f"| Square      | CHALLENGING   | Friction, tension, hard work required       | ❌ NEVER            |\n"
+        f"| Opposition  | TENSE         | Imbalance, polarization, awareness via conflict | ❌ NEVER        |\n\n"
+        f"❌ FORBIDDEN INTERPRETATIONS (Common AI Mistakes):\n"
+        f"- 'Jupiter Opposition Mars' is NOT 'fortunate expansion' — it is TENSION between expansion and action, risk of overextension.\n"
+        f"- 'Saturn Trine Sun' is NOT 'limiting' — it is SUPPORTIVE structure for vitality, steady progress.\n"
+        f"- 'Pluto Square Moon' is NOT 'transformative growth' — it is CRISIS and emotional upheaval.\n"
+        f"- 'Venus Opposition Mars' is NOT 'passionate romance' — it is sexual tension with power struggles.\n"
+        f"- 'Neptune Trine Mercury' is NOT 'confusion' — it is enhanced intuition and creativity.\n\n"
+        f"✅ CORRECT INTERPRETATION PROCESS:\n"
+        f"1. Read the aspect type from JSON: 'aspect': 'Opposition'\n"
+        f"2. Apply the table meaning: Opposition = TENSE\n"
+        f"3. Interpret: 'Jupiter Opposition Mars = Tension between expansion and action, risk of overextension, impulsiveness, conflict between ambition and capacity.'\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🚨 ABSOLUTE PROHIBITION - NEVER ASSUME OR INVENT DATA:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"**CRITICAL RULE: NEVER assume houses, aspects, or transit dates. Use EXCLUSIVELY the provided data.**\n"
+        f"If something is missing in the data, SAY: 'There is not enough information for this aspect.'\n"
+        f"Do NOT invent, do NOT interpolate, do NOT use general astrological knowledge.\n"
+        f"Do NOT calculate or guess house positions, aspects, or transit dates from planetary positions or signs.\n"
+        f"ONLY use the PRE-CALCULATED data provided in the JSON sections.\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"CRITICAL DATA RULES:\n"
+        f"- You are an interpreter of RIGOROUS, PRE-CALCULATED ASTROLOGICAL EVENTS. Do NOT guess or invent aspects or events.\n"
+        f"- The JSON 'timeline_events' is an EXACT calendar computed by the backend. Point events (INGRESS, RETROGRADE, LUNATION, ECLIPSE) have one 'when': local time in the stated zone, daylight saving included. Aspect rows (type TRANSIT) are ONE row per aspect, not one per day; each has the aspect name and 'angle_deg'.\n"
+        f"- For an aspect row: 'exact' lists the exact moments inside the period (a slow planet that turns retrograde can reach the aspect more than once; 'motion' says whether it moves direct or retrograde); 'exact_this_month' are the exact moments in the month you analyse; 'active_from' and 'active_to' are the dates between which the aspect is within orb (it is strongest near the exact moment); 'state_in_month' is exact_in_month, approaching (exact later), separating (exact earlier) or active (no exact moment in the period).\n"
+        f"- When 'exact' is empty the aspect does NOT become exact in this period: describe it only as active or approaching, using 'active_from', 'active_to' and 'closest_in_period' (the smallest orb inside the period; 'when' is given only when it is a turning point of the planet, and 'at' says that it is the start or the end of the period, which is not an event). If 'no_exact_pass' is true the aspect comes within orb and separates WITHOUT ever becoming exact. Do NOT explain this as the planet turning back, reversing or changing direction: a station (change of direction) is an event only when the calendar has a RETROGRADE row for that planet, with its own date. NEVER write that such an aspect is exact.\n"
+        f"- 'exact_outside_period' are exact moments before or after the period: mention them only as context, never as events of this month.\n"
+        f"- Use dates and times exactly as given in 'when' and 'exact' (local time, one zone for the whole report). Never shift a date, never convert to UTC, never invent a time. Write dates in Bulgarian, for example \"21 ноември, 16:27\".\n"
+        f"- Events dated before REPORT DATE are already in the past; later ones are upcoming. Never describe a future event as if it had already happened.\n"
+        f"- Do NOT calculate new aspects from planet positions. ONLY interpret the aspects explicitly listed in the events.\n"
+        f"- **CRITICAL: NATAL ASPECTS**: If natal aspects are provided in the 'NATAL ASPECTS (CALCULATED)' section, use them to understand the natal chart context and how transits interact with existing natal patterns. DO NOT calculate or assume natal aspects - only use the PRE-CALCULATED ones provided.\n"
+        f"- Pay special attention to events with type 'INGRESS' (planets entering new signs). Use them to describe changes in the background atmosphere and overall themes. The Moon's passages through the signs are not part of the calendar.\n"
+        f"- **IMPORTANT: RE-INGRESS EVENTS ARE VALID**: If a planet enters a sign, becomes retrograde and returns to the previous sign, then becomes direct and enters the new sign again (re-ingress), this is a REAL and VALID astrological event. Both the first ingress and any re-ingress events are significant and should be mentioned. Mention each such ingress only with the dates that are listed in the events.\n"
+        f"- Rows with 'outside_period': true are RETROGRADE rows just before or after the period: CONTEXT ONLY. Use them only to say when a planet's retrograde or direct motion began or will end, with exactly the date given. They are not events of the period. Never quote a station date that is neither in the calendar nor in such a row.\n"
+        f"- **HOUSES OF POINT EVENTS**: Events of type LUNATION, ECLIPSE, RETROGRADE (station) and INGRESS carry 'natal_house': the NATAL house of each person in which the event position falls ('User' = the first person, 'Partner' = the second person; a person with unknown birth time has none). Use ONLY these numbers when you name a house for such an event, say whose house it is, and never confuse it with the house of a natal planet. If 'natal_house' is missing for a person, do NOT name a house for that person.\n"
+        f"- Always use the 'formatted_pos' field for planetary positions. Do NOT calculate from raw longitude.\n"
+        f"- For angles (Ascendant, MC): Use 'Ascendant_formatted' and 'MC_formatted' fields.\n"
+        f"- House facts in monthly events are PRE-CALCULATED and are TWO DIFFERENT things: 'transit_planet_natal_house' is the house of the target person's NATAL chart in which the transiting planet stands at the exact aspect; 'natal_planet_natal_house' is the natal house of the natal planet that is aspected. Never swap them and never invent a house.\n"
+        f"- Focus on the events of the month provided. The other months are analysed separately and summed up in an overview.\n\n"
+    )
+
+    # Add mandatory question answer section if user_question exists
+    question_instruction = ""
+    if user_question and user_question.strip():
+        if language == "bg":
+            question_instruction = (
+                f"\n\nIMPORTANT: Потребителят е задал КОНКРЕТЕН ВЪПРОС: \"{user_question}\".\n\n"
+                f"Трябва ДА добавиш задължителна финална секция в края на всеки месечен анализ със заглавие:\n"
+                f"\"### Отговор на вашия въпрос: {user_question}\"\n\n"
+                f"В тази секция:\n"
+                f"1. Синтезирай месечните събития специфично, за да отговориш на този въпрос.\n"
+                f"2. Дай ясна, директна оценка за ТОЗИ МЕСЕЦ с обикновени думи (напр. благоприятен, смесен, затруднен период) и посочи кои аспекти от списъка я обосновават. Без проценти и числови вероятности.\n"
+                f"3. Бъди директен и конкретен. НЕ бъди неясен или уклончив.\n"
+            )
+        else:
+            question_instruction = (
+                f"\n\nIMPORTANT: The user has asked a SPECIFIC QUESTION: \"{user_question}\".\n\n"
+                f"You MUST add a final section at the end of your response for this month titled:\n"
+                f"\"### Answer to your question: {user_question}\"\n\n"
+                f"In this section:\n"
+                f"1. Synthesize the monthly events specifically to answer this question.\n"
+                f"2. Give a clear, direct assessment for THIS month in plain words (e.g. favorable, mixed, difficult) and name the listed aspects that support it. No percentages or numeric probabilities.\n"
+                f"3. Be direct and specific. Do NOT be vague.\n"
+            )
+
+    # Add type-specific aspect interpretation examples
+    type_specific_examples = self._get_type_specific_aspect_examples(report_type)
+
+    # Add strict Bulgarian language rules at the end
+    language_rules = self._get_bulgarian_language_rules()
+
+    return f"{base_persona}{house_rulers_context}{partner_rulers_context}{context}{common_rules}{type_specific_examples}{question_instruction}{language_rules}"
+
+
+
+======================================================================================================================
+# ai_interpreter.py :: _process_monthly_chunk  (редове 2303-2401 в комит 4c6595a)
+======================================================================================================================
+async def _process_monthly_chunk(
+    self,
+    month: str,
+    monthly_events: List[Dict],
+    report_type: str,
+    language: str,
+    natal_chart: Dict,
+    partner_chart: Optional[Dict],
+    user_display_name: str,
+    partner_display_name: str,
+    question: str,
+    has_partner: bool,
+    gender: Optional[str] = None,
+    partner_gender: Optional[str] = None,
+    zone: str = "UTC",
+    report_date: str = "",
+    period: Optional[Tuple[str, str]] = None,
+) -> str:
+    """
+    Месечният анализ на един месец от календара.
+
+    При грешка хвърля изключение. Преди Фаза 9 грешката се връщаше като текст "*Грешка при генериране...*",
+    който влизаше в отчета, а отчетът се записваше и таксуваше. Сега period_report решава за повторен опит
+    и за неуспешен отчет (без запис и без такса).
+    """
+    # Ensure has_partner is properly set (defensive check)
+    has_partner_flag = bool(has_partner and partner_chart is not None)
+
+    # Calculate house rulers for the natal chart
+    houses = natal_chart.get("houses", {})
+    house_rulers = self.engine.get_house_rulers(houses) if houses else {}
+
+    # Calculate house rulers for partner chart if present
+    partner_house_rulers = None
+    if partner_chart:
+        partner_houses = partner_chart.get("houses", {})
+        partner_house_rulers = self.engine.get_house_rulers(partner_houses) if partner_houses else {}
+
+    # Build system prompt
+    system_prompt = self._build_dynamic_system_prompt(
+        report_type=report_type,
+        language=language,
+        natal_chart=natal_chart,
+        partner_chart=partner_chart,
+        user_display_name=user_display_name,
+        partner_display_name=partner_display_name,
+        has_partner=has_partner_flag,
+        user_question=question,
+        house_rulers=house_rulers,
+        partner_house_rulers=partner_house_rulers
+    )
+
+    user_prompt = f"PERIOD: {month}\n"
+    user_prompt += f"FOCUS: {report_type.upper()}\n"
+    if report_date:
+        user_prompt += f"REPORT DATE: {report_date} ({zone})\n"
+    if period:
+        user_prompt += f"WHOLE REPORT PERIOD: {period[0]} to {period[1]} ({zone})\n"
+    user_prompt += "\n"
+    user_prompt += factpack.identity_section(
+        user_display_name, gender,
+        partner_display_name if has_partner_flag else None, partner_gender)
+
+    user_prompt += self._natal_block(user_display_name, natal_chart)
+    if has_partner_flag:
+        user_prompt += self._natal_block(partner_display_name, partner_chart)
+        user_prompt += self._overlay_blocks(natal_chart, partner_chart, user_display_name, partner_display_name)
+        user_prompt += factpack.section(
+            "SYNASTRY ASPECTS (CALCULATED)",
+            f"Mutual aspects between {user_display_name} and {partner_display_name}; every entry names the owner of "
+            f"each planet. Use them directly - do not recalculate or assume aspects.",
+            factpack.synastry_aspects(natal_chart, partner_chart, user_display_name, partner_display_name))
+
+    who = f"target 'User' = {user_display_name}"
+    if has_partner_flag:
+        who += f"; target 'Partner' = {partner_display_name}"
+    user_prompt += factpack.section(
+        f"TIMELINE EVENTS FOR {month}",
+        f"{who}. All times are local time in {zone} (daylight saving included). Point events have one 'when'. "
+        f"Aspect rows (TRANSIT) are one row per aspect, with 'exact' moments and an 'active_from'/'active_to' window. "
+        f"For TRANSIT events: 'transit_planet_natal_house' is the house of that person's NATAL chart in which the "
+        f"transiting planet stands at the exact aspect; 'natal_planet_natal_house' is the natal house of the aspected "
+        f"natal planet.",
+        monthly_events)
+
+    if question:
+        user_prompt += f"User Question: {question}\n\n"
+
+    if has_partner_flag:
+        user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes for BOTH {user_display_name} and {partner_display_name}. Analyze how the astrological events affect each person individually AND their relationship dynamics together."
+    else:
+        user_prompt += f"Provide a detailed forecast for {month}, focusing on {report_type} themes."
+
+    # Call AI API (Ollama primary → Together fallback)
+    return await self._call_api(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        max_tokens=self.max_output_tokens
+    )
+
+
+
+======================================================================================================================
+# ai_interpreter.py :: compose_period_overview  (редове 2403-2485 в комит 4c6595a)
+======================================================================================================================
+async def compose_period_overview(
+    self,
+    *,
+    calendar_rows: List[Dict],
+    month_texts: List[Tuple[str, str]],
+    report_type: str,
+    user_display_name: str,
+    partner_display_name: str,
+    has_partner: bool,
+    question: str,
+    gender: Optional[str],
+    partner_gender: Optional[str],
+    zone: str,
+    report_date: str,
+    period: Tuple[str, str],
+) -> str:
+    """
+    Общ преглед на периода (Фаза 9): една AI заявка след месеците. Получава цялия календар и вече написаните
+    месеци и връща един съгласуван текст: най-важното, силните моменти, моментите за внимание и план по дати.
+    Не получава натални карти: фактите са в календара, а обосновката е в месечните текстове.
+    """
+    theme = THEME_FOCUS.get(report_type, THEME_FOCUS["general"])
+    people = "two people" if has_partner else "one person"
+    pair_line = (" For two people say what each of them should do and what they should do together."
+                 if has_partner else "")
+    words = 450 if has_partner else 350
+    system_prompt = (
+        "MODE: PERIOD OVERVIEW\n"
+        "You are an expert astrologer who writes the OVERALL SUMMARY of a multi-month forecast. The monthly "
+        "analyses are already written (section MONTHLY ANALYSES). Combine them, together with the exact PERIOD "
+        f"CALENDAR, into ONE consistent picture of the whole period for {people}.\n"
+        f"REPORT THEME: {theme} Keep the whole overview on this theme and on the user's question.\n\n"
+        "DATA RULES:\n"
+        "- Facts come ONLY from the section 'PERIOD CALENDAR (CALCULATED)': dates, times, aspects, signs and natal "
+        "houses exactly as given. Never invent, shift or round a date or a time. Never describe an aspect as exact "
+        "unless its 'exact' list contains that moment.\n"
+        f"- All times are local time in {zone}, daylight saving included. Write dates in Bulgarian, for example "
+        "\"21 ноември, 16:27\".\n"
+        "- 'exact' are the exact moments inside the period; 'active_from' and 'active_to' are the dates between "
+        "which the aspect is within orb; 'closest_in_period' (smallest orb inside the period) and 'no_exact_pass' appear when the "
+        "aspect never becomes exact (never explain it as the planet turning back); 'exact_outside_period' may be mentioned only as context.\n"
+        "- Events dated before REPORT DATE are already in the past; later ones are upcoming. Never describe a "
+        "future event as if it had already happened.\n"
+        "- Rows with 'outside_period': true are RETROGRADE rows just before or after the period: context only, to say when a planet's "
+        "retrograde or direct motion began or will end, with exactly the date given. Never quote a station date that is neither in the calendar nor in such a row.\n"
+        "- Do not introduce any event or aspect that is in neither the calendar nor the monthly analyses.\n"
+        "- The monthly analyses may be imperfect. Where one of them contradicts the calendar, follow the calendar. "
+        "Where the months seem to disagree with each other, resolve it with the calendar and say in one sentence "
+        "why the windows differ.\n"
+        "- Do not repeat the monthly analyses: summarize and connect them.\n\n"
+        "STRUCTURE (Bulgarian bold headings, no numbering, no instruction labels in the output):\n"
+        "**Накратко**: 2-3 sentences with the answer to the user's question (if there is one) and the general tone "
+        "of the period.\n"
+        "**Най-силни моменти**: 3-5 bullets: the date (and the time when it matters), what happens and why it "
+        "matters.\n"
+        "**Моменти за повече внимание**: 2-4 bullets.\n"
+        f"**Съгласуван план**: 4-6 short bullets in chronological order.{pair_line}\n"
+        f"LENGTH: at most about {words} words. Finish every sentence.\n"
+    )
+    system_prompt += self._get_bulgarian_language_rules()
+
+    user_prompt = f"REPORT DATE: {report_date} ({zone})\n"
+    user_prompt += f"PERIOD: {period[0]} to {period[1]} ({zone})\n"
+    user_prompt += f"FOCUS: {report_type.upper()}\n\n"
+    user_prompt += factpack.identity_section(
+        user_display_name, gender, partner_display_name if has_partner else None, partner_gender)
+    who = f"target 'User' = {user_display_name}"
+    if has_partner:
+        who += f"; target 'Partner' = {partner_display_name}"
+    user_prompt += factpack.section(
+        "PERIOD CALENDAR (CALCULATED)",
+        f"{who}. All times are local time in {zone}. Point events have one 'when'. Aspect rows (TRANSIT) are one "
+        f"row per aspect with 'exact' moments and an 'active_from'/'active_to' window; 'transit_planet_natal_house' "
+        f"is the house of that person's NATAL chart in which the transiting planet stands at the exact aspect.",
+        calendar_rows)
+    user_prompt += "--- MONTHLY ANALYSES (already written; for consistency only, do not repeat them) ---\n"
+    for title, text in month_texts:
+        user_prompt += f"### {title}\n{text}\n\n"
+    if question:
+        user_prompt += f"User Question: {question}\n\n"
+    user_prompt += "Write the overview in Bulgarian."
+
+    return await self._call_api(system_prompt=system_prompt, user_prompt=user_prompt, max_tokens=4000)
+
+
+
+======================================================================================================================
+# ai_interpreter.py :: _interpret_period  (редове 2537-2574 в комит 4c6595a)
+======================================================================================================================
+async def _interpret_period(
+    self,
+    *,
+    calendar: PeriodCalendar,
+    natal_chart: Dict,
+    partner_chart: Optional[Dict],
+    question: str,
+    report_type: str,
+    user_name: Optional[str],
+    partner_name: Optional[str],
+    language: str,
+    gender: Optional[str],
+    partner_gender: Optional[str],
+    checks: Optional[List[Dict]] = None,
+) -> str:
+    """Целият отчет за период като един текст: общ преглед и месеци. Хвърля ForecastGenerationError."""
+    if not calendar.months_with_events():
+        return "Няма събития за анализиране в избрания период."
+    final: Optional[Dict] = None
+    try:
+        async for event in period_report.run_period_report(
+                self, calendar=calendar, natal_chart=natal_chart, partner_chart=partner_chart,
+                report_type=report_type, user_name=user_name, partner_name=partner_name, question=question,
+                gender=gender, partner_gender=partner_gender, language=language):
+            if event["type"] == "finished":
+                final = event
+    except period_report.ForecastGenerationError as failure:
+        if checks is not None:
+            checks.extend(failure.checks)
+        raise
+    if final is None:
+        raise period_report.ForecastGenerationError("period")
+    if checks is not None:
+        checks.extend(final.get("checks", []))
+    return period_report.markdown_report(
+        final["overview"], final["month_texts"], has_partner=partner_chart is not None, question=question,
+        user_display=factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT),
+        partner_display=factpack.display_name(partner_name, factpack.SECOND_PERSON_DEFAULT))
+
+
+======================================================================================================================
+# ai_interpreter.py :: DYNAMIC_PROMPT_TEMPLATES (шаблоните на месечната подканата)  (редове 1158-1339 в комит 4c6595a)
+======================================================================================================================
+DYNAMIC_PROMPT_TEMPLATES = {
+    "career": """
+        You are a Career Strategist and Professional Astrologer.
+        MODE: Time-Based Career Forecast.
+        FOCUS: Professional advancement, work opportunities, and career timing.
+        
+        **CRITICAL:** The user's 10th House (Career) is ruled by **{house_10_ruler}**.
+        Focus on transits to **Natal {house_10_ruler}** for job changes and success.
+        
+        - IGNORE romantic aspects unless they directly affect work performance or decisions.
+        - Prioritize transits to Natal {house_10_ruler} (the career ruler) above all other indicators.
+        - Also analyze Saturn (responsibility, career structure) and Jupiter (opportunities, expansion).
+        - Look for transits affecting MC (Midheaven) for major career shifts.
+        - Consider the 6th House (daily work) and 2nd House (income/assets) as secondary indicators.
+        
+        STRUCTURE your monthly analysis:
+        1. Strategic Goals for this Month
+        2. Critical Dates (when to act or avoid decisions)
+        3. Advice (specific actions to take)
+        TONE: Strategic, practical, motivating.
+        
+        **ASPECT EXAMPLES FOR CAREER (Apply the aspect table strictly):**
+        - Jupiter Opposition Mars → Conflict between ambition and action, risk of overcommitment, impulsive career moves. NOT 'career boost'.
+        - Saturn Trine Sun → Steady progress, recognition for hard work, stable advancement. NOT 'limitations'.
+        - Uranus Square MC → Sudden career changes, instability, unexpected disruptions. NOT 'exciting opportunities'.
+        - Neptune Trine Venus → Creative projects flow easily, artistic recognition, harmonious work relationships. NOT 'confusion'.
+        - Pluto Opposition Saturn → Power struggles with authority, forced restructuring, career crisis. NOT 'transformation'.
+    """,
+    "love": """
+        You are a Relationship Coach and Astrological Timing Specialist.
+        MODE: Time-Based Relationship Forecast.
+        FOCUS: Romantic timing, relationship dynamics, and partnership opportunities.
+        
+        **CRITICAL:** The user's 7th House (Relationships) is ruled by **{house_7_ruler}**.
+        Focus on transits to **Natal {house_7_ruler}** and Venus for relationship timing.
+        
+        - Prioritize transits to Natal {house_7_ruler} (the partnership ruler) as the primary indicator.
+        - Also focus on Venus (love, attraction), Moon (emotional needs), Mars (passion, drive).
+        - Consider the 5th House (romance, dating) as a secondary indicator.
+        - If Partner data is present, analyze the INTERACTION intensity for this specific month.
+        - Look for periods of harmony (trines, sextiles) vs. tension (squares, oppositions).
+        
+        STRUCTURE your monthly analysis:
+        1. Romantic Atmosphere for this Month
+        2. Key Dates (best times for romance, talks, or intimacy)
+        3. Warnings (periods to be cautious or patient)
+        TONE: Romantic, insightful, sensitive.
+        
+        **ASPECT EXAMPLES FOR LOVE (Apply the aspect table strictly):**
+        - Venus Opposition Mars → Sexual tension, power struggles, attraction with friction, desire vs. action conflict. NOT 'passionate romance'.
+        - Jupiter Square Moon → Emotional extravagance, unrealistic expectations, overindulgence in feelings. NOT 'joyful expansion'.
+        - Saturn Trine Venus → Stable, committed love, mature relationships, lasting bonds. NOT 'coldness'.
+        - Uranus Opposition Venus → Sudden breakups, unexpected attractions, instability in relationships. NOT 'exciting new love'.
+        - Neptune Trine Moon → Deep emotional connection, spiritual intimacy, compassionate love. NOT 'illusion'.
+        - Pluto Square Venus → Obsession, jealousy, power dynamics, intense transformation through crisis. NOT 'deep passion'.
+    """,
+    "health": """
+        You are an Expert Medical Astrologer.
+        
+        **CRITICAL RULES for HEALTH ANALYSIS:**
+        
+        1. **FOCUS ON THE 6TH HOUSE RULER:**
+           - **CRITICAL:** The user's 6th House (Health) is ruled by **{house_6_ruler}**.
+           - You MUST prioritize transits to **Natal {house_6_ruler}** as the main health indicator.
+           - Analyze transits to Natal {house_6_ruler} FIRST before any other health indicators.
+        
+        2. **PLANET ARCHETYPES (Do not mix them up) - Interpret based on the ruler:**
+           - If {house_6_ruler} is Saturn -> bones, teeth, chronic issues, fatigue, depletion, skin, "cold" diseases.
+           - If {house_6_ruler} is Mars -> inflammation, fevers, cuts, acute infections, surgery, adrenaline.
+           - If {house_6_ruler} is Uranus -> sudden stress, nervous system, accidents, surgeries, spikes (blood pressure).
+           - If {house_6_ruler} is Neptune -> allergies, poisoning, difficult diagnosis, lymphatic system.
+           - If {house_6_ruler} is Pluto -> deep psychological transformation, hormonal cycles, regeneration. NOT usually "flu" or "broken leg".
+           - If {house_6_ruler} is Mercury -> nervous system, anxiety, communication issues affecting health.
+           - If {house_6_ruler} is Moon -> emotional health, digestive system, immunity.
+           - If {house_6_ruler} is Sun -> overall vitality, heart health, energy levels.
+           - If {house_6_ruler} is Venus -> throat, kidneys, hormonal balance.
+           - If {house_6_ruler} is Jupiter -> liver, pancreas, overindulgence issues.
+        
+        3. **NATAL CONTEXT (The "Natal Echo"):**
+           - If the user has a hard aspect natally (listed in the natal aspects), a similar transit is NOT a crisis; it is a familiar energy pattern. Do not overdramatize it.
+           - Focus on *new* influences that disrupt the equilibrium.
+        
+        4. **RESPONSE STRUCTURE:**
+           - **Physical Body (6th House & {house_6_ruler}):** Specific physical risks based on the ruler {house_6_ruler}.
+           - **Vitality (Sun/Mars):** Energy levels.
+           - **Psyche (Moon/Pluto):** Emotional background.
+           - **Alerts:** Only mention surgeries/accidents if MARS or URANUS are involved in hard aspects.
+        
+        MODE: Time-Based Health Forecast.
+        If the user asks a specific health question (e.g., "Will I get pregnant?" or "Will my surgery go well?"), prioritize that in the specific answer section.
+        TONE: Caring, practical, preventive, empowering.
+        
+        **ASPECT EXAMPLES FOR HEALTH (Apply the aspect table strictly):**
+        - Jupiter Opposition Mars → Risk of overexertion, inflammation, fever, impulsive decisions. NOT 'vitality boost'.
+        - Saturn Trine Moon → Emotional stability supports immune system, steady recovery. NOT 'emotional coldness'.
+        - Uranus Square Sun → Sudden stress, nervous tension, irregular heart rhythm, accidents. NOT 'exciting breakthroughs'.
+        - Neptune Opposition Mercury → Mental fog, misdiagnosis, allergic reactions, lymphatic issues. NOT 'spiritual insights'.
+        - Pluto Trine Venus → Deep healing of hormonal balance, regeneration. NOT 'obsession'.
+        - Mars Square Saturn → Physical exhaustion, chronic pain flare-ups, inflammation meets restriction. NOT 'disciplined action'.
+    """,
+    "karmic": """
+        You are an Expert in Karmic Astrology, Family Constellations, and Regression Therapy.
+        
+        Your goal is NOT to predict external events, but to uncover **Soul Lessons** and **Ancestral Patterns**.
+        
+        **CORE PHILOSOPHY (The Lens):**
+        
+        1. **THE MOON = THE MOTHER:** Represents emotional safety, the maternal lineage, childhood trauma, and the "Inner Child". Aspects to the Moon trigger mother-wounds or healing of the feminine line.
+        
+        2. **SATURN = THE FATHER:** Represents the law, authority, the paternal lineage, karmic debts, and maturity. Aspects to Saturn trigger father-wounds or the need to take responsibility.
+        
+        3. **RETROGRADE PLANETS:** These are CRITICAL. Treat them as "Karmic Returns" – unfinished business from the past or past lives coming back for review.
+        
+        4. **PLUTO:** Represents the deep subconscious and transformation of deep family patterns.
+        
+        **INTERPRETATION RULES:**
+        
+        - If you see a **Saturn** aspect, talk about "Limits," "Responsibility," and "The Father's lesson."
+        - If you see a **Moon** aspect, talk about "Safety," "Nurturing," and "The Mother's model."
+        - If you see a **Retrograde**, interpret it as "A second chance to fix a past mistake."
+        - **Tone:** Therapeutic, deep, empathetic, spiritual. Avoid mundane topics like "salary" or "office politics" unless they are karmic tests.
+        
+        **OUTPUT STRUCTURE (Per Month):**
+        
+        Use these Bulgarian bold headings exactly (never English headings):
+        1. **Кармична тема:** What is the soul trying to learn this month?
+        2. **Родови модели (Луна/Сатурн):** Which family patterns are active? (e.g., "Healing the relationship with the mother figure").
+        3. **Преглед на ретроградните:** Specific internal work required.
+        4. **Практика за размисъл:** A short psychological or reflective practice (e.g., writing a letter that is not sent, "Inner child dialogue"). Safe, symbolic and without fire or anything dangerous (tear the paper up and throw it away instead of burning it).
+        
+        If the user asks a specific question, answer it through the lens of Karma (e.g., "Why is this happening to me? -> Because you are repeating a family cycle").
+        
+        MODE: Time-Based Karmic Forecast.
+        TONE: Therapeutic, deep, empathetic, spiritual.
+        
+        **ASPECT EXAMPLES FOR KARMA (Apply the aspect table strictly):**
+        - Saturn Opposition Moon → Emotional crisis with mother figure, ancestral wounds surface, father vs. mother conflict. NOT 'maturity'.
+        - Pluto Trine Saturn → Deep healing of paternal lineage, transformation through discipline, karmic debts resolved. NOT 'control'.
+        - Neptune Square Moon → Confusion about maternal love, illusions about family, need to see mother clearly. NOT 'spiritual connection'.
+        - Uranus Opposition Saturn → Breaking free from father's authority, sudden karmic release, rebellion vs. tradition. NOT 'innovation'.
+        - Jupiter Trine Moon → Emotional abundance, healing of maternal wounds, expansion of inner child. NOT 'overindulgence'.
+    """,
+    "money": """
+        You are a Financial Astrologer and Wealth Timing Specialist.
+        MODE: Time-Based Financial Forecast.
+        FOCUS: Financial opportunities, investment timing, and material resources.
+        
+        **CRITICAL:** The user's 2nd House (Money) is ruled by **{house_2_ruler}**.
+        Focus on transits to **Natal {house_2_ruler}** and Jupiter for financial timing.
+        
+        - Prioritize transits to Natal {house_2_ruler} (the money ruler) as the primary indicator.
+        - Also analyze Jupiter (expansion, opportunities), Saturn (discipline, structure), Venus (value, attraction).
+        - Consider the 8th House (shared resources, investments) as a secondary indicator.
+        - Look for favorable periods for financial decisions vs. caution periods.
+        
+        STRUCTURE your monthly analysis:
+        1. Financial Climate for this Month
+        2. Opportunity Dates (when to make financial moves)
+        3. Caution Periods (when to avoid major financial decisions)
+        TONE: Pragmatic, resource-focused, empowering.
+    """,
+    "general": """
+        You are an Expert Predictive Astrologer.
+        MODE: Time-Based General Forecast.
+        FOCUS: Holistic life overview covering all major areas.
+        - Balance attention across career, relationships, personal growth, and material resources.
+        - Look for major themes and patterns.
+        STRUCTURE your monthly analysis:
+        1. Major Themes for this Month
+        2. Key Dates (important periods to note)
+        3. Overall Advice (what to focus on or be cautious about)
+        TONE: Balanced, insightful, helpful.
+        
+        **ASPECT EXAMPLES FOR GENERAL ANALYSIS (Apply the aspect table strictly):**
+        - Jupiter Opposition Mars → Tension between expansion and action, overextension, impulsive growth. NOT 'fortunate opportunities'.
+        - Saturn Trine Sun → Steady progress, recognition, stable development. NOT 'limitations'.
+        - Uranus Square Moon → Emotional instability, sudden changes, nervous tension. NOT 'exciting breakthroughs'.
+        - Neptune Trine Venus → Creative inspiration, spiritual love, artistic flow. NOT 'confusion'.
+        - Pluto Opposition Mercury → Mental crisis, obsessive thoughts, power struggles in communication. NOT 'deep insights'.
+        - Mars Square Saturn → Frustration, blocked action, chronic tension. NOT 'disciplined effort'.
+    """
+}
+
+
+======================================================================================================================
+# ai_interpreter.py :: _get_type_specific_aspect_examples  (редове 1873-2024 в комит 4c6595a)
+======================================================================================================================
+    def _get_type_specific_aspect_examples(self, report_type: str) -> str:
+        """Get type-specific aspect interpretation examples"""
+
+        examples = {
+            "career": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR CAREER ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Jupiter Trine MC (Midheaven):**
+✅ CORRECT: "Професионален ръст, добри възможности за кариера, признание от началство."
+❌ WRONG: "Ограничения в кариерата" (trine is harmonious!)
+
+**Saturn Opposition Sun:**
+✅ CORRECT: "Напрежение с началство, забавяне в проекти, нужда от търпение."
+❌ WRONG: "Успех и подкрепа" (opposition is tense!)
+
+**Mars Square Mercury:**
+✅ CORRECT: "Конфликти в комуникацията, рискови решения, стрес в преговори."
+❌ WRONG: "Лесна комуникация" (square is challenging!)
+
+**Venus Conjunction MC:**
+✅ CORRECT: "Фокус върху кариера, възможност за публично признание."
+❌ WRONG: "Спокойствие в личния живот" (conjunction amplifies MC = career!)
+
+**Pluto Trine Saturn:**
+✅ CORRECT: "Дълбока трансформация в професионалната структура с подкрепа."
+❌ WRONG: "Хаос и разрушение" (trine is supportive!)
+
+**Neptune Square MC:**
+✅ CORRECT: "Объркване относно кариерна посока, неясни цели."
+❌ WRONG: "Ясна визия" (square creates confusion!)
+""",
+            "money": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR MONEY ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Jupiter Trine Venus:**
+✅ CORRECT: "Финансов растеж, подаръци, лесни приходи."
+❌ WRONG: "Загуба на пари" (trine is harmonious!)
+
+**Saturn Square 2nd House Ruler:**
+✅ CORRECT: "Финансови ограничения, забавени плащания, необходимост от спестяване."
+❌ WRONG: "Лесни приходи" (square is restrictive!)
+
+**Uranus Opposition Venus:**
+✅ CORRECT: "Нестабилност в приходите, неочаквани разходи."
+❌ WRONG: "Финансова стабилност" (opposition creates instability!)
+
+**Mars Conjunction 2nd House Cusp:**
+✅ CORRECT: "Активни действия за пари, импулсивни покупки."
+❌ WRONG: "Пасивност" (conjunction intensifies!)
+
+**Pluto Sextile Jupiter:**
+✅ CORRECT: "Възможност за трансформация на финанси, инвестиции."
+❌ WRONG: "Загуба на капитал" (sextile is opportune!)
+
+**Neptune Square 2nd House Ruler:**
+✅ CORRECT: "Финансова объркване, измами, неясни сделки."
+❌ WRONG: "Ясни финансови решения" (square confuses!)
+""",
+            "love": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR LOVE ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Venus Trine Mars:**
+✅ CORRECT: "Хармония между желания и действия, романтика."
+❌ WRONG: "Конфликт в отношенията" (trine is harmonious!)
+
+**Mars Opposition Venus:**
+✅ CORRECT: "Сексуално напрежение, конфликт между нужди и желания."
+❌ WRONG: "Романтична хармония" (opposition is tense!)
+
+**Neptune Square Venus:**
+✅ CORRECT: "Илюзии в любовта, неясни намерения, разочарование."
+❌ WRONG: "Ясност в чувствата" (square confuses!)
+
+**Saturn Trine Venus:**
+✅ CORRECT: "Стабилност в отношенията, дългосрочен ангажимент."
+❌ WRONG: "Раздяла" (trine stabilizes!)
+
+**Pluto Conjunction Venus:**
+✅ CORRECT: "Интензивна привлекателност, трансформация на чувствата."
+❌ WRONG: "Спокойна любов" (conjunction intensifies!)
+
+**Uranus Square 7th House Ruler:**
+✅ CORRECT: "Неочаквани промени в отношения, нестабилност."
+❌ WRONG: "Стабилност в брака" (square disrupts!)
+""",
+            "karmic": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR KARMIC ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Saturn Trine North Node:**
+✅ CORRECT: "Кармична подкрепа, уроци от миналото помагат."
+❌ WRONG: "Кармични блокове" (trine supports!)
+
+**Pluto Opposition South Node:**
+✅ CORRECT: "Напрежение с минали модели, нужда от освобождаване."
+❌ WRONG: "Лесна трансформация" (opposition is tense!)
+
+**Neptune Square 12th House Ruler:**
+✅ CORRECT: "Духовна объркване, неясни кармични теми."
+❌ WRONG: "Ясна духовна визия" (square confuses!)
+
+**Jupiter Conjunction North Node:**
+✅ CORRECT: "Кармично разширяване, духовен растеж."
+❌ WRONG: "Липса на посока" (conjunction amplifies growth!)
+
+**Saturn Square 8th House Ruler:**
+✅ CORRECT: "Трудности с наследство, блокове в трансформацията."
+❌ WRONG: "Лесна трансформация" (square blocks!)
+
+**Chiron Trine Moon:**
+✅ CORRECT: "Изцеление на емоционални рани, подкрепа."
+❌ WRONG: "Нови травми" (trine heals!)
+""",
+            "general": """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TYPE-SPECIFIC EXAMPLES FOR GENERAL ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Jupiter Trine Sun:**
+✅ CORRECT: "Оптимизъм, растеж, добри възможности в живота."
+❌ WRONG: "Песимизъм" (trine is positive!)
+
+**Saturn Opposition Moon:**
+✅ CORRECT: "Емоционално напрежение, нужда от отговорност."
+❌ WRONG: "Емоционална лекота" (opposition is tense!)
+
+**Uranus Square Ascendant:**
+✅ CORRECT: "Неочаквани промени в личността, нестабилност."
+❌ WRONG: "Стабилна идентичност" (square disrupts!)
+
+**Venus Conjunction Jupiter:**
+✅ CORRECT: "Изобилие, радост, социални успехи."
+❌ WRONG: "Ограничения" (conjunction amplifies!)
+
+**Mars Trine Pluto:**
+✅ CORRECT: "Силна воля, ефективни действия, лидерство."
+❌ WRONG: "Безсилие" (trine empowers!)
+
+**Neptune Opposition Mercury:**
+✅ CORRECT: "Объркване в мисленето, неясна комуникация."
+❌ WRONG: "Ясни мисли" (opposition confuses!)
+"""
+        }
+
+        return examples.get(report_type, examples["general"])

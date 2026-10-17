@@ -34,7 +34,7 @@ import text_guard  # noqa: E402
 from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import TransitScanner  # noqa: E402
-from testenv import CHART, give_deposit, register_and_login, analyze, OVERVIEW_OK  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)          # София
@@ -628,24 +628,36 @@ class InterpreterIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
 
+    CARD_TEXT = "Това изисква търпение и ясни граници в разговорите."                       # карта по подразбиране на testenv.pair_reply
+    WRONG_CARD = "Това усилва близостта в 7-ми дом и носи топлина във вашия живот."         # дом в блок на карта: нарушение
+    FIXED_CARD = "Това усилва близостта и носи топлина във вашия живот."
+
+    def natal_fake(self, calls, *, all_wrong=False, fixed=None):
+        """Натален анализ за един човек е по карти (natal_single.py): първата карта (или всички) идва с дом в текста; поправката я оправя."""
+        async def fake(system_prompt=None, user_prompt=None, temperature=None, **kwargs):
+            calls.append(temperature)
+            if "MODE: ONE-PERSON NATAL ANALYSIS. You INTERPRET" in system_prompt:
+                reply = testenv.pair_reply(user_prompt)
+                return reply.replace(self.CARD_TEXT, self.WRONG_CARD, -1 if all_wrong else 1)
+            return self.WRONG_CARD if all_wrong else (fixed or self.FIXED_CARD)
+        return fake
+
     def test_a_wrong_house_is_repaired_with_a_second_call(self):
-        facts, good, bad, _ = good_and_bad_text()
-        checks = []
-        fake = mock.AsyncMock(side_effect=[bad, good])
-        with mock.patch.object(self.interp, "_call_api", fake):
+        checks, calls = [], []
+        with mock.patch.object(self.interp, "_call_api", self.natal_fake(calls)):
             text = asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван", checks=checks))
-        self.assertEqual(text, good)
-        self.assertEqual(fake.await_count, 2)
-        self.assertEqual(fake.await_args_list[1].kwargs["temperature"], text_guard.REPAIR_TEMPERATURE)
-        self.assertEqual([c["result"] for c in checks], ["repaired"])
+        self.assertIn(self.FIXED_CARD, text)
+        self.assertNotIn("7-ми дом и носи", text)
+        self.assertEqual(calls[0], None)                                          # основната заявка е без изрична температура
+        self.assertEqual(calls.count(text_guard.REPAIR_TEMPERATURE), 1)           # една поправка с втора AI заявка
+        self.assertIn("repaired", [c.get("result") for c in checks])
 
     def test_an_unrepairable_text_raises_and_nothing_is_returned(self):
-        _, _, bad, _ = good_and_bad_text()
-        checks = []
-        with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(side_effect=[bad, bad])):
+        checks, calls = [], []
+        with mock.patch.object(self.interp, "_call_api", self.natal_fake(calls, all_wrong=True)):
             with self.assertRaises(text_guard.TextCheckError):
                 asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван", checks=checks))
-        self.assertEqual([c["result"] for c in checks], ["rejected"])
+        self.assertIn("rejected", [c.get("result") for c in checks])
 
     def test_provider_errors_are_still_wrapped_as_before(self):
         with mock.patch.object(self.interp, "_call_api", mock.AsyncMock(side_effect=RuntimeError("мрежа"))):
@@ -716,95 +728,14 @@ class InterpreterIntegrationTest(unittest.TestCase):
         self.assertEqual([c["result"] for c in checks], ["rejected"])
 
     def test_facts_that_cannot_be_built_let_the_text_through_only_in_warn_mode(self):
-        _, _, bad, _ = good_and_bad_text()
+        async def fake(system_prompt=None, user_prompt=None, **kwargs):
+            return testenv.pair_reply(user_prompt)
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "warn"}), \
-                mock.patch.object(self.interp, "_call_api", mock.AsyncMock(return_value=bad)), \
+                mock.patch.object(self.interp, "_call_api", fake), \
                 mock.patch.object(ai_interpreter.text_check, "build_facts", side_effect=KeyError("карта")):
             text = asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван"))
-        self.assertEqual(text, bad)
-
-
-class PeriodGuardTest(unittest.TestCase):
-    """run_period_report с истинския интерпретатор: подменени са само вътрешните AI викове."""
-
-    def setUp(self):
-        self.interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
-        self.cal = calendar_for(partner=False)
-
-    def run_report(self, month_texts, overview=OVERVIEW_OK, repair=None):
-        async def monthly(**kwargs):
-            return month_texts[kwargs["month"]].pop(0)
-
-        async def go():
-            steps = []
-            async for step in period_report.run_period_report(
-                    self.interp, calendar=self.cal, natal_chart=chart(IVAN_BIRTH), partner_chart=None, report_type="general",
-                    user_name="Иван", partner_name=None, question="", report_date="2026-10-08", retry_pause=0):
-                steps.append(step)
-            return steps
-        with mock.patch.object(self.interp, "_process_monthly_chunk", side_effect=monthly), \
-                mock.patch.object(self.interp, "compose_period_overview", mock.AsyncMock(return_value=overview)), \
-                mock.patch.object(self.interp, "_call_api", repair or mock.AsyncMock(side_effect=AssertionError("няма поправка"))):
-            return asyncio.run(go())
-
-    GOOD_OCT = "Венера става ретроградна на 3 октомври в 09:16. Новолуние в Везни на 10 октомври."
-    BAD_OCT = "Венера става ретроградна на 4 октомври. Новолуние в Везни на 10 октомври."
-    NOV = "Меркурий става директен на 13 ноември в 16:54."
-
-    def test_a_correct_month_text_passes_without_a_repair(self):
-        steps = self.run_report({"2026-10": [self.GOOD_OCT], "2026-11": [self.NOV]})
-        self.assertEqual(steps[-1]["type"], "finished")
-        self.assertEqual(steps[-1]["month_texts"][0][1], self.GOOD_OCT)
-        self.assertEqual([c["result"] for c in steps[-1]["checks"]], ["ok", "ok", "ok"])        # два месеца и общият преглед
-
-    def test_a_wrong_station_date_is_repaired_once(self):
-        repair = mock.AsyncMock(return_value=self.GOOD_OCT)
-        steps = self.run_report({"2026-10": [self.BAD_OCT], "2026-11": [self.NOV]}, repair=repair)
-        self.assertEqual(steps[-1]["month_texts"][0][1], self.GOOD_OCT)
-        self.assertEqual(repair.await_count, 1)
-        self.assertEqual(steps[-1]["checks"][0]["result"], "repaired")
-        self.assertEqual(steps[-1]["checks"][0]["stage"], "month:2026-10")
-        self.assertIn("event", steps[-1]["checks"][0]["codes"])
-
-    def test_a_month_that_cannot_be_repaired_is_generated_again_and_then_fails_the_report(self):
-        repair = mock.AsyncMock(return_value=self.BAD_OCT)
-        with self.assertRaises(period_report.ForecastGenerationError) as ctx:
-            self.run_report({"2026-10": [self.BAD_OCT, self.BAD_OCT], "2026-11": [self.NOV]}, repair=repair)
-        self.assertEqual(ctx.exception.stage, "month:2026-10")
-        self.assertIsInstance(ctx.exception.cause, text_guard.TextCheckError)
-        self.assertEqual(repair.await_count, 4)                                                  # по две поправки на опит
-        self.assertEqual([c["result"] for c in ctx.exception.checks], ["rejected", "rejected"])
-
-    def test_the_second_attempt_can_save_the_month(self):
-        repair = mock.AsyncMock(return_value=self.BAD_OCT)
-        steps = self.run_report({"2026-10": [self.BAD_OCT, self.GOOD_OCT], "2026-11": [self.NOV]}, repair=repair)
-        self.assertEqual(steps[-1]["month_texts"][0][1], self.GOOD_OCT)
-        self.assertEqual([c["result"] for c in steps[-1]["checks"]][:2], ["rejected", "ok"])
-
-    def test_the_overview_is_checked_too(self):
-        bad = OVERVIEW_OK + "<p>Най-важното: Плутон става директен на 17 октомври.</p>"
-        good = OVERVIEW_OK + "<p>Най-важното: Плутон става директен на 16 октомври.</p>"
-        repair = mock.AsyncMock(return_value=good)
-        steps = self.run_report({"2026-10": [self.GOOD_OCT], "2026-11": [self.NOV]}, overview=bad, repair=repair)
-        self.assertEqual(steps[-1]["overview"], good)
-        self.assertEqual(steps[-1]["checks"][-1]["stage"], "overview")
-
-    def test_labels_are_cleaned_in_period_texts(self):
-        text = self.GOOD_OCT + " Състояние (state_in_month: approaching) е известно."
-        steps = self.run_report({"2026-10": [text], "2026-11": [self.NOV]})
-        self.assertNotIn("state_in_month", steps[-1]["month_texts"][0][1])
-
-
-class TitleTest(unittest.TestCase):
-    def test_the_monthly_pair_title_names_both_people_in_the_format_and_in_the_instruction(self):
-        interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
-        pair = interp._build_dynamic_system_prompt(
-            report_type="love", language="bg", natal_chart=chart(A_BIRTH), partner_chart=chart(IVAN_BIRTH),
-            user_display_name="Мария", partner_display_name="Иван", has_partner=True)
-        self.assertEqual(pair.count("[ИМЕ НА ПАРТНЬОРА]"), 2)                 # формата и указанието казват едно и също
-        single = interp._build_dynamic_system_prompt(
-            report_type="love", language="bg", natal_chart=chart(A_BIRTH), user_display_name="Мария", has_partner=False)
-        self.assertNotIn("[ИМЕ НА ПАРТНЬОРА]", single)
+        self.assertIn("## Натална карта на Иван", text)
+        self.assertIn("## Заключение", text)
 
 
 def sse_events(text):
@@ -836,28 +767,39 @@ class EndpointTest(unittest.TestCase):
         finally:
             db.close()
 
+    NATAL_CARD = "Това изисква търпение и ясни граници в разговорите."
+    NATAL_WRONG = "Това усилва близостта в 7-ми дом и носи топлина във вашия живот."
+    NATAL_FIXED = "Това усилва близостта и носи топлина във вашия живот."
+
+    def natal_ai(self, all_wrong=False):
+        """Натален анализ за един човек е по карти: първата карта (или всички) идва с дом в текста; поправката я оправя (или не)."""
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            if "MODE: ONE-PERSON NATAL ANALYSIS. You INTERPRET" in system_prompt:
+                return testenv.pair_reply(user_prompt).replace(self.NATAL_CARD, self.NATAL_WRONG, -1 if all_wrong else 1)
+            return self.NATAL_WRONG if all_wrong else self.NATAL_FIXED
+        return fake
+
     def test_natal_is_repaired_saved_and_the_repair_is_recorded_without_text(self):
         h = register_and_login(self.client, "p10-repair@test.bg")
         uid = self.client.get("/me", headers=h).json()["id"]
-        bad, good = self.bad_and_good()
-        with mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(side_effect=[bad, good])):
+        with mock.patch.object(main.ai_interpreter, "_call_api", self.natal_ai()):
             r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["interpretation"], good)
+        text = r.json()["interpretation"]
+        self.assertIn(self.NATAL_FIXED, text)
+        self.assertNotIn("7-ми дом и носи", text)
         saved = self.client.get("/reports", headers=h).json()
         self.assertEqual(len(saved), 1)
         recorded = self.events(uid, "text_check")
-        self.assertEqual(len(recorded), 1)
-        self.assertEqual(recorded[0].props["result"], "repaired")
-        self.assertEqual(recorded[0].props["stage"], "natal")
-        self.assertNotIn("Слънце", json.dumps(recorded[0].props, ensure_ascii=False))
+        self.assertEqual([e.props["result"] for e in recorded], ["repaired"])
+        self.assertTrue(recorded[0].props["stage"].startswith("natalone:A"))
+        self.assertNotIn("дом", json.dumps(recorded[0].props, ensure_ascii=False))             # в телеметрията няма текст на анализа
 
     @mock.patch.dict(os.environ, {"BALANCE_ENFORCED": "1"})
     def test_natal_that_cannot_be_repaired_is_502_nothing_saved_nothing_charged(self):
         h = register_and_login(self.client, "p10-reject@test.bg")
         me = self.client.get("/me", headers=h).json()
-        bad, _ = self.bad_and_good()
-        with mock.patch.object(main.ai_interpreter, "_call_api", mock.AsyncMock(side_effect=[bad, bad])):
+        with mock.patch.object(main.ai_interpreter, "_call_api", self.natal_ai(all_wrong=True)):
             r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 502)
         self.assertRegex(r.json()["detail"], r"^" + re.escape(text_guard.USER_MESSAGE) + r" \(код: [0-9a-f]{8}\)$")
@@ -867,17 +809,23 @@ class EndpointTest(unittest.TestCase):
         failed = self.events(me["id"], "analysis_failed")
         self.assertEqual(len(failed), 1)
         self.assertEqual(failed[0].props["reason"], "text_check")
-        self.assertEqual(failed[0].props["codes"], "house")
+        self.assertEqual((failed[0].props["stage"], failed[0].props["codes"]), ("natalone:too_many", "complete"))      # повече от 4 провалени карти
+        rejected = self.events(me["id"], "text_check")
+        self.assertTrue(rejected and all(e.props["result"] == "rejected" for e in rejected))                          # всяка карта е отхвърлена и след поправките
 
     def test_warn_mode_returns_the_text_as_it_is(self):
         h = register_and_login(self.client, "p10-warn@test.bg")
-        bad, _ = self.bad_and_good()
-        fake = mock.AsyncMock(return_value=bad)
-        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "warn"}), mock.patch.object(main.ai_interpreter, "_call_api", fake):
+        fake = self.natal_ai()
+        calls = []
+
+        async def counting(system_prompt, user_prompt, **kwargs):
+            calls.append(system_prompt)
+            return await fake(system_prompt, user_prompt, **kwargs)
+        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "warn"}), mock.patch.object(main.ai_interpreter, "_call_api", counting):
             r = analyze(self.client, h, {**CHART, "name": "Аз"})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["interpretation"], bad)
-        self.assertEqual(fake.await_count, 1)
+        self.assertIn(self.NATAL_WRONG, r.json()["interpretation"])                           # нарушението е в текста (само предупреждение)
+        self.assertEqual(len(calls), 1)                                                       # без поправка в режим „warn“
         uid = self.client.get("/me", headers=h).json()["id"]
         self.assertEqual(self.events(uid, "text_check")[0].props["result"], "warned")
 

@@ -219,13 +219,22 @@ class PromptRulesTest(unittest.TestCase):
                        "TRANSITING planet", "0° съвпад, 60° секстил"):
             self.assertIn(needle, self.rules)
 
-    def test_the_karma_template_has_bulgarian_headings_and_no_dna_fact(self):
+    def test_the_live_prompts_have_no_old_english_headings_and_the_karma_theme_states_no_family_fact(self):
+        """Старият шаблон за карма е архивиран заедно с кода за периода (archive/legacy_period_flow_2026-10-12.txt). Проверката важи за
+        действащите подкани: ни стар английски заглавие, ни „Family DNA“ в тях, а темата за карма забранява факти за предците и родителите."""
         import inspect
-        source = inspect.getsource(ai_interpreter)
-        for old in ("Ancestral Echoes (Moon/Saturn)", "Retrograde Review:**", "Healing Practice:**", "Forgiveness ritual"):
-            self.assertNotIn(old, source)
-        self.assertNotIn("Family DNA", source)
-        self.assertIn("**Кармична тема:**", source)
+        import card_engine
+        import natal_pair
+        import natal_single
+        import pair_snapshot
+        import period_cards
+        import single_snapshot
+        for module in (ai_interpreter, card_engine, natal_pair, natal_single, pair_snapshot, period_cards, single_snapshot):
+            source = inspect.getsource(module)
+            for old in ("Ancestral Echoes (Moon/Saturn)", "Retrograde Review:**", "Healing Practice:**", "Forgiveness ritual", "Family DNA"):
+                self.assertNotIn(old, source, msg=(module.__name__, old))
+        self.assertIn("never facts about ancestors or parents", ai_interpreter.THEME_FOCUS["karmic"])
+        self.assertIn("Кармична тема", bg_text.bulgarianize("**The Karmic Theme**\nтекст"))                  # пропусната английска дума се превежда
 
     def test_stray_english_headings_are_translated_by_the_safety_net(self):
         text = "**Ancestral Echoes**\nтекст\n**Retrograde Review**\n**Healing Practice**"
@@ -271,6 +280,10 @@ class ContextStationTest(unittest.TestCase):
         self.assertIn(("event", "hard"), codes("Плутон става директен на 17 октомври.", self.facts))
         self.assertEqual(codes("Плутон става директен на 16 октомври.", self.facts), [])
 
-    def test_the_prompt_tells_the_ai_about_context_rows(self):
-        import inspect
-        self.assertGreaterEqual(inspect.getsource(ai_interpreter).count("outside_period"), 2)
+    def test_the_period_prompts_allow_only_dates_from_card_headings(self):
+        """Старият промпт даваше на AI контекстните редове („ретрограден до …“). Сега фактите са карти, написани от кода: AI няма право на
+        дата извън заглавията им, а грешна дата на станция отхвърля проверката (тестовете по-горе)."""
+        import period_cards
+        for prompt in (period_cards.MONTH_SYSTEM, period_cards.OVERVIEW_SYSTEM, period_cards.MONTH_COMPOSE_SYSTEM):
+            self.assertIn("date from a card heading", prompt)
+        self.assertIn("Never invent, compute or guess a planet, sign, house, aspect, date or time", period_cards.MONTH_SYSTEM)

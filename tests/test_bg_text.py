@@ -1,3 +1,4 @@
+import re
 """
 Тестове: английските имена на знаци и планети и „natal/transit“ в готовия текст стават български, а имената на хората остават.
 
@@ -84,12 +85,29 @@ class PipelineTest(unittest.TestCase):
         h = register_and_login(self.client, "bg-text@test.bg")
 
         # през истинския _call_api: подменен е само HTTP клиентът
+        english = "Новолуние в Libra. Сатурн квадратура natal Луна. Leo е в Aquarius."
+
         class FakeResponse:
             status_code = 200
 
+            def __init__(self, content):
+                self.content = content
+
             def json(self):
-                return {"choices": [{"message": {"content": "Новолуние в Libra. Сатурн квадратура natal Луна. Leo е в Aquarius."},
-                                     "finish_reason": "stop"}], "usage": {}}
+                return {"choices": [{"message": {"content": self.content}, "finish_reason": "stop"}], "usage": {}}
+
+        def reply(payload):
+            """Натален анализ за един човек е по карти: първата карта носи английските думи, останалото е обикновен текст."""
+            messages = (payload or {}).get("messages") or []
+            system = next((m["content"] for m in messages if m.get("role") == "system"), "")
+            user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+            if "MODE: ONE-PERSON NATAL ANALYSIS. You INTERPRET" not in system:
+                return english
+            ids = re.findall(r"^(A\d+): ", user, re.M)
+            parts = [f"[[{i}]]\n" + (english if n == 0 else "Така у вас се съчетават търпение и вътрешна сила.") for n, i in enumerate(ids)]
+            parts += ["[[SUMMARY]]\nВие съчетавате спокойствие и упоритост.", "[[ADVICE]]\n- Давайте си време за важните решения.",
+                      "[[CONCLUSION]]\nИмате добра основа за стабилност и растеж."]
+            return "\n\n".join(parts)
 
         class FakeClient:
             def __init__(self, *a, **k):
@@ -102,7 +120,7 @@ class PipelineTest(unittest.TestCase):
                 return False
 
             async def post(self, *a, **k):
-                return FakeResponse()
+                return FakeResponse(reply(k.get("json")))
         ai = main.ai_interpreter
         with mock.patch.object(ai, "ollama_key", "k"), mock.patch.object(ai, "ollama_url", "http://x"), \
                 mock.patch("ai_interpreter.httpx.AsyncClient", FakeClient), \

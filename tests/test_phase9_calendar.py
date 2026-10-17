@@ -10,7 +10,6 @@
 
 Пускане: python -m unittest discover -s tests -p "test_phase9_calendar.py"
 """
-import asyncio
 import json
 import math
 import os
@@ -26,7 +25,6 @@ import testenv  # noqa: F401  (трябва да е преди main)
 import swisseph as swe  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import ai_interpreter  # noqa: E402
 import engine  # noqa: E402
 import main  # noqa: E402
 import period_report  # noqa: E402
@@ -34,7 +32,7 @@ from database import Event, Report, SessionLocal  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from scanner import (APPLYING_ORB, ASPECTS, NATAL_TARGETS, SEPARATING_ORB, TRANSIT_PLANETS,  # noqa: E402
                      TransitScanner, utc_to_jd)
-from testenv import CHART, give_deposit, register_and_login, analyze, OVERVIEW_OK, period_fake, period_reply  # noqa: E402
+from testenv import CHART, give_deposit, register_and_login, analyze, period_fake, period_reply  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "phase9_control")
 A_BIRTH = dict(date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219)
@@ -68,15 +66,6 @@ def sse_events(text):
     return [json.loads(line[6:]) for line in text.splitlines() if line.startswith("data: ")]
 
 
-def section_json(user_prompt, title_prefix):
-    """JSON на блока '--- ЗАГЛАВИЕ ---' (данните са на един ред)."""
-    lines = user_prompt.splitlines()
-    for i, line in enumerate(lines):
-        if line.startswith(f"--- {title_prefix}"):
-            for candidate in lines[i + 1:]:
-                if candidate.startswith(("[", "{")):
-                    return json.loads(candidate)
-    raise AssertionError(f"няма блок {title_prefix}")
 
 
 class CalendarBase(unittest.TestCase):
@@ -442,175 +431,6 @@ class StructureTest(CalendarBase):
                                           partner_chart=self.ivan)
         self.assertLess(time.perf_counter() - started, 10.0)
         self.assertEqual(cal.months, ["2026-10", "2026-11", "2026-12"])
-
-
-class FakeInterpreter:
-    """Подменя само двата AI вика; календарът, редът на стъпките и повторните опити са истински."""
-
-    def __init__(self, fail_month=None, month_failures=0, overview_failures=0, empty_overview=False):
-        self.fail_month, self.month_failures = fail_month, month_failures
-        self.overview_failures, self.empty_overview = overview_failures, empty_overview
-        self.month_calls, self.overview_calls = [], []
-
-    def build_text_facts(self, **kwargs):                  # проверката на текста (Фаза 10) има собствени тестове
-        return None
-
-    def require_text_facts(self, facts, *, stage, checks=None):
-        return None
-
-    async def guard_text(self, text, facts, *, stage, checks=None, max_tokens=None):
-        return text
-
-    async def _process_monthly_chunk(self, **kwargs):
-        self.month_calls.append(kwargs["month"])
-        if kwargs["month"] == self.fail_month and self.month_failures > 0:
-            self.month_failures -= 1
-            raise RuntimeError("провайдърът не отговори")
-        return f"Текст за {kwargs['month']}"
-
-    async def compose_period_overview(self, **kwargs):
-        self.overview_calls.append(kwargs)
-        if self.overview_failures > 0:
-            self.overview_failures -= 1
-            raise RuntimeError("провайдърът не отговори")
-        return "" if self.empty_overview else "Общият преглед"
-
-
-class OrchestrationTest(CalendarBase):
-    def run_report(self, interpreter, calendar=None):
-        async def go():
-            steps = []
-            async for step in period_report.run_period_report(
-                    interpreter, calendar=calendar or self.cal, natal_chart=self.a, partner_chart=self.ivan,
-                    report_type="love", user_name="A", partner_name="Иван", question="Общ проект",
-                    partner_gender="male", report_date="2026-10-09", retry_pause=0):
-                steps.append(step)
-            return steps
-        return asyncio.run(go())
-
-    def test_steps_come_in_order_and_the_overview_gets_everything(self):
-        fake = FakeInterpreter()
-        steps = self.run_report(fake)
-        self.assertEqual([s["type"] for s in steps], ["month_start", "month_complete", "month_start", "month_complete",
-                                                      "overview_start", "overview_complete", "finished"])
-        self.assertEqual([s["month"] for s in steps if s["type"] == "month_start"], ["Октомври 2026", "Ноември 2026"])
-        overview_args = fake.overview_calls[0]
-        self.assertEqual([t for t, _ in overview_args["month_texts"]], ["Октомври 2026", "Ноември 2026"])
-        self.assertEqual(overview_args["zone"], "Europe/Sofia")
-        self.assertEqual(overview_args["period"], PERIOD)
-        self.assertTrue(overview_args["has_partner"])
-        self.assertFalse([k for row in overview_args["calendar_rows"] for k in row if k.startswith("_")])
-        self.assertEqual(steps[-1]["overview"], "Общият преглед")
-
-    def test_one_automatic_retry_saves_the_month(self):
-        fake = FakeInterpreter(fail_month="2026-11", month_failures=1)
-        steps = self.run_report(fake)
-        self.assertEqual(steps[-1]["type"], "finished")
-        self.assertEqual(fake.month_calls, ["2026-10", "2026-11", "2026-11"])
-
-    def test_a_month_that_fails_twice_fails_the_report(self):
-        fake = FakeInterpreter(fail_month="2026-11", month_failures=2)
-        with self.assertRaises(period_report.ForecastGenerationError) as ctx:
-            self.run_report(fake)
-        self.assertEqual(ctx.exception.stage, "month:2026-11")
-        self.assertEqual(fake.overview_calls, [])               # без месец няма общ преглед
-
-    def test_the_overview_gets_one_retry_and_an_empty_one_fails(self):
-        self.assertEqual(self.run_report(FakeInterpreter(overview_failures=1))[-1]["type"], "finished")
-        with self.assertRaises(period_report.ForecastGenerationError) as ctx:
-            self.run_report(FakeInterpreter(empty_overview=True))
-        self.assertEqual(ctx.exception.stage, "overview")
-        with self.assertRaises(period_report.ForecastGenerationError):
-            self.run_report(FakeInterpreter(overview_failures=2))
-
-    def test_saved_content_and_markdown_put_the_overview_first(self):
-        months = [("Октомври 2026", "<p>о</p>"), ("Ноември 2026", "<p>н</p>")]
-        saved = period_report.saved_content("<p>Преглед</p>", months)
-        self.assertTrue(saved.startswith("<h2>Общ преглед на периода</h2>\n<p>Преглед</p>\n\n<h2>Октомври 2026</h2>"))
-        text = period_report.markdown_report("Преглед", months, has_partner=True, question="Въпрос",
-                                             user_display="A", partner_display="Иван")
-        self.assertTrue(text.startswith("# Прогноза за Връзка (Октомври 2026 - Ноември 2026)"))
-        self.assertLess(text.index("## Общ преглед на периода"), text.index("## Прогноза за Октомври 2026"))
-        self.assertIn("**Анализ за A и Иван**", text)
-
-
-class PromptTest(CalendarBase):
-    """Подканите към AI с истинския интерпретатор: подменен е само мрежовият вик."""
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
-
-    def run_calls(self, calendar, pair=True, question="Общ проект"):
-        calls = []
-
-        async def fake_call(_self, system_prompt, user_prompt, max_tokens, **kwargs):
-            calls.append((system_prompt, user_prompt))
-            return "<p>Текст</p>"
-
-        async def go():
-            async for _ in period_report.run_period_report(
-                    self.interp, calendar=calendar, natal_chart=self.a, partner_chart=self.ivan if pair else None,
-                    report_type="love", user_name="A", partner_name="Иван" if pair else None, question=question,
-                    partner_gender="male", report_date="2026-10-09", retry_pause=0):
-                pass
-        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
-                mock.patch.object(ai_interpreter.AIInterpreter, "_call_api", new=fake_call):
-            asyncio.run(go())
-        return calls
-
-    def test_month_prompts_carry_zone_report_date_and_the_calendar_rules(self):
-        calls = self.run_calls(self.cal)
-        self.assertEqual(len(calls), 3)                                             # два месеца и общ преглед
-        for (system, user), month in zip(calls[:2], ("2026-10", "2026-11")):
-            self.assertIn("REPORT DATE: 2026-10-09 (Europe/Sofia)", user)
-            self.assertIn("WHOLE REPORT PERIOD: 2026-10-01 to 2026-11-30 (Europe/Sofia)", user)
-            self.assertIn(f"TIMELINE EVENTS FOR {month}", user)
-            self.assertIn("ONE row per aspect", system)
-            self.assertIn("NEVER write that such an aspect is exact", system)
-            self.assertIn("Never shift a date, never convert to UTC", system)
-            self.assertNotIn("'orb')", system)                                       # старото поле „orb“ го няма
-            events = section_json(user, f"TIMELINE EVENTS FOR {month}")
-            self.assertTrue(events)
-            for row in events:
-                self.assertFalse([k for k in row if k.startswith("_")], row["id"])
-                if row["type"] == "TRANSIT":
-                    self.assertIn("state_in_month", row)
-                    self.assertIn("exact_this_month", row)
-                elif row.get("outside_period"):
-                    self.assertFalse(row["when"].startswith(month))              # контекстна станция извън периода (Фаза 17)
-                else:
-                    self.assertTrue(row["when"].startswith(month))
-        self.assertIn("Partner", {r["target"] for r in section_json(calls[0][1], "TIMELINE EVENTS FOR 2026-10")
-                                  if r["type"] == "TRANSIT"})
-        for text in (calls[0][1], calls[1][1], calls[2][1]):
-            for internal in ("_utc", "_sort", "_exact_utc", "_pass_count"):
-                self.assertNotIn(internal, text)
-
-    def test_overview_prompt_has_calendar_months_question_and_no_natal_data(self):
-        system, user = self.run_calls(self.cal)[2]
-        self.assertIn("MODE: PERIOD OVERVIEW", system)
-        self.assertIn("450 words", system)
-        self.assertIn("Never describe an aspect as exact", system)
-        self.assertIn("what each of them should do", system)
-        self.assertIn("REPORT DATE: 2026-10-09 (Europe/Sofia)", user)
-        self.assertIn("--- PERIOD CALENDAR (CALCULATED) ---", user)
-        self.assertIn("### Октомври 2026\n<p>Текст</p>", user)
-        self.assertIn("### Ноември 2026\n<p>Текст</p>", user)
-        self.assertIn("User Question: Общ проект", user)
-        self.assertNotIn("NATAL CHART", user)
-        calendar_rows = section_json(user, "PERIOD CALENDAR (CALCULATED)")
-        self.assertEqual(len(calendar_rows), len(self.cal.events) + len(self.cal.context_events))
-        neptune = next(r for r in calendar_rows if r["id"] == "AS:Partner:Neptune:Square:Neptune")
-        self.assertEqual(len(neptune["exact"]), 1)
-
-    def test_single_person_overview_is_shorter_and_has_no_pair_line(self):
-        single = self.scanner.build_calendar(self.a, PERIOD[0], PERIOD[1], A_BIRTH["lat"], A_BIRTH["lon"])
-        system, user = self.run_calls(single, pair=False)[2]
-        self.assertIn("350 words", system)
-        self.assertNotIn("what each of them should do", system)
-        self.assertNotIn("second_person", user)
 
 
 class EndpointTest(unittest.TestCase):

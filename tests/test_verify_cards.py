@@ -53,6 +53,49 @@ class OfflineVerificationTest(unittest.TestCase):
         problems, counts = vc.verify(text, people, sky, "single_snapshot", 8)
         self.assertEqual((problems, counts["house_line"]), ([], 0))                     # без час няма ред за домове
 
+    def test_natal_single_cards_and_their_interpretations_are_verified(self):
+        text, people, names = vc.offline_text("natal_single", ("A",), None, ("career", "", "Как да избера работа?"))
+        for person, display in zip(people, names):
+            person["name"] = display
+        problems, counts = vc.verify(text, people, None, "natal_single")
+        self.assertEqual(problems, [])
+        for kind in ("placement", "aspect"):
+            self.assertGreater(counts[kind], 0, kind)
+        self.assertGreater(counts["interpretations"], 5)
+        self.assertEqual(counts["closing"], 4)                                           # обща картина, съвети, отговор, заключение
+        self.assertIn("Асцендентът на", text)                                             # ъглите са карти при известен час
+        unknown_text, unknown_people, unknown_names = vc.offline_text("natal_single", ("IVAN_NO_TIME",), None, ("general", "", ""))
+        for person, display in zip(unknown_people, unknown_names):
+            person["name"] = display
+        self.assertEqual(vc.verify(unknown_text, unknown_people, None, "natal_single")[0], [])
+        self.assertNotIn("Асцендент", unknown_text)                                       # без час няма ъгли и домове
+        self.assertNotIn(" дом", unknown_text.split("## Обща картина")[0])
+
+    def test_a_tampered_natal_single_heading_is_detected(self):
+        text, people, names = vc.offline_text("natal_single", ("A",), None, ("love", "", ""))
+        for person, display in zip(people, names):
+            person["name"] = display
+        sun = next(l for l in text.splitlines() if l.startswith("### Слънцето на"))
+        for old, new in ((" е в Водолей ", " е в Телец "), ("(26°30')", "(25°30')"), (", в 9-ти дом", ", в 10-и дом")):
+            if old in sun:
+                self.assertTrue(vc.verify(text.replace(sun, sun.replace(old, new, 1), 1), people, None, "natal_single")[0], old)
+        angle = next(l for l in text.splitlines() if l.startswith("### Асцендентът на"))
+        self.assertTrue(vc.verify(text.replace(angle, angle.replace("Близнаци", "Лъв"), 1), people, None, "natal_single")[0])            # друг знак
+        self.assertTrue(vc.verify(text.replace(angle, angle[:-1] + ", в 1-ви дом.", 1), people, None, "natal_single")[0])           # ъгълът няма дом
+
+    def test_facts_inside_the_interpretations_of_a_natal_single_report_are_detected(self):
+        text, people, names = vc.offline_text("natal_single", ("A",), None, ("general", "", "Как да избера работа?"))
+        for person, display in zip(people, names):
+            person["name"] = display
+        filler = "Това изисква търпение и ясни граници в разговорите."
+        for dirty in ("Марс помага тук.", "Тук е важно да сте в Телец.", "В 7-ми дом е по-лесно.", "Градусът 12°30 е важен.", "Тригонът носи лекота."):
+            self.assertTrue(vc.verify(text.replace(filler, dirty, 1), people, None, "natal_single")[0], dirty)
+        summary = "Общата картина е спокойна и изисква търпение."
+        for dirty in ("Венера е в Козирог.", "Асцендентът дава увереност.", "Квадратурата тежи."):
+            self.assertTrue(vc.verify(text.replace(summary, dirty, 1), people, None, "natal_single")[0], dirty)
+        for fine in ("Очакванията ви съвпадат повече, отколкото си мислите.", "Не влизайте в опозиция с близките си."):
+            self.assertEqual(vc.verify(text.replace(filler, fine, 1), people, None, "natal_single")[0], [], fine)
+
 
 if __name__ == "__main__":
     unittest.main()

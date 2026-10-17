@@ -224,6 +224,15 @@ COMPOSE_SYSTEM = (
 )
 
 
+NATAL_RESTORE_SYSTEM = (
+    "You write ONE short interpretation for ONE pre-written fact card of a natal analysis. Output only the interpretation text, no tags.\n"
+    "THEME: {theme}\n"
+    "Write 2-3 sentences about THAT card only: what it means for the person (or for the pair), in plain words. The heading already names "
+    "the planets, the sign, the house, the aspect and the orb: do NOT name any planet, sign, house, aspect or degree. Start directly with "
+    "the meaning. Be direct and concrete, no filler, no predictions. Write in Bulgarian.\n"
+)
+
+
 class NatalPair(CardMode):
     name = "natal_pair"
     stage = "natalpair"
@@ -233,6 +242,7 @@ class NatalPair(CardMode):
     strict_cards = True
     closing_names_forbidden = True
     advice_title = "Какво да имате предвид"
+    facts_stage = "natal"
 
     def build(self, ctx: Context):
         return build_cards(ctx), {}
@@ -251,6 +261,9 @@ class NatalPair(CardMode):
 
     def compose_system(self, ctx: Context, answer_tag: str) -> str:
         return COMPOSE_SYSTEM.format(theme=ctx.theme, first=ctx.first, second=ctx.second, relation=self._relation(ctx), answer_tag=answer_tag)
+
+    def restore_system(self, ctx: Context) -> str:
+        return NATAL_RESTORE_SYSTEM.format(theme=ctx.theme)
 
     def user_prompt(self, interp, ctx: Context, cards: List[Card], lines: Dict[str, str]) -> str:
         user = f"User Question: {ctx.question or 'Provide a synastry analysis for this relationship.'}\n\n"

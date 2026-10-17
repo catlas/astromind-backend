@@ -396,11 +396,6 @@ def _date_mentions(text: str) -> List[Tuple[int, int, int, int]]:
     return out
 
 
-def _any_date(text: str) -> Optional[Tuple[int, int]]:
-    found = _date_mentions(text)
-    return (found[0][0], found[0][1]) if found else None
-
-
 def allowed_dates(cards: List[Card], calendar: PeriodCalendar) -> set:
     """Датите (месец, ден) от заглавията на включените карти и границите на периода: само те могат да се споменават в затварящите блокове."""
     out = {(int(calendar.start[5:7]), int(calendar.start[8:10])), (int(calendar.end[5:7]), int(calendar.end[8:10]))}
@@ -624,12 +619,13 @@ async def run_period_report(
     partner_name: Optional[str], question: str, gender: Optional[str] = None, partner_gender: Optional[str] = None, language: str = "bg",
     report_date: Optional[str] = None, retry_pause: Optional[float] = None, relation: str = "",
 ) -> AsyncIterator[Dict[str, Any]]:
-    """Същите събития като period_report.run_period_report: month_start, month_complete, part_replaced (по изключение), overview_start,
-    overview_complete и finished. Хвърля period_report.ForecastGenerationError."""
+    """Събитията на задачата: month_start, month_complete (за всеки месец), overview_start, overview_complete и накрая finished (със
+    събраните текстове). Хвърля period_report.ForecastGenerationError."""
     retry_pause = period_report.RETRY_PAUSE_SECONDS if retry_pause is None else retry_pause
     first = factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT)
     second = factpack.display_name(partner_name, factpack.SECOND_PERSON_DEFAULT) if partner_chart is not None else ""
     people = f"{first} and {second}" if second else first
+    identity = factpack.identity_section(first, gender, second, partner_gender) if second else factpack.identity_section(first, gender)
     report_date = report_date or period_report.today_in_zone(calendar.timezone)
     theme = interpreter_theme(report_type)
     rel = natal_pair.Relevance(report_type, relation, question)
@@ -702,7 +698,7 @@ async def run_period_report(
                 blocks = "".join(f"[{c.id}] {c.heading}\n{c.text}\n\n" for c in kept)
                 composed = await _ai(interpreter, MONTH_COMPOSE_SYSTEM.format(theme=theme, relation_line=_relation_line(relation), people=people,
                                                                               month=title, zone=calendar.timezone),
-                                     f"VERIFIED CARDS:\n{blocks}Write the section now, in Bulgarian.", f"month:{month}:compose", retry_pause)
+                                     f"{identity}VERIFIED CARDS:\n{blocks}Write the section now, in Bulgarian.", f"month:{month}:compose", retry_pause)
                 parsed = parse_sections(composed, {"MONTH"})
                 checked, codes = await card_engine._check_block(
                     interpreter, restrict_events(facts, kept), f"period:{month}:compose:MONTH", parsed.get("MONTH", ""), checks,
@@ -730,7 +726,7 @@ async def run_period_report(
         answer_tag = "[[ANSWER]]  a direct answer to the user's question in 3-5 sentences, based only on the blocks.\n" if question else ""
         system = OVERVIEW_SYSTEM.format(theme=theme, relation_line=_relation_line(relation), people=people, period=f"{calendar.start} - {calendar.end}",
                                         zone=calendar.timezone, answer_tag=answer_tag)
-        user = f"User question: {question or 'none'}\n\nVERIFIED BLOCKS:\n{blocks_text}{advice_text}Write the sections now, in Bulgarian."
+        user = f"User question: {question or 'none'}\n\n{identity}VERIFIED BLOCKS:\n{blocks_text}{advice_text}Write the sections now, in Bulgarian."
         needed = ["SUMMARY", "ADVICE"] + (["ANSWER"] if question else []) + ["CONCLUSION"]
         overview_blocks: Dict[str, str] = {}
         for attempt in (1, 2):

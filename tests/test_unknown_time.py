@@ -601,7 +601,8 @@ class RealPromptTest(unittest.TestCase):
                           "reminder": birthtime.reminder.get()})
             if is_period_prompt(system_prompt):
                 return period_reply(system_prompt, user_prompt)    # прогноза по карти: карти от кода, AI тълкува
-            if "SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt:
+            if ("SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt
+                    or "MODE: ONE-PERSON NATAL ANALYSIS. You INTERPRET" in system_prompt):
                 return pair_reply(user_prompt)                   # анализ по карти: карти от кода, AI тълкува
             return "<p>Подменен текст.</p>"
         with mock.patch.object(main.ai_interpreter, "_call_api", record):

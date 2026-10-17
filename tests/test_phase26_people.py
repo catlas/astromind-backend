@@ -134,16 +134,36 @@ class RelationshipTitlesTest(unittest.TestCase):
         self.assertEqual(relationship.adapt(self.TEMPLATE), self.TEMPLATE)               # без контекст нищо не се променя
 
     def test_the_real_templates_are_adapted_in_every_request(self):
-        templates = [v for name in dir(ai_interpreter) for v in [getattr(ai_interpreter, name)]
-                     if isinstance(v, dict) for v in v.values() if isinstance(v, str) and "Romantic Atmosphere" in v]
+        """Шаблоните на темите за период са архивирани (archive/legacy_period_flow_2026-10-12.txt). Остава истинският текст на фокуса за двойка:
+        той се подменя при друг контекст, а подканите по карти не носят романтични шаблони, така че нищо не остава непроменено."""
+        templates = [text for kind in ("love", "general", "career", "money", "health", "karmic")
+                     for text in [ai_interpreter.AIInterpreter._get_synastry_type_focus(kind)]
+                     if any(old in text for old, _ in relationship._NEUTRAL)]
         self.assertTrue(templates)
         token = relationship.bind("friend")
         try:
             for template in templates:
-                self.assertNotIn("Romantic Atmosphere", relationship.adapt(template))
+                adapted = relationship.adapt(template)
+                self.assertNotEqual(adapted, template)
+                for old, _ in relationship._NEUTRAL:
+                    self.assertNotIn(old, adapted)
         finally:
             relationship.unbind(token)
         self.assertEqual(relationship.current_code.get(), "")                                # връзката е свалена след анализа
+
+    def test_the_card_prompts_carry_no_romantic_templates_to_other_relations(self):
+        import card_engine
+        import natal_pair
+        import natal_single
+        import pair_snapshot
+        import period_cards
+        import single_snapshot
+        texts = [(module.__name__, name, value) for module in (card_engine, natal_pair, natal_single, pair_snapshot, period_cards, single_snapshot)
+                 for name, value in vars(module).items() if name.isupper() and isinstance(value, str)]
+        self.assertGreaterEqual(len(texts), 10)                                              # подканите са намерени, не празен списък
+        for module, name, value in texts:
+            for old, _ in relationship._NEUTRAL:
+                self.assertNotIn(old, value, msg=(module, name))
 
 
 class MemoryIdentityTest(unittest.TestCase):

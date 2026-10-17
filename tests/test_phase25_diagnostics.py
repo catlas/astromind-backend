@@ -142,7 +142,7 @@ class JobDiagnosticsTest(unittest.TestCase):
     def test_a_success_leaves_a_diagnostic_with_the_provider_usage(self):
         async def call(system_prompt, user_prompt, max_tokens, **kwargs):
             ai_budget.note_attempt("ollama", "ok", 0.0, 100, 50, model="тестов-модел")
-            return "<p>Анализ.</p>"
+            return testenv.pair_reply(user_prompt)                       # натален анализ за един човек е по карти: една заявка
         patches = [mock.patch.object(main.ai_interpreter, "_call_api", call),
                    mock.patch.object(main.ai_interpreter, "build_text_facts", return_value=None)]
         job = self.post("r16-ok@test.bg", patches=patches)

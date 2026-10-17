@@ -194,6 +194,7 @@ class Job(Base):
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     lease_until = Column(DateTime, nullable=True)
+    hidden = Column(Boolean, nullable=False, default=False, server_default="0")        # неуспешна или отказана задача, скрита от потребителя в История
 
 
 class Purchase(Base):

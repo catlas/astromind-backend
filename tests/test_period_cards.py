@@ -635,6 +635,125 @@ class OrderIndependenceTest(FlowBase):
         self.assertEqual(caught.exception.stage, "period:final")
 
 
+class RetryTest(FlowBase):
+    """Един автоматичен повторен опит на заявка към AI (период_report._attempt); втори провал е неуспешен отчет."""
+
+    @staticmethod
+    def flaky(marker, failures, empty=False):
+        state = {"failed": 0, "calls": {}}
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            key = marker if marker in system_prompt else "other"
+            state["calls"][key] = state["calls"].get(key, 0) + 1
+            if marker in system_prompt and state["failed"] < failures:
+                state["failed"] += 1
+                if empty:
+                    return ""
+                raise RuntimeError("провайдърът не отговори")
+            return period_reply(system_prompt, user_prompt)
+        fake.state = state
+        return fake
+
+    def test_one_automatic_retry_saves_the_month(self):
+        fake = self.flaky("MODE: MONTHLY FORECAST BY FACT CARDS", 1)
+        steps = self.run_report(fake)
+        self.assertEqual(steps[-1]["type"], "finished")
+        self.assertEqual(fake.state["calls"]["MODE: MONTHLY FORECAST BY FACT CARDS"], len(rs.calendar(False).months_with_events()) + 1)
+
+    def test_a_month_that_fails_twice_fails_the_report_and_there_is_no_overview(self):
+        fake = self.flaky("MODE: MONTHLY FORECAST BY FACT CARDS", 2)
+        with self.assertRaises(period_report.ForecastGenerationError) as caught:
+            self.run_report(fake)
+        self.assertEqual(caught.exception.stage, "month:2026-10")
+        self.assertNotIn("MODE: PERIOD OVERVIEW FROM VERIFIED BLOCKS", fake.state["calls"])                 # без месец няма общ преглед
+
+    def test_the_overview_gets_one_retry_and_an_empty_one_fails(self):
+        marker = "MODE: PERIOD OVERVIEW FROM VERIFIED BLOCKS"
+        self.assertEqual(self.run_report(self.flaky(marker, 1))[-1]["type"], "finished")
+        with self.assertRaises(period_report.ForecastGenerationError) as caught:
+            self.run_report(self.flaky(marker, 2, empty=True))
+        self.assertEqual(caught.exception.stage, "overview")
+        with self.assertRaises(period_report.ForecastGenerationError):
+            self.run_report(self.flaky(marker, 2))
+
+    def test_the_saved_content_puts_the_overview_first(self):
+        months = [("Октомври 2026", "<p>о</p>"), ("Ноември 2026", "<p>н</p>")]
+        saved = period_report.saved_content("<p>Преглед</p>", months)
+        self.assertTrue(saved.startswith("<h2>Общ преглед на периода</h2>\n<p>Преглед</p>\n\n<h2>Октомври 2026</h2>"))
+        self.assertTrue(period_report.saved_content("<p>Преглед</p>", months, note="Бележка").startswith("<h2>Общ преглед на периода</h2>\nБележка\n\n"))
+
+
+class PromptTest(FlowBase):
+    """Подканите към AI с истинския интерпретатор и подменен само мрежовият вик: картите са от кода, а общият преглед е само от проверените
+    блокове."""
+
+    def prompts(self, pair, question="Как да говорим спокойно в разговор?", relation="", gender=None, partner_gender=None):
+        calls = []
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            calls.append((system_prompt, user_prompt))
+            return period_reply(system_prompt, user_prompt)
+        cal = rs.calendar(pair)
+
+        async def go():
+            return [s async for s in period_cards.run_period_report(
+                self.interp, calendar=cal, natal_chart=rs.chart("A" if pair else "Ivan"), partner_chart=rs.chart("Ivan") if pair else None,
+                report_type="love", user_name=rs.A_NAME if pair else rs.IVAN, partner_name=rs.IVAN if pair else None, question=question,
+                gender=gender, partner_gender=partner_gender, report_date="2026-10-11", retry_pause=0, relation=relation)]
+        with mock.patch.object(self.interp, "_call_api", fake):
+            asyncio.run(go())
+        return calls, cal
+
+    def test_the_month_prompt_carries_the_zone_the_theme_the_question_the_people_and_the_cards_with_owners(self):
+        calls, cal = self.prompts(True, relation="romantic", gender="female", partner_gender="male")
+        system, user = calls[0]
+        self.assertEqual(len(calls), len(cal.months_with_events()) + 1)                    # месеците и общият преглед
+        self.assertIn("Month: Октомври 2026", system)
+        self.assertIn(f"All times are local time ({cal.timezone})", system)
+        self.assertIn("THEME: " + ai_interpreter.THEME_FOCUS["love"], system)
+        self.assertIn("relationship (romantic)", system)
+        self.assertIn("User Question: Как да говорим спокойно в разговор?", user)
+        self.assertIn("--- PEOPLE ---", user)
+        self.assertIn('"gender":"male"', user)
+        cards = [l for l in user.splitlines() if re.match(r"^M1E\d+: ", l)]
+        self.assertTrue(cards)
+        self.assertTrue(any(f" на {NAME_IVAN}:" in c for c in cards) and any(f" на {NAME_A}:" in c for c in cards))
+        for text in (system, user):
+            for internal in ("_utc", "_sort", "_exact_utc", "_pass_count", "state_in_month", "TIMELINE EVENTS", "NATAL CHART"):
+                self.assertNotIn(internal, text)
+        self.assertIn("never switch to", system)                                          # едно обръщение: „вие“
+
+    def test_the_overview_prompt_has_only_verified_blocks_the_question_and_the_people(self):
+        calls, cal = self.prompts(True, gender="female", partner_gender="male")
+        system, user = calls[-1]
+        self.assertIn("MODE: PERIOD OVERVIEW FROM VERIFIED BLOCKS", system)
+        self.assertIn("User question: Как да говорим спокойно в разговор?", user)
+        self.assertIn("--- PEOPLE ---", user)
+        self.assertIn("MONTH ADVICE 2026-10:", user)
+        self.assertIn("[M1E1]", user)
+        for raw in ("PERIOD CALENDAR", "TIMELINE EVENTS", "NATAL CHART", "_utc"):
+            self.assertNotIn(raw, user)
+        self.assertIn("The window of a transit is not the end of a life process", system)
+        self.assertIn("[[ANSWER]]", system)
+
+    def test_a_single_person_prompt_has_no_second_person_and_no_answer_without_a_question(self):
+        calls, _cal = self.prompts(False, question="")
+        for system, user in calls:
+            self.assertNotIn("second_person", user)
+        system, user = calls[-1]
+        self.assertNotIn("[[ANSWER]]", system)
+        self.assertNotIn(" and ", system.split("People:")[1].split(".")[0])
+
+
+class LabelsTest(FlowBase):
+    def test_an_internal_label_in_a_card_text_is_repaired_and_never_reaches_the_report(self):
+        label = "Състоянието (state_in_month: approaching) е известно."
+        steps = self.run_report(self.ai(card=lambda i: label if i == "M1E2" else None, repair=lambda _p: GOOD_CARD))
+        whole = steps[-1]["overview"] + "".join(t for _t, t in steps[-1]["month_texts"])
+        self.assertNotIn("state_in_month", whole)
+        self.assertEqual(next(c for c in steps[-1]["checks"] if c["stage"] == "period_cards")["quality"], "full")
+
+
 ENFORCED = {"BALANCE_ENFORCED": "1"}
 FORECAST = {"is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-01-31"}
 

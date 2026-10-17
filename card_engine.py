@@ -89,6 +89,7 @@ class CardMode:
     strict_cards = False                           # в тълкуването на карта: без други планети, аспекти, знаци и домове
     closing_names_forbidden = False                # в затварящите блокове: без планети, аспекти, знаци и домове (само смисъл)
     advice_title = "Какво да имате предвид в този ден"
+    facts_stage = "snapshot"                       # етапът в дневниците при липсващи факти (натални режими: „natal“)
 
     def build(self, ctx: Context) -> Tuple[List[Card], Dict[str, str]]:
         raise NotImplementedError
@@ -110,6 +111,18 @@ class CardMode:
 
     def owner_of(self, group: str, ctx: Context) -> str:
         return ctx.first if group == "A" else ctx.second
+
+    def restore_system(self, ctx: Context) -> str:
+        """Подканата за възстановяване на една карта (нова заявка само за нея)."""
+        return RESTORE_SYSTEM.format(theme=ctx.theme)
+
+    def card_check(self, card: Card):
+        """extra_check за тълкуването на карта. Режимите могат да добавят свои правила към общите (card_scope)."""
+        return card_scope(card, self.strict_cards)
+
+    def closing_check(self, text: str) -> List[Violation]:
+        """Правилата за затварящите блокове (обобщение, съвети, отговор, заключение), освен покритието на въпроса."""
+        return closing_scope(text) if self.closing_names_forbidden else []
 
 
 def parse_sections(text: str, known=None) -> Dict[str, str]:
@@ -256,7 +269,7 @@ def minimum_met(cards: List[Card], original: Dict[str, int], person_groups: Tupl
 
 
 async def _check_composition(interp, facts, sections: Dict[str, str], question: str, checks: List[Dict], stage_prefix: str,
-                             names_forbidden: bool = False) -> Dict[str, str]:
+                             closing: Optional[Callable[[str], List[Violation]]] = None) -> Dict[str, str]:
     needed = [t for t in COMPOSITION if t != "ANSWER" or question]
     missing = [t for t in needed if not sections.get(t)]
     if missing:
@@ -264,8 +277,8 @@ async def _check_composition(interp, facts, sections: Dict[str, str], question: 
     out: Dict[str, str] = {}
     for tag in needed:
         coverage = question_coverage(question) if tag == "ANSWER" else None
-        if names_forbidden:
-            extra = (lambda t, c=coverage: closing_scope(t) + (c(t) if c else []))
+        if closing is not None:
+            extra = (lambda t, c=coverage: closing(t) + (c(t) if c else []))
         else:
             extra = coverage
         checked, codes = await _check_block(interp, facts, f"{stage_prefix}:{tag}", sections[tag], checks, extra)
@@ -284,7 +297,7 @@ async def _compose(interp, mode: CardMode, ctx: Context, facts, cards: List[Card
     raw = await interp._call_api(system_prompt=system, user_prompt=user, max_tokens=interp.max_output_tokens)
     sections = parse_sections(raw, set(COMPOSITION))
     return await _check_composition(interp, restrict(facts, kept), sections, ctx.question, checks, f"{mode.stage}:compose",
-                                    mode.closing_names_forbidden)
+                                    mode.closing_check if mode.closing_names_forbidden else None)
 
 
 RESTORE_SYSTEM = (
@@ -299,7 +312,7 @@ RESTORE_SYSTEM = (
 
 async def _restore(interp, mode: CardMode, ctx: Context, facts, card: Card, checks: List[Dict]) -> bool:
     """Възстановяване на провалена карта: нова заявка само за нея и същата проверка. Връща дали е възстановена."""
-    system = RESTORE_SYSTEM.format(theme=ctx.theme)
+    system = mode.restore_system(ctx)
     user = (f"People: {ctx.first}" + (f" and {ctx.second}" if ctx.partner_chart else "") + (f". Chosen moment: {ctx.target_date}." if ctx.target_date else ".") + "\n"
             f"CARD {card.id}: {card.heading}\nWrite the interpretation now, in Bulgarian.")
     try:
@@ -308,7 +321,7 @@ async def _restore(interp, mode: CardMode, ctx: Context, facts, card: Card, chec
         raise                                                    # спрян бюджет не е „неуспешно възстановяване“
     except Exception:
         return False
-    checked, _codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}:restore", raw, checks, card_scope(card, mode.strict_cards))
+    checked, _codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}:restore", raw, checks, mode.card_check(card))
     if checked is None:
         return False
     card.text, card.removed = checked, False
@@ -337,7 +350,7 @@ def assemble(mode: CardMode, ctx: Context, cards: List[Card], lines: Dict[str, s
 
 async def run(interp, mode: CardMode, ctx: Context, checks: List[Dict]) -> str:
     facts = interp.build_text_facts(**mode.facts_kwargs(ctx))
-    interp.require_text_facts(facts, stage="snapshot", checks=checks)
+    interp.require_text_facts(facts, stage=mode.facts_stage, checks=checks)
 
     cards, lines = mode.build(ctx)
     original = {g: sum(1 for c in cards if c.group == g) for g in mode.groups}
@@ -363,7 +376,7 @@ async def run(interp, mode: CardMode, ctx: Context, checks: List[Dict]) -> str:
         if not raw_text:
             card.removed, failed[card.id] = True, "missing"
         else:
-            checked, codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}", raw_text, checks, card_scope(card, mode.strict_cards))
+            checked, codes = await _check_block(interp, restrict(facts, [card]), f"{mode.stage}:{card.id}", raw_text, checks, mode.card_check(card))
             if checked is None:
                 card.removed, failed[card.id] = True, codes
             else:
@@ -393,7 +406,7 @@ async def run(interp, mode: CardMode, ctx: Context, checks: List[Dict]) -> str:
     if not removed:
         try:
             blocks = await _check_composition(interp, restrict(facts, kept), sections, ctx.question, checks, f"{mode.stage}",
-                                              mode.closing_names_forbidden)
+                                              mode.closing_check if mode.closing_names_forbidden else None)
         except text_guard.TextCheckError as failure:
             checks.append({"stage": f"{mode.stage}:composition", "mode": "enforce", "result": "fallback", "codes": failure.outcome.codes()[:60]})
             blocks = {}

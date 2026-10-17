@@ -285,8 +285,9 @@ class PromptPayloadTest(Phase8Base):
 
         async def fake_call(_self, system_prompt, user_prompt, max_tokens, **kw):
             calls.append((system_prompt, user_prompt, kw))
-            if "SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt:
-                return testenv.pair_reply(user_prompt)              # анализ по карти (за дата; натален за двама): карти от кода, AI тълкува
+            if ("SNAPSHOT for ONE chosen" in system_prompt or "TWO-PERSON NATAL ANALYSIS (SYNASTRY)" in system_prompt
+                    or "MODE: ONE-PERSON NATAL ANALYSIS. You INTERPRET" in system_prompt):
+                return testenv.pair_reply(user_prompt)              # анализ по карти (за дата; натален за един и за двама): карти от кода, AI тълкува
             return "<p>ok</p>"
 
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
@@ -304,8 +305,29 @@ class PromptPayloadTest(Phase8Base):
         if mode == "snapshot":
             kw.update(transit_chart=self.t_pair if pair else self.t_ivan, target_date="2026-10-08 12:00")
         elif mode == "period":
-            kw.update(calendar=self.calendar_pair if pair else self.calendar_ivan)
+            return self.capture_period(pair, theme, kw)
         return self.capture(**kw)
+
+    def capture_period(self, pair, theme, kw):
+        """Прогнозата за период е по карти (period_cards.py): подканите на двата месеца и на общия преглед."""
+        import period_cards
+        calls = []
+
+        async def fake_call(_self, system_prompt, user_prompt, max_tokens, **kwargs):
+            calls.append((system_prompt, user_prompt, kwargs))
+            return testenv.period_reply(system_prompt, user_prompt)
+
+        async def go():
+            async for _ in period_cards.run_period_report(
+                    self.interp, calendar=self.calendar_pair if pair else self.calendar_ivan, natal_chart=kw["natal_chart"],
+                    partner_chart=kw.get("partner_chart"), report_type=theme, user_name=kw["user_name"], partner_name=kw.get("partner_name"),
+                    question=kw["question"], gender=kw.get("gender"), partner_gender=kw.get("partner_gender"), report_date="2026-10-08",
+                    retry_pause=0):
+                pass
+        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}), \
+                mock.patch.object(ai_interpreter.AIInterpreter, "_call_api", new=fake_call):
+            asyncio.run(go())
+        return calls
 
     def test_all_36_combinations_are_clean_and_labelled(self):
         for target in ("single", "pair"):
@@ -332,18 +354,18 @@ class PromptPayloadTest(Phase8Base):
                             else:
                                 self.assertNotIn('"second_person"', user)
 
-    def test_every_natal_block_has_twelve_cusps_with_ruler(self):
-        """Единичният натален анализ носи наталния блок; двамата са по карти (natal_pair.py): картите за собствената карта са от кода."""
+    def test_every_natal_analysis_is_by_cards_without_raw_charts(self):
+        """Натален анализ за един (natal_single.py) и за двама (natal_pair.py) е по карти: фактите за собствената карта са от кода."""
         for theme in THEMES:
             with self.subTest(target="single", theme=theme):
                 _, user, _ = self.case("single", "natal", theme)[0]
-                charts = [p for t, p in parse_sections(user).items() if t.endswith("NATAL CHART")]
-                self.assertEqual(len(charts), 1)
-                for chart in charts:
-                    self.assertEqual(len(chart["houses"]), 12)
-                    for row in chart["houses"].values():
-                        self.assertEqual(set(row), {"cusp", "ruler"})
-                        self.assertTrue(row["cusp"].split()[0] in SIGNS)
+                own = [l for l in user.splitlines() if re.match(r"^A\d+: ", l)]
+                self.assertTrue(own)
+                self.assertTrue(all(" на Иван" in l for l in own))
+                self.assertTrue(any("Асцендентът на Иван" in l for l in own))             # ъглите са карти при известен час
+                self.assertTrue(any(", в " in l and " дом." in l for l in own))             # позиции със знак, градуси и дом
+                self.assertNotIn("NATAL CHART ---", user)                          # без сурови карти, от които AI да смята
+                self.assertNotIn('"cusp"', user)
             with self.subTest(target="pair", theme=theme):
                 _, user, _ = self.case("pair", "natal", theme)[0]
                 own = [l for l in user.splitlines() if re.match(r"^[AB]\d+: ", l)]
@@ -407,27 +429,33 @@ class PromptPayloadTest(Phase8Base):
                 find_section(sections, "ИВАН NATAL ASPECTS (CALCULATED)")       # преди липсваше за втория човек
                 self.assertNotIn("TRANSIT PLANETARY POSITIONS", user)            # няма сурови позиции, от които AI да смята
 
-    def test_period_prompts_have_separate_house_fields_and_both_overlays(self):
+    def test_period_prompts_are_by_cards_with_the_owner_the_zone_and_only_verified_blocks_in_the_overview(self):
+        """Прогноза за период (period_cards.py): подканата на месеца носи картите с притежател във всяко заглавие, а общият преглед - само
+        проверените блокове (без суров календар и без сурови карти)."""
         for target in ("single", "pair"):
             for theme in THEMES:
                 with self.subTest(target=target, theme=theme):
                     calls = self.case(target, "period", theme)
-                    self.assertIn("PERIOD CALENDAR (CALCULATED)", calls[-1][1])      # последната заявка е общият преглед
-                    for system, user, _ in calls[:-1]:
-                        sections = parse_sections(user)
-                        events = find_section(sections, "TIMELINE EVENTS FOR")
-                        transits = [e for e in events if e["type"] == "TRANSIT"]
+                    calendar = self.calendar_pair if target == "pair" else self.calendar_ivan
+                    for system, user, _ in calls[:2]:
+                        self.assertIn(calendar.timezone, system)
+                        cards = [l for l in user.splitlines() if re.match(r"^M\d+E\d+: ", l)]
+                        self.assertTrue(cards)
+                        transits = [l for l in cards if "Транзитн" in l]
                         self.assertTrue(transits)
-                        for event in transits:
-                            self.assertIn("transit_planet_natal_house", event)
-                            self.assertIn("natal_planet_natal_house", event)
-                            self.assertNotIn("house_impact", event)
+                        owners = {"A", "Иван"} if target == "pair" else {"Иван"}
+                        for line in transits:
+                            self.assertTrue(any(f" на {owner}:" in line for owner in owners), line)        # изричен притежател
                         if target == "pair":
-                            find_section(sections, "PARTNER PLANETS IN USER'S NATAL HOUSES (CALCULATED)")
-                            find_section(sections, "A PLANETS IN ИВАН'S NATAL HOUSES (CALCULATED)")
-                            self.assertTrue(any(e["target"] == "Partner" for e in transits))
-                        self.assertNotIn("Оцени вероятността", system)
-                        self.assertIn("NO PERCENTAGES", system)
+                            self.assertTrue(any(" на Иван:" in l for l in transits) and any(" на A:" in l for l in transits))
+                        for raw in ("TIMELINE EVENTS", "PERIOD CALENDAR", "NATAL CHART", "house_impact", "state_in_month"):
+                            self.assertNotIn(raw, user)
+                    system, user, _ = calls[-1]
+                    self.assertIn("MODE: PERIOD OVERVIEW FROM VERIFIED BLOCKS", system)
+                    self.assertIn("VERIFIED BLOCKS", user)
+                    self.assertIn("MONTH ADVICE 2026-10", user)
+                    for raw in ("PERIOD CALENDAR", "TIMELINE EVENTS", "NATAL CHART"):
+                        self.assertNotIn(raw, user)
 
     def test_unnamed_people_get_neutral_names_not_user_or_account(self):
         calls = self.capture(natal_chart=self.a, partner_chart=self.ivan, report_type="love", question="")
@@ -496,7 +524,7 @@ class PeriodLimitEndpointsTest(unittest.TestCase):
 
     def test_stream_rejects_too_long_periods_without_calling_ai(self):
         h = register_and_login(self.client, "period-stream@test.bg")
-        with mock.patch.object(main.ai_interpreter, "_process_monthly_chunk") as chunk:
+        with mock.patch.object(main.ai_interpreter, "_call_api") as chunk:
             r = analyze(self.client, h, self.payload("2027-12-31"), stream=True)
             self.assertIn("най-много 3 месеца за един човек", r.text)
             limiter.reset()

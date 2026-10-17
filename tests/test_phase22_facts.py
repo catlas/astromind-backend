@@ -17,6 +17,7 @@ import testenv  # noqa: F401  (трябва да е преди engine)
 import ai_interpreter
 import jobs
 import main
+import period_cards
 import period_report
 import regression_support as rs
 import text_check as tc
@@ -160,32 +161,33 @@ class RefusalBeforeSpendTest(unittest.TestCase):
         self.assertEqual(caught.exception.stage, "snapshot")
 
     def test_warn_mode_still_calls_the_ai_and_returns_the_text(self):
-        fake = mock.AsyncMock(return_value="Слънцето е в Рак.")
+        calls = []
+
+        async def fake(system_prompt=None, user_prompt=None, **kwargs):
+            calls.append(system_prompt)
+            return testenv.pair_reply(user_prompt)                       # натален анализ за един човек е по карти
         with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "warn"}), mock.patch.object(self.interp, "_call_api", fake), \
                 mock.patch.object(self.interp, "build_text_facts", return_value=self.missing):
             text = asyncio.run(self.interp.interpret_chart(natal_chart=rs.chart("Ivan"), user_name="Иван"))
-        self.assertEqual(text, "Слънцето е в Рак.")
-        self.assertEqual(fake.await_count, 1)
+        self.assertIn("## Натална карта на Иван", text)
+        self.assertEqual(len(calls), 1)
 
     def test_a_period_report_sends_no_month_to_the_ai(self):
-        monthly, overview = mock.AsyncMock(return_value="текст"), mock.AsyncMock(return_value="преглед")
+        calls = []
+
+        async def fake(system_prompt=None, user_prompt=None, **kwargs):
+            calls.append(system_prompt)
+            return testenv.period_reply(system_prompt, user_prompt)
 
         async def go():
-            steps = []
-            async for step in period_report.run_period_report(
-                    self.interp, calendar=rs.calendar(False), natal_chart=rs.chart("Ivan"), partner_chart=None,
-                    report_type="general", user_name="Иван", partner_name=None, question="", report_date="2026-10-11",
-                    retry_pause=0):
-                steps.append(step)
-            return steps
+            return [step async for step in period_cards.run_period_report(
+                self.interp, calendar=rs.calendar(False), natal_chart=rs.chart("Ivan"), partner_chart=None,
+                report_type="general", user_name="Иван", partner_name=None, question="", report_date="2026-10-11", retry_pause=0)]
 
-        with mock.patch.object(self.interp, "_process_monthly_chunk", monthly), \
-                mock.patch.object(self.interp, "compose_period_overview", overview), \
-                mock.patch.object(self.interp, "build_text_facts", return_value=self.missing):
+        with mock.patch.object(self.interp, "_call_api", fake), mock.patch.object(self.interp, "build_text_facts", return_value=self.missing):
             with self.assertRaises(period_report.ForecastGenerationError) as caught:
                 asyncio.run(go())
-        self.assertEqual(monthly.await_count, 0)
-        self.assertEqual(overview.await_count, 0)
+        self.assertEqual(calls, [])                                             # нито една заявка към AI
         self.assertEqual(caught.exception.stage, "facts")
         self.assertIsInstance(caught.exception.cause, text_guard.TextCheckError)
         self.assertEqual(caught.exception.checks[0]["reason"], "facts_unavailable")
@@ -255,13 +257,11 @@ class JobEndToEndTest(unittest.TestCase):
         self.assertNotIn("Иван", str(job["error"]))                          # без лични данни в отказа
 
     def test_a_forecast_fails_before_any_month_is_generated_and_costs_nothing(self):
-        month, overview = mock.AsyncMock(return_value="<p>м</p>"), mock.AsyncMock(return_value="<p>о</p>")
+        call = mock.AsyncMock(return_value="<p>м</p>")
         body = {**CHART, "is_dynamic": True, "target_date": "2026-01-01", "end_date": "2026-01-31"}
-        job, before, after = self.run_failing_job("r01-forecast@test.bg", body, [
-            mock.patch.object(main.ai_interpreter, "_process_monthly_chunk", month),
-            mock.patch.object(main.ai_interpreter, "compose_period_overview", overview)])
+        job, before, after = self.run_failing_job("r01-forecast@test.bg", body, [mock.patch.object(main.ai_interpreter, "_call_api", call)])
         self.assertEqual(job["status"], "failed")
-        self.assertEqual((month.await_count, overview.await_count), (0, 0))
+        self.assertEqual(call.await_count, 0)
         self.assertEqual(job["charged_cents"], 0)
         self.assertEqual(after[:4], before[:4])
         self.assertEqual(after[4], before[4])

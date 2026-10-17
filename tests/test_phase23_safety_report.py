@@ -4,16 +4,12 @@
 Всяко правило има и верен контрол: безопасните съвети (пауза без екрани, консултация с лекар без отлагане) и обикновените думи
 („общ преглед“, „рожден ден“) не са нарушения. Финалната проверка на отчета е детерминирана и връща засегнатата част на поправка.
 """
-import asyncio
 import dataclasses
 import os
 import unittest
-from unittest import mock
 
 import testenv  # noqa: F401  (трябва да е преди engine)
 from testenv import OVERVIEW_OK
-import ai_interpreter
-import period_report
 import regression_support as rs
 import report_guard
 import safety
@@ -212,68 +208,6 @@ class CrossPartTest(unittest.TestCase):
         check = report_guard.part_check(parts, "overview", self.months, self.facts)
         self.assertEqual(check(OVERVIEW_OK + "<p>Финализирайте на 24 октомври.</p>"), [])
         self.assertTrue(check(OVERVIEW_OK + "<p>Не финализирайте на 24 октомври.</p>"))
-
-
-class FinalGuardFlowTest(unittest.TestCase):
-    """run_period_report с истинския интерпретатор: подменени са само вътрешните AI викове."""
-
-    def setUp(self):
-        self.interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
-        self.cal = rs.calendar(False)
-
-    def run_report(self, month, overview, repair):
-        async def monthly(**kwargs):
-            return month
-
-        async def go():
-            steps = []
-            async for step in period_report.run_period_report(
-                    self.interp, calendar=self.cal, natal_chart=rs.chart("Ivan"), partner_chart=None, report_type="general",
-                    user_name="Иван", partner_name=None, question="", report_date="2026-10-11", retry_pause=0):
-                steps.append(step)
-            return steps
-        with mock.patch.object(self.interp, "_process_monthly_chunk", side_effect=monthly), \
-                mock.patch.object(self.interp, "compose_period_overview", mock.AsyncMock(return_value=overview)), \
-                mock.patch.object(self.interp, "_call_api", repair):
-            return asyncio.run(go())
-
-    MONTH = "<p>Финализирайте проекта на 24 октомври, когато Меркурий е директен.</p>"
-
-    def test_a_contradicting_overview_is_repaired_before_it_is_shown(self):
-        bad = OVERVIEW_OK + "<p>Не финализирайте проекта на 24 октомври.</p>"
-        good = OVERVIEW_OK + "<p>Финализирайте проекта на 24 октомври.</p>"
-        repair = mock.AsyncMock(return_value=good)
-        steps = self.run_report(self.MONTH, bad, repair)
-        self.assertEqual(repair.await_count, 1)
-        self.assertEqual(steps[-1]["overview"], good)
-        self.assertEqual([c["stage"] for c in steps[-1]["checks"]][-1], "final:overview")
-        self.assertEqual([s["type"] for s in steps].index("overview_complete") < [s["type"] for s in steps].index("finished"), True)
-
-    def test_a_consistent_report_costs_no_extra_ai_call(self):
-        repair = mock.AsyncMock(side_effect=AssertionError("поправка не трябва да се вика"))
-        steps = self.run_report(self.MONTH, OVERVIEW_OK + "<p>Финализирайте проекта на 24 октомври.</p>", repair)
-        self.assertEqual(steps[-1]["type"], "finished")
-        self.assertEqual(repair.await_count, 0)
-
-    def test_an_unresolved_contradiction_fails_the_report_and_nothing_is_finished(self):
-        bad = OVERVIEW_OK + "<p>Не финализирайте проекта на 24 октомври.</p>"
-        repair = mock.AsyncMock(return_value=bad)               # поправката не поправя
-        steps = []
-        with self.assertRaises(period_report.ForecastGenerationError) as caught:
-            steps = self.run_report(self.MONTH, bad, repair)
-        self.assertEqual(caught.exception.stage, "final:overview")
-        self.assertIsInstance(caught.exception.cause, text_guard.TextCheckError)
-        self.assertEqual(steps, [])
-
-    def test_a_month_with_a_missing_month_claim_is_replaced_and_announced(self):
-        month = "<p>Няма данни за октомври, затова започвайте спокойно.</p>"
-        fixed = "<p>Започвайте спокойно през октомври.</p>"
-        repair = mock.AsyncMock(return_value=fixed)
-        steps = self.run_report(month, OVERVIEW_OK, repair)
-        replaced = [s for s in steps if s["type"] == "part_replaced"]
-        self.assertEqual(len(replaced), 1)
-        self.assertEqual(replaced[0]["text"], fixed)
-        self.assertEqual(steps[-1]["month_texts"][0][1], fixed)
 
 
 class RepairPromptTest(unittest.TestCase):

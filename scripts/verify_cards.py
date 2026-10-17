@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Възпроизводима сверка на картите с факти (pair_snapshot, single_snapshot, natal_pair) с фиксирани тестови данни.
+Възпроизводима сверка на картите с факти (pair_snapshot, single_snapshot, natal_pair, natal_single) с фиксирани тестови данни.
 
 Какво проверява: заглавията на картите в готов анализ (или построени от кода при --offline) срещу ИЗЧИСЛЕНИЕ, направено наново и
 по друг път: позициите идват от Swiss Ephemeris през engine.calculate_chart, но аспектите, орбисите, знаците, градусите, домовете
@@ -9,7 +9,8 @@
 
 Какво НЕ проверява: самите астрономически позиции (ефемеридите), координатите на градовете и преобразуването на местния час в UTC.
 Тези неща се вземат от engine като дадени; сверката доказва съгласуваност на фактите с тях, не независимост от тях. Смисълът на
-тълкуванията и качеството на стила не се проверяват автоматично.
+тълкуванията и качеството на стила не се проверяват автоматично; в наталните режими се проверява само, че под картите и в затварящите блокове
+няма факти (планети, знаци, домове, градуси, аспекти, ъгли), които не са в заглавията.
 
 За прогнозата за период (period_cards.py) има отделна сверка: scripts/verify_period.py (точни часове в UTC през zoneinfo, посока, приближение, интервал).
 
@@ -49,6 +50,7 @@ CASES = {
     "pair_snapshot": [("A", "IVAN"), ("IVAN", "A"), ("A", "IVAN_NO_TIME"), ("A", "CHILD")],
     "single_snapshot": [("IVAN",), ("A",), ("IVAN_NO_TIME",)],
     "natal_pair": [("A", "IVAN"), ("IVAN", "A"), ("A", "IVAN_NO_TIME"), ("A", "CHILD")],
+    "natal_single": [("A",), ("IVAN",), ("IVAN_NO_TIME",), ("CHILD",)],
 }
 VARIANTS = [("general", "", ""), ("love", "romantic", "Как да говорим за очакванията си?"), ("career", "work", "Как да си разпределим задачите?"),
             ("money", "family", "Как да планираме общ разход?"), ("health", "friend", ""), ("karmic", "parent_child", "Как да поставям граници?")]
@@ -103,12 +105,93 @@ OVERLAY_RE = re.compile(r"^(.+?) на (.+?) попада в (\S+) дом на (.
 HOUSE_LINE_RE = re.compile(r"^Транзитните планети в домовете на (.+?): (.+)\.$")
 
 
+# --- Тълкуванията под картите в наталните режими: само смисъл, без факти (независима проверка на текста, не на смисъла) ---
+_NAME_RX = [(re.compile(rf"(?<![\w]){re.escape(n)}(?![\w])", re.IGNORECASE), PLANETS[n]) for n in sorted(PLANETS, key=len, reverse=True)]
+_SIGN_RX = re.compile(r"(?<![\w])(" + "|".join(SIGNS) + r")(?![\w])")
+_HOUSE_RX = re.compile(r"(?<![\w])(\d{1,2}-?(?:ви|ри|ти|ми|и)\s+дом|\d{1,2}\s*дом|(?:първ|втор|трет|четвърт|пет|шест|седм|осм|девет|десет|единадесет|дванадесет)\w*\s+(?:натален\s+)?дом)(?![\w])", re.IGNORECASE)
+_DEGREE_RX = re.compile(r"\d{1,2}\s*°")
+_ASPECT_DEFINITE = re.compile(r"(?<![\w])(секстил\w*|тригон\w*|квадратур\w*|конюнкци\w*|аспект\w*)", re.IGNORECASE)
+_ASPECT_AMBIGUOUS = re.compile(r"(?<![\w])(съвпад\w*|опозиц\w*|съединение\w*|квадрат\w*)", re.IGNORECASE)      # са и обикновени думи
+_ASTRO_CUE = re.compile(r"транзит|натал|аспект|орбис|ретроград", re.IGNORECASE)
+_CLOSING = ("Обща картина", "Какво да имате предвид", "Отговор на въпроса", "Заключение")
+_QUALITY_NOTE = re.compile(r"^\*\*(Частичен|Резервен) анализ\.\*\*")
+
+
+def _planets_in(text):
+    return {key for rx, key in _NAME_RX if rx.search(text)}
+
+
+def _aspect_words(text):
+    """Термини за аспект в текста; „съвпада“ и „опозиция“ се броят само в изречение с астрологична следа (планета, натален, аспект…)."""
+    found = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        cue = bool(_ASTRO_CUE.search(sentence)) or bool(_planets_in(sentence))
+        found += [m.group(0) for m in _ASPECT_DEFINITE.finditer(sentence)]
+        if cue:
+            found += [m.group(0) for m in _ASPECT_AMBIGUOUS.finditer(sentence)]
+    return found
+
+
+def _aspect_of(heading):
+    m = re.search(r" е в (съвпад|секстил|квадратура|тригон|опозиция) (?:със|с) ", heading)
+    return m.group(1) if m else None
+
+
+def check_interpretations(text):
+    """Блоковете между заглавията: под карта няма други планети, аспекти, знаци, домове и градуси (ъгъл само в собствената си карта);
+    в затварящите блокове няма планети, аспекти, знаци, домове, ъгли и градуси. Връща (проблеми, брой карти, брой затварящи блока)."""
+    problems, cards, closing = [], 0, 0
+    heading, body, in_closing = None, [], False
+
+    def flush():
+        nonlocal cards, closing
+        if heading is None and not (in_closing and body):
+            return
+        joined = " ".join(body).strip()
+        if in_closing:
+            closing += 1
+            where, own_planets, own_aspect = "затварящ блок", set(), None
+        else:
+            if not joined:
+                problems.append(f"картата няма тълкуване: {heading[:70]}")
+                return
+            cards += 1
+            where, own_planets, own_aspect = f"карта „{heading[:50]}“", _planets_in(heading), _aspect_of(heading)
+        foreign = sorted(_planets_in(joined) - own_planets)
+        if foreign:
+            problems.append(f"в {where} има планета или ъгъл, който не е негов: {foreign[0]}")
+        for kind, rx in (("знак", _SIGN_RX), ("дом", _HOUSE_RX), ("градуси", _DEGREE_RX)):
+            found = rx.search(joined)
+            if found:
+                problems.append(f"в {where} има {kind}: „{found.group(0)}“")
+        words = [w for w in _aspect_words(joined) if not own_aspect or not w.lower().startswith(own_aspect[:5])]
+        if words:
+            problems.append(f"в {where} има аспект: „{words[0]}“")
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("## "):
+            flush()
+            heading, body = None, []
+            in_closing = any(line[3:].startswith(c) for c in _CLOSING)
+            continue
+        if line.startswith("### "):
+            flush()
+            heading, body = line[4:].strip(), []
+            continue
+        if not line or _QUALITY_NOTE.match(line):
+            continue
+        body.append(line)
+    flush()
+    return problems, cards, closing
+
+
 def verify(text, people, sky=None, mode="natal_pair", limit=None, require_complete=True):
     """people: [{name, chart: Chart, known}] в реда на хората; sky: Chart на небето за режимите „за дата“. Връща списък от несъответствия."""
     problems = []
     by_name = {p["name"]: p for p in people}
     transit_sets = {p["name"]: set() for p in people}
-    counts = {"transit": 0, "aspect": 0, "placement": 0, "overlay": 0, "house_line": 0}
+    counts = {"transit": 0, "aspect": 0, "placement": 0, "overlay": 0, "house_line": 0, "interpretations": 0, "closing": 0}
     for line in (l.strip() for l in text.splitlines()):
         heading = line[4:] if line.startswith("### ") else line
         m = TRANSIT_RE.match(heading)
@@ -142,15 +225,19 @@ def verify(text, people, sky=None, mode="natal_pair", limit=None, require_comple
         if m:
             planet, _ = find_planet(m.group(1))
             owner = by_name.get(m.group(2))
-            if not (planet and owner and planet in owner["chart"].planets):
+            angle = planet in ("ASC", "MC")                                  # Асцендент и MC са от точките, нямат дом и ги има само с час
+            if not (planet and owner and planet in (owner["chart"].points if angle else owner["chart"].planets)):
                 problems.append(f"не се разчита: {heading[:80]}")
                 continue
-            lon = owner["chart"].planets[planet]
+            lon = (owner["chart"].points if angle else owner["chart"].planets)[planet]
             total = round(lon * 60)                                         # както в заглавията: минутите са закръглени
             sign, deg, minute = SIGNS[(total // 1800) % 12], (total % 1800) // 60, total % 60
             if m.group(3) != sign or m.group(4) != str(deg) or int(m.group(5)) != minute:
                 problems.append(f"позиция {heading[:70]}: изчислена {sign} {deg}°{minute}'")
-            if m.group(6):
+            if angle:
+                if m.group(6):
+                    problems.append(f"ъгълът няма дом: {heading[:70]}")
+            elif m.group(6):
                 if not owner["chart"].known or house_of(lon, owner["chart"].cusps) != ORDINALS[m.group(6)]:
                     problems.append(f"дом {heading[:70]}: изчислен {house_of(lon, owner['chart'].cusps) if owner['chart'].known else 'няма час'}")
             elif owner["chart"].known:
@@ -182,6 +269,10 @@ def verify(text, people, sky=None, mode="natal_pair", limit=None, require_comple
                 if planet and house_of(sky.planets[planet], owner["chart"].cusps) != ORDINALS[mm.group(2)]:
                     problems.append(f"{m.group(1)}: {part} (изчислен {house_of(sky.planets[planet], owner['chart'].cusps)})")
             counts["house_line"] += 1
+    if mode in ("natal_pair", "natal_single") and "\n## " in "\n" + text:
+        found, texts, closing = check_interpretations(text)
+        problems += found
+        counts["interpretations"], counts["closing"] = texts, closing
     if sky and limit:
         for person in people:
             chart = person["chart"]
@@ -230,9 +321,16 @@ def offline_text(case, keys, moment, variant):
         import single_snapshot as ss
         cards, extra = ss.MODE.build(ctx)
         lines = [extra.get("A", "")]
-    else:
+    elif case in ("natal_single", "natal_pair"):
         import natal_pair
-        cards = natal_pair.build_cards(ctx)
+        import natal_single
+        mode, build = (natal_single.MODE, natal_single.build_cards) if case == "natal_single" else (natal_pair.MODE, natal_pair.build_cards)
+        cards = build(ctx)
+        for card in cards:
+            card.text = "Това изисква търпение и ясни граници в разговорите."          # неутрално тълкуване: проверява се само, че няма факти
+        blocks = {"SUMMARY": "Общата картина е спокойна и изисква търпение.", "ADVICE": "- Давайте си време за важните решения.",
+                  "ANSWER": "Най-добре е да не бързате.", "CONCLUSION": "Имате добра основа и ще постигате най-много бавно."}
+        return card_engine.assemble(mode, ctx, cards, {}, blocks), people, names
     return "\n".join([l for l in lines if l] + [f"### {c.heading}" for c in cards]), people, names
 
 
@@ -241,13 +339,14 @@ def run_offline():
     total = 0
     for case, groups in CASES.items():
         for keys in groups:
-            for variant in (VARIANTS if case == "natal_pair" else VARIANTS[:1]):
-                for moment in (MOMENTS if case != "natal_pair" else [None]):
+            natal = case in ("natal_pair", "natal_single")
+            for variant in (VARIANTS if natal else VARIANTS[:1]):
+                for moment in (MOMENTS if not natal else [None]):
                     text, people, names = offline_text(case, keys, moment, variant)
                     for person, name in zip(people, names):
                         person["name"] = name
                     sky = Chart(date=moment[0], time=moment[1], lat=PEOPLE[keys[0]]["lat"], lon=PEOPLE[keys[0]]["lon"], zone=moment[2]) if moment else None
-                    limit = None if case == "natal_pair" else (8 if case == "single_snapshot" else 6)
+                    limit = None if natal else (8 if case == "single_snapshot" else 6)
                     problems, counts = verify(text, people, sky, case, limit)
                     total += 1
                     if problems:
@@ -273,7 +372,7 @@ def main(argv=None):
         person["name"] = re.sub(r"\s*[—-]\s*", " ", PEOPLE[key]["name"]).strip()
     sky = None
     limit = None
-    if args.case != "natal_pair":
+    if args.case in ("pair_snapshot", "single_snapshot"):
         date, time, zone = args.moment.split(",")
         sky = Chart(date=date, time=time, lat=PEOPLE[keys[0]]["lat"], lon=PEOPLE[keys[0]]["lon"], zone=zone)
         limit = 8 if args.case == "single_snapshot" else 6
