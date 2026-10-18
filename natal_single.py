@@ -126,7 +126,7 @@ SYSTEM_PROMPT = (
     "RULES FOR EVERY SECTION:\n"
     "1. In a card section write 2-3 sentences about THAT card only, in plain words. The heading already names the planet or the angle, the "
     "sign, the house, the aspect and the orb: do NOT name any planet, sign, house, aspect, angle (Ascendant, MC) or degree there. Start "
-    "directly with the meaning.\n"
+    "directly with the meaning. Begin each card in a different way: never start two cards with the same word.\n"
     "2. Never invent, compute or guess a planet, sign, house, aspect or degree. A fact that is not in a card does not exist for this analysis.\n"
     "3. In SUMMARY, ADVICE, ANSWER and CONCLUSION name NO planet, sign, house, aspect, angle or degree: write only the meaning and rely only "
     "on the cards. Every recommendation must follow from a card. No predictions of the future, no diagnoses, no percentages.\n"

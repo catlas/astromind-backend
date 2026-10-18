@@ -488,7 +488,7 @@ MONTH_SYSTEM = (
     "RULES FOR EVERY SECTION:\n"
     "1. In a card section write 2-3 sentences about THAT card only, in plain words, for the person named in the heading. The heading already "
     "names the planets, the aspect, the date, the time, the movement and the sign: do NOT name any planet, aspect, sign, house, time "
-    "or movement there; avoid dates (if you need one, use only a date from the heading), and no degrees or orb numbers. Start directly with the meaning. A card about a "
+    "or movement there; avoid dates (if you need one, use only a date from the heading), and no degrees or orb numbers. Start directly with the meaning. Begin each card in a different way: never start two cards with the same word. A card about a "
     "station, a sign change or a lunation concerns every person named in its heading (or the one person, if only one is named).\n"
     "2. Never invent, compute or guess a planet, sign, house, aspect, date or time. A fact that is not in a card does not exist.\n"
     "3. In MONTH name NO planet, aspect, sign or house. Name a date only if it is a date from a card heading. Every recommendation must "

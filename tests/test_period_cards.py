@@ -823,16 +823,25 @@ class PromptTest(FlowBase):
 
 
 class PromptExamplesTest(unittest.TestCase):
-    """Примерите „Така у вас…“ и „През тези дни…“ в подканите се копираха от AI във всяка карта (18.10.2026: 100% от наталните карти
-    започваха с „Така“, около 35% от периодните с „През“). Остава само указанието да се започва направо със смисъла."""
+    """Буквалните примери в подканите се копираха от AI във всяка карта (18.10.2026: 100% от наталните карти започваха с „Така“, около
+    35% от периодните с „През“). Няма примери в нито една от петте подкани на карти; остава указанието да се започва направо със смисъла
+    и ново указание всяка карта да започва по различен начин."""
 
-    def test_the_two_literal_examples_are_not_in_the_prompts_but_the_instruction_is(self):
+    def prompts(self):
+        import natal_pair
         import natal_single
-        for name, prompt in (("natal_single.SYSTEM_PROMPT", natal_single.SYSTEM_PROMPT), ("period_cards.MONTH_SYSTEM", period_cards.MONTH_SYSTEM)):
-            self.assertNotIn("Така у вас", prompt, name)
-            self.assertNotIn("През тези дни", prompt, name)
-            self.assertNotIn("for example:", prompt, name)
-            self.assertIn("Start directly with the meaning", prompt, name)
+        import pair_snapshot
+        import single_snapshot
+        return (("natal_single.SYSTEM_PROMPT", natal_single.SYSTEM_PROMPT), ("natal_pair.SYSTEM_PROMPT", natal_pair.SYSTEM_PROMPT),
+                ("pair_snapshot.SYSTEM_PROMPT", pair_snapshot.SYSTEM_PROMPT), ("single_snapshot.SYSTEM_PROMPT", single_snapshot.SYSTEM_PROMPT),
+                ("period_cards.MONTH_SYSTEM", period_cards.MONTH_SYSTEM))
+
+    def test_no_literal_example_is_in_any_card_prompt_and_the_instructions_are(self):
+        for name, prompt in self.prompts():
+            for phrase in ("Така у вас", "През тези дни", "Така Иван внася", "Мислите ви може да", "Думите ви може да", "for example:"):
+                self.assertNotIn(phrase, prompt, (name, phrase))
+            self.assertIn("start directly with the meaning", prompt.lower(), name)
+            self.assertIn("Begin each card in a different way: never start two cards with the same word.", prompt, name)
             self.assertIn("do NOT name any planet", prompt, name)                                # забраните не са пипани
 
 

@@ -30,7 +30,7 @@ SYSTEM_PROMPT = (
     "RULES FOR EVERY SECTION:\n"
     "1. In a card section write 2-3 sentences about THAT card only: what it means for the person on this date, in plain words. "
     "The heading above your text already names the planets, the aspect and the orb: do NOT name any planet, aspect, sign, house or "
-    "degree there, start directly with the meaning (for example: \"Мислите ви може да...\").\n"
+    "degree there, start directly with the meaning. Begin each card in a different way: never start two cards with the same word.\n"
     "2. Mention a planet, aspect, house, sign, degree or date only if it is in a card, in the houses line or in the natal data. "
     "Never invent, compute or guess one. An aspect that is not in a card does not exist for this analysis.\n"
     "3. In SUMMARY, ADVICE, ANSWER and CONCLUSION rely only on the cards: every recommendation must follow from a card; never mention an "
