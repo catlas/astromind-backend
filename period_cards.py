@@ -121,7 +121,9 @@ def _gendered(planet: str, masculine: str, feminine: str) -> str:
 
 
 def transit_parts(row: Dict, owner: str, notes: Optional[TimeNotes] = None) -> Tuple[str, str]:
-    """(заглавие, подробности) на карта за транзит. Точният момент е във заглавието; най-близкото приближение и интервалът са подробности."""
+    """(заглавие, подробности) на карта за транзит. Точният момент е във заглавието; най-близкото приближение и интервалът са подробности.
+    ТВЪРДО РЕШЕНИЕ НА СОБСТВЕНИКА (19.10.2026): датите извън периода (точен аспект извън периода, начало и край на интервала) ОСТАВАТ и не се режат,
+    не се крият и не се заменят (tests/test_owner_decision_dates.py; HANDOVER_2026_10_12.md, раздел 6, т. 1г)."""
     tp, npl = row["planet"], row["natal_planet"]
     aspect = ASPECT_BG[row["aspect"].lower()]
     base = (f"{_adjective('транзит', tp).capitalize()} {PLANET_BG.get(tp, tp)} е в {aspect} с {_adjective('натал', npl)} "
@@ -398,7 +400,8 @@ def _date_mentions(text: str) -> List[Tuple[int, int, int, int]]:
 
 
 def allowed_dates(cards: List[Card], calendar: PeriodCalendar) -> set:
-    """Датите (месец, ден) от заглавията на включените карти и границите на периода: само те могат да се споменават в затварящите блокове."""
+    """Датите (месец, ден) от заглавията на включените карти и границите на периода: само те могат да се споменават в затварящите блокове.
+    Това са и датите на интервала на картата, дори извън периода: твърдо решение на собственика (19.10.2026), не се ограничава до периода."""
     out = {(int(calendar.start[5:7]), int(calendar.start[8:10])), (int(calendar.end[5:7]), int(calendar.end[8:10]))}
     for card in cards:
         for iso in re.findall(r"\d{4}-\d{2}-\d{2}", repr(card.row.get("event"))):
