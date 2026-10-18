@@ -144,7 +144,8 @@ class OfflineVerificationTest(unittest.TestCase):
                                  ("live_2026_10_18_period_single_two_months.txt", "2026-10-18", "2026-11-30"),
                                  ("live_2026_10_18_period_single_windows_a.txt", "2026-10-18", "2026-12-31"),
                                  ("live_2026_10_18_period_single_windows_b.txt", "2026-10-18", "2026-12-31"),
-                                 ("live_2026_10_18_period_single_windows_c.txt", "2026-10-18", "2026-12-31"),):
+                                 ("live_2026_10_18_period_single_windows_c.txt", "2026-10-18", "2026-12-31"),
+                                 ("live_2026_10_18_final_period_single_A.txt", "2026-10-18", "2026-12-31"),):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
                 live = f.read()
             problems, counts = vp.verify_period(live, person, start, end)
@@ -154,6 +155,27 @@ class OfflineVerificationTest(unittest.TestCase):
                 rs.chart("A"), start, end, rs.A_BIRTH["lat"], rs.A_BIRTH["lon"], tz_name="Europe/Sofia")
             facts = tc.build_facts(mode="period", user_name=rs.A_NAME, natal_chart=rs.chart("A"), calendar=cal, report_date="2026-10-18", question="")
             self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
+
+    def test_the_live_pair_report_of_the_final_acceptance_of_18_10_2026_matches_the_recomputation_and_passes_the_checker(self):
+        """Краят на Фаза 29: реален прогнозен отчет за двама (18.10–30.11.2026, любов, романтична връзка) с кода на 210a3ca, записан точно както е доставен:
+        пълен резултат (без бележка за резервен или частичен), сверен с преизчислението и с проверителя на текста от продукцията."""
+        import regression_support as rs
+        import text_check as tc
+        from scanner import TransitScanner
+        import engine
+        name = "live_2026_10_18_final_period_pair_A_IVAN.txt"
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
+            live = f.read()
+        self.assertNotIn("Резервен анализ", live)
+        self.assertNotIn("Частичен анализ", live)
+        problems, counts = vp.verify_period(live, self.people, "2026-10-18", "2026-11-30")
+        self.assertEqual(problems, [], name)
+        self.assertGreater(counts["exact"], 0)
+        cal = TransitScanner(engine_instance=engine.get_engine()).build_calendar(
+            rs.chart("A"), "2026-10-18", "2026-11-30", rs.A_BIRTH["lat"], rs.A_BIRTH["lon"], partner_chart=rs.chart("Ivan"), tz_name="Europe/Sofia")
+        facts = tc.build_facts(mode="period", user_name=rs.A_NAME, natal_chart=rs.chart("A"), partner_name=rs.IVAN, partner_chart=rs.chart("Ivan"),
+                               calendar=cal, report_date="2026-10-18", question="")
+        self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
 
     def test_text_copied_from_the_screen_is_refused_with_one_clear_message_instead_of_dozens_of_false_mismatches(self):
         """Екранът слива редовете на абзаца и маха курсива: подробностите на картата се сливат с тълкуването. Сверката го разпознава."""

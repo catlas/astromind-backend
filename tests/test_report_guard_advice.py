@@ -197,7 +197,8 @@ class RealReportsAdviceTest(unittest.TestCase):
         facts = rs.facts("period", False, "2026-12-31")
         bullets = []
         for name in ("live_2026_10_18_period_single_today_after_changes.txt", "live_2026_10_18_period_single_two_months.txt",
-                     "live_2026_10_18_period_single_windows_a.txt", "live_2026_10_18_period_single_windows_b.txt", "live_2026_10_18_period_single_windows_c.txt"):
+                     "live_2026_10_18_period_single_windows_a.txt", "live_2026_10_18_period_single_windows_b.txt", "live_2026_10_18_period_single_windows_c.txt",
+                     "live_2026_10_18_final_period_single_A.txt", "live_2026_10_18_final_period_pair_A_IVAN.txt"):
             with open(os.path.join(base, name), encoding="utf-8") as f:
                 bullets += [b.strip() for b in re.findall(r"(?m)^- (.+)$", f.read())]
         counted = [b for b in bullets if report_guard._action_words(b) and tc.parse_dates(b, facts)]
