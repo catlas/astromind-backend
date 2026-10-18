@@ -488,7 +488,7 @@ MONTH_SYSTEM = (
     "RULES FOR EVERY SECTION:\n"
     "1. In a card section write 2-3 sentences about THAT card only, in plain words, for the person named in the heading. The heading already "
     "names the planets, the aspect, the date, the time, the movement and the sign: do NOT name any planet, aspect, sign, house, time "
-    "or movement there; avoid dates (if you need one, use only a date from the heading), and no degrees or orb numbers. Start directly with the meaning (for example: \"През тези дни...\"). A card about a "
+    "or movement there; avoid dates (if you need one, use only a date from the heading), and no degrees or orb numbers. Start directly with the meaning. A card about a "
     "station, a sign change or a lunation concerns every person named in its heading (or the one person, if only one is named).\n"
     "2. Never invent, compute or guess a planet, sign, house, aspect, date or time. A fact that is not in a card does not exist.\n"
     "3. In MONTH name NO planet, aspect, sign or house. Name a date only if it is a date from a card heading. Every recommendation must "
@@ -513,6 +513,27 @@ OVERVIEW_SYSTEM = (
     "may not be recommended and forbidden for the same action, and a task postponed until a later date may not be recommended earlier. "
     "The window of a transit is not the end of a life process. Respect the relationship (no romantic or sexual frame unless it is "
     "romantic). Direct, concrete style, no filler. Address the reader consistently with the polite plural \"вие\", never \"ти\".\n"
+)
+
+CLOSING_TAG_SPECS = {
+    "SUMMARY": "[[SUMMARY]]  4-6 sentences: the overall character of the period and how the months follow each other.",
+    "ADVICE": "[[ADVICE]]  4-6 bullets starting with \"- \": one consistent plan for the period. A date may be named only if it is a date from a card heading.",
+    "ANSWER": "[[ANSWER]]  a direct answer to the user's question in 3-5 sentences, based only on the blocks.",
+    "CONCLUSION": "[[CONCLUSION]]  2-3 sentences with a reasoned overall conclusion.",
+}
+
+CLOSING_AGAIN_SYSTEM = (
+    "MODE: ONE CLOSING SECTION AGAIN, FROM VERIFIED BLOCKS.\n"
+    "THEME: {theme}{relation_line}. People: {people}. Period: {period}. All times are local time ({zone}).\n"
+    "Below are the ONLY verified blocks of the whole period. The previous version of one closing section contradicted them (the conflicts are "
+    "listed in the user message). Write that one section again from scratch, using ONLY the verified blocks:\n"
+    "{spec}\n\n"
+    "RULES: for ONE action on ONE date give ONE consistent recommendation: never recommend and forbid the same action on the same date and "
+    "never contradict a verified block. Prefer fewer dates; a date may be named only if it is a date from a card heading. Name NO planet, "
+    "aspect, sign or house: write only the meaning. Every recommendation must follow from a block. The window of a transit is not the end of "
+    "a life process. Respect the relationship (no romantic or sexual frame unless it is romantic). Direct, concrete style, no filler. Address "
+    "the reader consistently with the polite plural \"вие\", never \"ти\".\n"
+    "OUTPUT: only this one section: its tag alone on a line, then the text.\n"
 )
 
 MONTH_COMPOSE_SYSTEM = (
@@ -556,6 +577,22 @@ async def _ai(interpreter, system: str, user: str, stage: str, retry_pause: floa
     async def call() -> str:
         return await interpreter._call_api(system_prompt=system, user_prompt=user, max_tokens=max_tokens or interpreter.max_output_tokens)
     return await period_report._attempt(stage, call, retry_pause)
+
+
+async def _write_closing_again(interpreter, facts, tag: str, conflicts: List[str], check, context: str, system_args: Dict[str, str],
+                               checks: List[Dict], retry_pause: float) -> Tuple[Optional[str], str]:
+    """Затварящ блок, който и след двете поправки противоречи на проверените блокове (препоръка и забрана на една дата за едно действие):
+    един нов опит за ТОЗИ блок от нулата, със списък на несъответствията на последната му версия. Проверката е същата; ако и новата
+    версия не мине (или няма таг), блокът, а с него и отчетът, се отказва. Връща (проверен текст или None, кодове)."""
+    listed = list(dict.fromkeys(conflicts))[:6]
+    system = CLOSING_AGAIN_SYSTEM.format(spec=CLOSING_TAG_SPECS[tag], **system_args)
+    user = (f"{context}CONFLICTS FOUND IN THE PREVIOUS VERSION OF [[{tag}]] (do not repeat them):\n" + "".join(f"- {c}\n" for c in listed)
+            + f"\nWrite the section [[{tag}]] now, in Bulgarian.")
+    raw = await _ai(interpreter, system, user, f"overview:{tag}:again", retry_pause, 2500)
+    section = parse_sections(raw, {tag}).get(tag, "")
+    if not section:
+        return None, "format"
+    return await card_engine._check_block(interpreter, facts, f"period:overview:{tag}:again", section, checks, check)
 
 
 async def _check_cards(interpreter, facts, cards: List[Card], sections: Dict[str, str], checks: List[Dict], failed: Dict[str, str],
@@ -726,7 +763,8 @@ async def run_period_report(
         answer_tag = "[[ANSWER]]  a direct answer to the user's question in 3-5 sentences, based only on the blocks.\n" if question else ""
         system = OVERVIEW_SYSTEM.format(theme=theme, relation_line=_relation_line(relation), people=people, period=f"{calendar.start} - {calendar.end}",
                                         zone=calendar.timezone, answer_tag=answer_tag)
-        user = f"User question: {question or 'none'}\n\n{identity}VERIFIED BLOCKS:\n{blocks_text}{advice_text}Write the sections now, in Bulgarian."
+        context = f"User question: {question or 'none'}\n\n{identity}VERIFIED BLOCKS:\n{blocks_text}{advice_text}"
+        user = f"{context}Write the sections now, in Bulgarian."
         needed = ["SUMMARY", "ADVICE"] + (["ANSWER"] if question else []) + ["CONCLUSION"]
         overview_blocks: Dict[str, str] = {}
         for attempt in (1, 2):
@@ -739,9 +777,16 @@ async def run_period_report(
             raise text_guard.TextCheckError("period:overview:format", _outcome("period:overview:format", "complete", "Неправилен формат."))
         prior = list(verified_parts)
         for tag in needed:
-            checked, codes = await card_engine._check_block(
-                interpreter, restrict_events(facts, kept_all), f"period:overview:{tag}", sections[tag], checks,
-                closing_checks(question, tag, allowed_all, facts, prior, "overview", months, ends_all))
+            check = closing_checks(question, tag, allowed_all, facts, prior, "overview", months, ends_all)
+            overview_facts = restrict_events(facts, kept_all)
+            conflicts: List[str] = []
+            checked, codes = await card_engine._check_block(interpreter, overview_facts, f"period:overview:{tag}", sections[tag], checks, check, conflicts)
+            if checked is None and codes and set(codes.split(",")) <= {"consistency"}:
+                # само противоречие с проверените блокове: един нов опит за този блок (проверката е същата), вместо веднага отказ
+                checked, codes = await _write_closing_again(
+                    interpreter, overview_facts, tag, conflicts, check, context,
+                    dict(theme=theme, relation_line=_relation_line(relation), people=people, period=f"{calendar.start} - {calendar.end}",
+                         zone=calendar.timezone), checks, retry_pause)
             if checked is None:
                 raise text_guard.TextCheckError(f"period:overview:{tag}", _outcome(f"period:overview:{tag}", codes.split(",")[0] or "check",
                                                                                    f"Блокът {tag} не мина проверката ({codes})."))

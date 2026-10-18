@@ -236,12 +236,16 @@ def _fail(stage: str, code: str, detail: str, text: str = "") -> text_guard.Text
     return text_guard.TextCheckError(stage, outcome)
 
 
-async def _check_block(interp, facts, stage: str, text: str, checks: List[Dict], extra=None) -> Tuple[Optional[str], str]:
-    """Проверява един блок (най-много 2 поправки). Връща (проверен текст или None, кодовете на нарушенията при провал)."""
+async def _check_block(interp, facts, stage: str, text: str, checks: List[Dict], extra=None,
+                       details: Optional[List[str]] = None) -> Tuple[Optional[str], str]:
+    """Проверява един блок (най-много 2 поправки). Връща (проверен текст или None, кодовете на нарушенията при провал). При провал
+    описанията на тежките нарушения на последната версия се добавят в details (ако е даден списък): за нов опит със знанието какво е грешно."""
     text = TAG_RE.sub("", text or "").strip()                    # забъркан таг в текста на блока не е част от анализа
     try:
         return await interp.guard_text(text, facts, stage=stage, checks=checks, extra_check=extra), ""
     except text_guard.TextCheckError as failure:
+        if details is not None:
+            details.extend(v.detail for v in failure.outcome.after if v.severity == "hard")
         return None, failure.outcome.codes() or "check"
 
 

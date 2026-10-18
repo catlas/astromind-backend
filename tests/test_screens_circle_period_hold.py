@@ -111,6 +111,17 @@ console.log(JSON.stringify({
         self.assertEqual(out["leap"], ["2028-02-29", "2028-03-01", "2027-03-01"])
         self.assertEqual(out["bad"], [None, None, "", ""])
 
+    def test_a_restored_period_never_starts_in_the_past(self):
+        out = run_node(["period"], """
+console.log(JSON.stringify({
+  past: period.restoredPeriodStart('2026-10-01', '2026-10-18'), today: period.restoredPeriodStart('2026-10-18', '2026-10-18'),
+  future: period.restoredPeriodStart('2026-11-05', '2026-10-18'), empty: period.restoredPeriodStart('', '2026-10-18'),
+  missing: period.restoredPeriodStart(undefined, '2026-10-18'), year: period.restoredPeriodStart('2026-12-31', '2027-01-02'),
+}));
+""")
+        self.assertEqual(out, {"past": "2026-10-18", "today": "2026-10-18", "future": "2026-11-05", "empty": "2026-10-18",
+                               "missing": "2026-10-18", "year": "2027-01-02"})
+
 
 @unittest.skipUnless(HAVE_NODE, "Node.js или файловете на екраните не са налични")
 class ScreenSourceTest(unittest.TestCase):
@@ -150,7 +161,7 @@ class ScreenSourceTest(unittest.TestCase):
         self.assertIn("forecastLimits.forecast_max_months_pair", derived)               # двама: по-късият лимит
         self.assertIn('data-testid="next-period"', generate)
         self.assertIn("Следващите {continuation.months} месеца", generate)
-        self.assertIn("import { maxEndDate, nextPeriod } from '../utils/period';", generate)
+        self.assertIn("import { maxEndDate, nextPeriod, restoredPeriodStart } from '../utils/period';", generate)
         self.assertNotIn("const maxEndDate", generate)                                  # една и съща логика на едно място
 
     def test_the_dashboard_circle_has_no_profile_limit_and_uses_the_shared_groups(self):
@@ -174,6 +185,15 @@ class ScreenSourceTest(unittest.TestCase):
         jobs = source("utils/jobs.js")
         self.assertIn("api.post(`/jobs/${id}/hide`)", jobs)
         self.assertIn("api.post('/jobs/hide-failed')", jobs)
+
+
+    def test_a_profile_restores_a_period_only_from_today_on(self):
+        generate = source("pages/GenerateReport.jsx")
+        apply_profile = body(generate, "const applyProfile", "const handleProfileChange")
+        self.assertIn("restoredPeriodStart(settings.transitData.target_date, today)", apply_profile)
+        self.assertIn("const restored = mode === 'period'", apply_profile)                         # само периодът; „за дата“ си остава както е запазена
+        self.assertIn(": settings.transitData;", apply_profile)                                  # други режими: както е запазено
+        self.assertIn("import { maxEndDate, nextPeriod, restoredPeriodStart } from '../utils/period';", generate)
 
 
 if __name__ == "__main__":

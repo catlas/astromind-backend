@@ -576,6 +576,83 @@ class RepairFallbackPartialTest(FlowBase):
                                     repair=lambda p: f"Не финализирайте проекта на {day}."))
 
 
+class ClosingBlockAgainTest(FlowBase):
+    """Затварящ блок, който и след двете поправки противоречи на проверените блокове, се пише наново ЕДИН път от нулата, със списък на
+    несъответствията; проверката е същата. Друг вид провал не се повтаря, а неуспехът пак отказва отчета (18.10.2026: на живо ADVICE
+    препоръчваше и забраняваше едно действие на 3 и 24 октомври и отчетът беше отказан)."""
+
+    def day_of_first_exact_card(self, cal):
+        card = next(c for c in cards_of(cal, False, limit=8) if c.row["event"]["type"] == "TRANSIT" and c.row["event"].get("exact"))
+        iso = card.row["event"]["exact"][0]["when"]
+        return f"{int(iso[8:10])} {tc._MONTH_NAMES[int(iso[5:7])]}"
+
+    def contradicting_ai(self, day, again, bad_bullet=None):
+        """Месецът препоръчва действие, а общият съвет го забранява (и след поправките). again(подкана) е отговорът на новото писане."""
+        bad_bullet = bad_bullet or f"- Не финализирайте проекта на {day}."
+        base = self.ai(month=lambda _s: f"Финализирайте проекта на {day}.",
+                       overview=lambda reply: reply.replace("- Говорете спокойно и изчакайте, ако усетите напрежение.", bad_bullet),
+                       repair=lambda _p: bad_bullet)
+        calls = []
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            if system_prompt.startswith("MODE: ONE CLOSING SECTION AGAIN"):
+                calls.append((system_prompt, user_prompt))
+                return again(user_prompt)
+            return await base(system_prompt, user_prompt, max_tokens, temperature, **kwargs)
+        return fake, calls
+
+    def test_a_contradicting_advice_is_written_again_once_and_the_report_stays_full(self):
+        cal = rs.calendar(False)
+        day = self.day_of_first_exact_card(cal)
+        fake, calls = self.contradicting_ai(day, lambda _p: "[[ADVICE]]\n- Говорете спокойно и изчакайте, ако усетите напрежение.")
+        steps = self.run_report(fake, calendar=cal)
+        self.assertEqual(len(calls), 1)                                                         # точно един нов опит, само за този блок
+        system, user = calls[0]
+        self.assertIn("never recommend and forbid the same action on the same date", system)
+        self.assertIn("[[ADVICE]]", system)
+        self.assertIn("CONFLICTS FOUND IN THE PREVIOUS VERSION OF [[ADVICE]]", user)
+        self.assertIn(f"на {day} за", user)                                                     # в списъка е точното противоречие: дата и действие
+        self.assertIn("има и препоръка, и забрана", user)
+        self.assertIn("VERIFIED BLOCKS", user)
+        finished = steps[-1]
+        self.assertEqual(finished["type"], "finished")
+        self.assertNotIn(f"Не финализирайте проекта на {day}", finished["overview"])
+        self.assertIn("- Говорете спокойно и изчакайте, ако усетите напрежение.", finished["overview"])
+        stages = {c["stage"]: c["result"] for c in finished["checks"] if c.get("stage", "").startswith("period:overview:ADVICE")}
+        self.assertEqual(stages.get("period:overview:ADVICE"), "rejected")                       # първата версия е отхвърлена и записана така
+        self.assertEqual(stages.get("period:overview:ADVICE:again"), "ok")                       # новата мина същата проверка
+        summary = next(c for c in finished["checks"] if c.get("stage") == "period_cards")
+        self.assertEqual(summary["quality"], "full")
+        parts = [(f"month:{m}", t) for m, (_ti, t) in zip(cal.months_with_events(), finished["month_texts"])] + [("overview", finished["overview"])]
+        self.assertEqual(report_guard.cross_part_violations(parts, cal.months_with_events(), rs.facts("period", False)), {})
+
+    def test_if_the_new_version_still_contradicts_the_report_is_refused_after_one_new_attempt_only(self):
+        cal = rs.calendar(False)
+        day = self.day_of_first_exact_card(cal)
+        fake, calls = self.contradicting_ai(day, lambda _p: f"[[ADVICE]]\n- Не финализирайте проекта на {day}.")
+        with self.assertRaises(period_report.ForecastGenerationError) as caught:
+            self.run_report(fake, calendar=cal)
+        self.assertEqual(len(calls), 1)                                                         # без втори и трети опит
+        self.assertEqual(caught.exception.stage, "period:overview:ADVICE")
+
+    def test_a_new_version_without_the_tag_is_refused(self):
+        cal = rs.calendar(False)
+        day = self.day_of_first_exact_card(cal)
+        fake, calls = self.contradicting_ai(day, lambda _p: "Говорете спокойно и изчакайте.")
+        with self.assertRaises(period_report.ForecastGenerationError):
+            self.run_report(fake, calendar=cal)
+        self.assertEqual(len(calls), 1)
+
+    def test_another_kind_of_failure_is_not_written_again(self):
+        cal = rs.calendar(False)
+        day = self.day_of_first_exact_card(cal)
+        named_planet = "- Марс е планетата на конфликтите, затова избягвайте спорове."
+        fake, calls = self.contradicting_ai(day, lambda _p: "[[ADVICE]]\n- Говорете спокойно.", bad_bullet=named_planet)
+        with self.assertRaises(period_report.ForecastGenerationError):
+            self.run_report(fake, calendar=cal)
+        self.assertEqual(calls, [])                                                             # планета в съвета не е противоречие: без повторение
+
+
 class OrderIndependenceTest(FlowBase):
     """Резултатът не зависи от реда, в който AI връща секциите, и от това коя от две противоречиви карти е първа; крайната проверка на целия
     отчет остава и хваща противоречие, което поетапната проверка е пропуснала."""
@@ -743,6 +820,20 @@ class PromptTest(FlowBase):
         system, user = calls[-1]
         self.assertNotIn("[[ANSWER]]", system)
         self.assertNotIn(" and ", system.split("People:")[1].split(".")[0])
+
+
+class PromptExamplesTest(unittest.TestCase):
+    """Примерите „Така у вас…“ и „През тези дни…“ в подканите се копираха от AI във всяка карта (18.10.2026: 100% от наталните карти
+    започваха с „Така“, около 35% от периодните с „През“). Остава само указанието да се започва направо със смисъла."""
+
+    def test_the_two_literal_examples_are_not_in_the_prompts_but_the_instruction_is(self):
+        import natal_single
+        for name, prompt in (("natal_single.SYSTEM_PROMPT", natal_single.SYSTEM_PROMPT), ("period_cards.MONTH_SYSTEM", period_cards.MONTH_SYSTEM)):
+            self.assertNotIn("Така у вас", prompt, name)
+            self.assertNotIn("През тези дни", prompt, name)
+            self.assertNotIn("for example:", prompt, name)
+            self.assertIn("Start directly with the meaning", prompt, name)
+            self.assertIn("do NOT name any planet", prompt, name)                                # забраните не са пипани
 
 
 class LabelsTest(FlowBase):
