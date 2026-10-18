@@ -129,6 +129,40 @@ class OfflineVerificationTest(unittest.TestCase):
                                    calendar=cal, report_date="2026-10-12", question=question)
             self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
 
+    def test_the_live_single_reports_of_18_10_2026_match_the_recomputation_and_pass_the_checker(self):
+        """Реални отчети за един човек с истински AI от продукцията: 3 календарни месеца и продължението след тях („Следващите 3 месеца“).
+        Сверка с преизчислението (verify_period) и с проверителя на текста, който работи в продукцията."""
+        import engine
+        import regression_support as rs
+        import text_check as tc
+        from scanner import TransitScanner
+        person = [p for p in self.people if p["name"] == "Тест А одит"]
+        self.assertEqual(len(person), 1)
+        for name, start, end in (("live_2026_10_18_period_single_first.txt", "2026-10-01", "2026-12-31"), ("live_2026_10_18_period_single_next.txt", "2027-01-01", "2027-03-31"),):
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
+                live = f.read()
+            problems, counts = vp.verify_period(live, person, start, end)
+            self.assertEqual(problems, [], name)
+            self.assertGreater(counts["exact"] + counts["nearest"], 0, name)
+            cal = TransitScanner(engine_instance=engine.get_engine()).build_calendar(
+                rs.chart("A"), start, end, rs.A_BIRTH["lat"], rs.A_BIRTH["lon"], tz_name="Europe/Sofia")
+            facts = tc.build_facts(mode="period", user_name=rs.A_NAME, natal_chart=rs.chart("A"), calendar=cal, report_date="2026-10-18", question="")
+            self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
+
+    def test_text_copied_from_the_screen_is_refused_with_one_clear_message_instead_of_dozens_of_false_mismatches(self):
+        """Екранът слива редовете на абзаца и маха курсива: подробностите на картата се сливат с тълкуването. Сверката го разпознава."""
+        import re
+        person = [p for p in self.people if p["name"] == "Тест А одит"]
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "live_2026_10_18_period_single_first.txt"), encoding="utf-8") as f:
+            live = f.read()
+        merged = re.sub(r"^\*(.+)\*\n", r"\1 ", live, flags=re.M)                 # както го показва екранът
+        self.assertNotEqual(merged, live)
+        problems, _counts = vp.verify_period(merged, person, "2026-10-01", "2026-12-31")
+        self.assertEqual(len(problems), 1)
+        self.assertIn("текстът не е записаният", problems[0])
+        problems, _counts = vp.verify_period(live, person, "2026-10-01", "2026-12-31")          # записаният текст минава чисто
+        self.assertEqual(problems, [])
+
     def test_all_fixed_cases_match_the_recomputation(self):
         self.assertEqual(vp.run_offline(), 0)
 

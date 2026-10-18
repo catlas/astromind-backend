@@ -433,6 +433,12 @@ def verify_period(text, people, start, end):
     sky = Sky(zone)
     problems = []
     counts = {"cards": len(cards), "transit": 0, "exact": 0, "nearest": 0, "interval": 0, "station": 0, "ingress": 0, "lunation": 0, "closing": len(closing)}
+    # Текст, копиран от екрана, не е записаният: екранът слива редовете на абзаца и маха курсива, така че подробностите на картата
+    # („Точен аспект, движение: …“) се сливат с тълкуването и сверката дава десетки лъжливи несъответствия (случаят от 18.10.2026).
+    merged = [c for c in cards if TITLE_TRANSIT_RE.match(c["title"]) and not c["detail"] and any("Интервал на действие:" in line for line in c["ai"])]
+    if merged:
+        return [f"текстът не е записаният: подробностите на {len(merged)} карти са слети с тълкуването (така ги показва екранът: слива редовете и маха курсива). "
+                f"Сверката не е валидна. Вземете записания текст (История → Преглед, или props.text на ReportText) и я пуснете пак."], counts
     allowed_dates = set()
     for d in (start, end):
         allowed_dates.add((int(d[5:7]), int(d[8:10])))

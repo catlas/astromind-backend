@@ -35,6 +35,31 @@ class OfflineVerificationTest(unittest.TestCase):
         self.assertEqual((counts["transit"], counts["house_line"]), (12, 2))
         self.assertGreater(counts["aspect"], 0)                                        # синастрични карти
 
+    def test_the_live_natal_single_reports_of_18_10_2026_match_the_recomputation_and_pass_the_checker(self):
+        """Реални натални анализи за един човек с истински AI от продукцията: фактите в заглавията са сверени с преизчисление, а под
+        картите и в затварящите блокове няма факти; без час на раждане няма Асцендент, MC и домове."""
+        import engine
+        import regression_support as rs
+        import text_check as tc
+        for name, key in (("live_2026_10_18_natal_single_A.txt", "A"), ("live_2026_10_18_natal_single_A_no_time.txt", "A_NO_TIME"),):
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
+                live = f.read()
+            known = vc.PEOPLE[key]["known"]
+            people = vc.build_people((key,))
+            for person in people:
+                person["name"] = vc.PEOPLE[key]["name"]
+            problems, counts = vc.verify(live, people, None, "natal_single")
+            self.assertEqual(problems, [], name)
+            self.assertGreater(counts["interpretations"], 0, name)
+            self.assertEqual(counts["closing"], 3, name)
+            headings = [l for l in live.splitlines() if l.startswith("### ")]
+            if not known:
+                self.assertFalse([h for h in headings if "Асцендент" in h or "MC" in h or " дом" in h], name)
+            natal = rs.chart("A") if known else engine.get_engine().calculate_chart("1990-02-15", "", rs.A_BIRTH["lat"], rs.A_BIRTH["lon"], time_known=False)
+            facts = tc.build_facts(mode="natal", user_name=(rs.A_NAME if known else vc.PEOPLE[key]["name"]), natal_chart=natal,
+                                   report_date="2026-10-18", question="")
+            self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
+
     def test_a_tampered_heading_is_detected(self):
         text, people, _ = self.case("natal_pair", ("A", "IVAN"))
         for old, new in (("попада в 10-и дом", "попада в 11-ти дом"), ("(орб 0,02°)", "(орб 1,02°)"), (" на Иван попада", " на Тест А одит попада")):
