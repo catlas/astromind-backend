@@ -16,6 +16,14 @@
 - „до 25 декември“ само с крайна дата в месечен блок е прозорец от първия ден на ТОЗИ месец (авторът на блока за декември вижда само
   картите на декември); в общия преглед няма начало и важи за всички по-ранни дати, както преди.
 
+Само съвет е препоръка (18.10.2026, второ живо приемане: описателни изречения от тълкуванията на картите — „На 24 октомври започва период,
+в който ежедневните разговори …“ — се четяха като „препоръка за започване / разговор“ и влизаха в противоречие с прозорците на съветите):
+- изречението допринася за проверката само ако е съвет: повелително („вземете“, „финализирайте“), „да + глагол“ („да вземете“, „да не подписвате“)
+  или оборот за съвет („добре е“, „добър момент“, „подходящо е“, „препоръчително“, „трябва“, „можете“);
+- „започва / започват / ангажира“ и другите форми в 3-то лице и причастията не са действие;
+- „избягвате“, „да избягвате“, „недейте“ са отрицание като „избягвайте“;
+- „след 25 декември“ само с дата в месечен блок важи от първия ден на ТОЗИ месец, както „до 25 декември“.
+
 Проверката е детерминирана (без AI заявка). При нарушение частта се връща на поправка през text_guard с extra_check:
 поправеният текст се проверява и срещу останалите части. Не се твърди, че това е пълна семантична проверка: то хваща доказаните случаи.
 """
@@ -38,7 +46,19 @@ ACTIONS = {
     r"разговор\w*|обсъжд\w+": "разговор",
 }
 _ACTION_RES = [(re.compile(r"(?<![\w])(?:%s)" % pattern, re.IGNORECASE), label) for pattern, label in ACTIONS.items()]
-_AVOID_RE = re.compile(r"(?<![\w])(?:не\s+\w+|избягвайте|избягвай|без)(?![\w])", re.IGNORECASE)
+_AVOID_RE = re.compile(r"(?<![\w])(?:не\s+\w+|избягвайте|избягвай|избягвате|недейте|недей|без)(?![\w])", re.IGNORECASE)
+# Изречение е съвет, ако има повелително или друга форма на 2 л. мн. ч. на „-ете/-йте“ (и „можете“), „да + глагол във 2 л. мн. ч.“ или оборот за съвет. Невярно открит сигнал (напр. „дете“) връща
+# изречението към стария ход (следи се), а липсващ сигнал го изключва: затова списъкът е широк.
+_ADVICE_RES = [
+    re.compile(r"(?<![\w])(?:нека|\w+(?:ете|йте))(?![\w])", re.IGNORECASE),
+    re.compile(r"(?<![\w])да\s+(?:не\s+)?\w+(?:ете|ите|ате|яте)(?![\w])", re.IGNORECASE),
+    re.compile(r"(?<![\w])(?:препоръч\w+|съветвам|добре\s+е|е\s+добре|по-добре|(?:добър|добр\w+)\s+(?:момент\w*|възможност\w*|прозорец\w*|време|ден|дни)|"
+               r"(?:не)?подходящ\w*|(?:не)?благоприятн\w*|важно\s+е|необходимо\s+е|трябва|време\s+е|е\s+време)(?![\w])", re.IGNORECASE),
+]
+# Форми в 3-то лице и причастия: описват („На 24 октомври започва период“, „…което ви ангажира“), не съветват, затова не са действие
+_DESCRIPTIVE_FORMS = frozenset({"започва", "започват", "започна", "започнаха", "започне", "започнат", "започнал", "започнала", "започнало", "започнали", "започваща",
+                                "стартира", "стартират", "стартирал", "стартирала", "стартирало", "стартирали",
+                                "ангажира", "ангажират", "ангажиран", "ангажирана", "ангажирано", "ангажирани", "ангажирал", "ангажирала"})
 # „по-късно“ няма тук: стои в обикновени изречения („думи, които по-късно съжалявате“) и би правило фалшиви противоречия
 _DEFER_WORD_RE = re.compile(r"(?<![\w])(?:отложете|отлагайте|изчакайте|изчакай|почакайте)(?![\w])", re.IGNORECASE)
 _NO_DATA_RE = re.compile(r"(?<![\w])няма\s+(?:данни|информация|анализ|събития)\s+за\s+(?:месец\s+)?(януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември)", re.IGNORECASE)
@@ -61,6 +81,15 @@ def _who(sentence: str, facts: Facts) -> frozenset:
         if rx and rx.search(sentence):
             named.add(key)
     return frozenset(named)
+
+
+def _is_advice(sentence: str) -> bool:
+    return any(rx.search(sentence) for rx in _ADVICE_RES)
+
+
+def _action_words(sentence: str) -> List[Tuple[int, str]]:
+    """(позиция, действие) на думите за действие в изречението; форми в 3-то лице и причастия („започва“, „ангажира“) не са действие."""
+    return [(m.start(), label) for rx, label in _ACTION_RES for m in rx.finditer(sentence) if m.group(0).lower() not in _DESCRIPTIVE_FORMS]
 
 
 def _month_start(stage: str) -> Optional[date]:
@@ -110,17 +139,19 @@ def _statements(text: str, facts: Facts, month_start: Optional[date] = None) -> 
     - do — препоръка на дата;
     - avoid — забрана на дата;
     - from — препоръка/отлагане „след/до“ дата (до датата, без нея); началото е първият ден от който важи отлагането (None: от началото на отчета);
+      само изречения със съвет (_is_advice) и само думи за действие във всяка форма освен „започва“, „ангажира“ и подобните (_DESCRIPTIVE_FORMS);
     - avoid_window — забрана за прозорец, датата е краят му (включително), началото е началото му.
-    month_start е първият ден на месеца на частта: „до 25 декември“ само с крайна дата в месечен блок важи от този ден."""
+    month_start е първият ден на месеца на частта: „до 25 декември“ и „след 25 декември“ само с дата в месечен блок важат от този ден."""
     out: List[Statement] = []
     for sentence in safety._plain_sentences(text):
-        labels = [label for rx, label in _ACTION_RES if rx.search(sentence)]
-        if not labels:
+        words = _action_words(sentence)
+        if not words or not _is_advice(sentence):
             continue
+        labels = list(dict.fromkeys(label for _, label in words))
         items = sorted(text_check.parse_dates(sentence, facts), key=lambda it: it.start)
         if not items:
             continue
-        first_action = min((m.start() for rx, _ in _ACTION_RES for m in [rx.search(sentence)] if m), default=0)
+        first_action = min(pos for pos, _ in words)
         negated = bool(_AVOID_RE.search(sentence[max(0, first_action - 25):first_action + 1]))
         deferred = bool(_DEFER_WORD_RE.search(sentence))
         who = _who(sentence, facts)
@@ -144,7 +175,7 @@ def _statements(text: str, facts: Facts, month_start: Optional[date] = None) -> 
             if until and not (deferred or negated):
                 continue
             kind = "from" if (after or deferred or until) else ("avoid" if negated else "do")
-            start = month_start if (kind == "from" and until and month_start is not None and day >= month_start) else None
+            start = month_start if (kind == "from" and (until or after) and month_start is not None and day >= month_start) else None
             for label in labels:
                 out.append((label, kind, day, sentence[:160], who, start))
     return out

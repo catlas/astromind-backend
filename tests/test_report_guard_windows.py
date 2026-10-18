@@ -123,7 +123,9 @@ class WindowTest(unittest.TestCase):
         self.assertEqual([(r[0], r[1], r[2], r[5]) for r in rows], [("решение", "from", date(2026, 12, 25), date(2026, 12, 1))])
         rows = report_guard._statements("Изчакайте до 25 декември с решението.", self.facts, None)
         self.assertEqual([(r[1], r[5]) for r in rows], [("from", None)])
-        rows = report_guard._statements("Решението вземете след 14 ноември.", self.facts, date(2026, 11, 1))          # „след“ няма начало
+        rows = report_guard._statements("Решението вземете след 14 ноември.", self.facts, date(2026, 11, 1))          # „след“ в месечен блок: от първия ден на месеца
+        self.assertEqual([(r[1], r[5]) for r in rows], [("from", date(2026, 11, 1))])
+        rows = report_guard._statements("Решението вземете след 14 ноември.", self.facts, None)                        # в общия преглед няма начало
         self.assertEqual([(r[1], r[5]) for r in rows], [("from", None)])
 
     def test_a_deadline_and_a_recommended_window_are_not_followed_as_windows(self):
