@@ -42,7 +42,7 @@ class OfflineVerificationTest(unittest.TestCase):
         import regression_support as rs
         import text_check as tc
         for name, key in (("live_2026_10_18_natal_single_A.txt", "A"), ("live_2026_10_18_natal_single_A_no_time.txt", "A_NO_TIME"),
-                          ("live_2026_10_18_natal_single_A_after_prompt.txt", "A"),):
+                          ("live_2026_10_18_natal_single_A_after_prompt.txt", "A"), ("live_2026_10_18_natal_single_A_final_prompt.txt", "A"),):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
                 live = f.read()
             known = vc.PEOPLE[key]["known"]
@@ -60,6 +60,26 @@ class OfflineVerificationTest(unittest.TestCase):
             facts = tc.build_facts(mode="natal", user_name=(rs.A_NAME if known else vc.PEOPLE[key]["name"]), natal_chart=natal,
                                    report_date="2026-10-18", question="")
             self.assertEqual([v for v in tc.check_text(live, facts) if v.severity == "hard"], [], name)
+
+    def test_the_live_pair_and_snapshot_reports_of_18_10_2026_match_the_recomputation(self):
+        """Реални отчети с истински AI от продукцията след последната промяна на подканите: натален за двама, „за дата“ за един и за двама
+        (момент 18.10.2026 12:00, София). Фактите в заглавията са сверени с преизчисление; това не доказва ефемеридите и смисъла на текста."""
+        import re
+        moment = ("2026-10-18", "12:00", "Europe/Sofia")
+        cases = (("live_2026_10_18_natal_pair_A_IVAN.txt", "natal_pair", ("A", "IVAN"), None, None, {"aspect": 9, "placement": 6, "overlay": 6, "closing": 3}),
+                 ("live_2026_10_18_single_snapshot_A.txt", "single_snapshot", ("A",), moment, 8, {"transit": 8, "house_line": 1}),
+                 ("live_2026_10_18_pair_snapshot_A_IVAN.txt", "pair_snapshot", ("A", "IVAN"), moment, 6, {"transit": 12, "aspect": 4, "house_line": 2}))
+        for name, case, keys, when, limit, expected in cases:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
+                live = f.read()
+            people = vc.build_people(keys)
+            for person, key in zip(people, keys):
+                person["name"] = re.sub(r"\s*[—-]\s*", " ", vc.PEOPLE[key]["name"]).strip()
+            sky = vc.Chart(date=when[0], time=when[1], lat=vc.PEOPLE[keys[0]]["lat"], lon=vc.PEOPLE[keys[0]]["lon"], zone=when[2]) if when else None
+            problems, counts = vc.verify(live, people, sky, case, limit)
+            self.assertEqual(problems, [], name)
+            for kind, number in expected.items():
+                self.assertEqual(counts[kind], number, (name, kind))
 
     def test_a_tampered_heading_is_detected(self):
         text, people, _ = self.case("natal_pair", ("A", "IVAN"))
