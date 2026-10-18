@@ -173,6 +173,7 @@ class RealReportsTest(unittest.TestCase):
                ("live_2026_10_18_period_single_windows_c.txt", "2026-10-18", "2026-12-31", False),
                ("live_2026_10_18_final_period_single_A.txt", "2026-10-18", "2026-12-31", False),
                ("live_2026_10_18_final_period_pair_A_IVAN.txt", "2026-10-18", "2026-11-30", True),
+               ("live_2026_10_18_phase30_period_pair_A_IVAN_love.txt", "2026-10-18", "2026-11-30", True),
                ("live_2026_10_12_period_pair_work.txt", "2026-10-20", "2026-10-31", True), ("live_2026_10_12_period_pair_dst_second.txt", "2026-10-20", "2026-10-31", True),
                ("live_2026_10_12_period_pair_two_months.txt", "2026-10-20", "2026-11-30", True), ("live_2026_10_12_period_pair_dst.txt", "2026-10-20", "2026-10-31", True))
 

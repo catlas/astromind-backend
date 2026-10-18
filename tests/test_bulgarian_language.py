@@ -260,6 +260,51 @@ class LanguageCheckTest(unittest.TestCase):
         self.assertEqual(tc.CHECKER_VERSION, "27")
 
 
+class LivePhase30TextsTest(unittest.TestCase):
+    """Четири реални отчета с кода на Фаза 30 (18.10.2026, продукция, реален AI), записани точно както са доставени върху екрана веднага след
+    генерацията: формите са правилни, няма латиница, а независимите сверки четат „във“. Натален без час не се сверява с verify_cards: в четири карти
+    за аспект AI е повторил собствения орбис в тълкуването (фактите са верни; строгата сверка го води като несъответствие, продукционната проверка го допуска)."""
+    BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+    @classmethod
+    def setUpClass(cls):
+        _text, cls.period_people = vp.offline_text(("IVAN", "A"), "2026-10-20", "2026-10-31")
+
+    def load(self, name):
+        with open(os.path.join(self.BASE, f"live_2026_10_18_phase30_{name}.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def people(self, keys):
+        people = vc.build_people(keys)
+        for person, key in zip(people, keys):
+            person["name"] = re.sub(r"\s*[—-]\s*", " ", vc.PEOPLE[key]["name"]).strip()
+        return people
+
+    def test_the_forms_are_right_and_there_are_no_english_words(self):
+        facts = rs.facts("period", True)
+        for name in ("natal_single_A", "natal_pair_A_IVAN_love", "natal_single_A_no_time", "period_pair_A_IVAN_love"):
+            text = self.load(name)
+            self.assertNotIn("Резервен анализ", text, name)
+            self.assertNotIn("Частичен анализ", text, name)
+            self.assertEqual(re.findall(r"(?<![ъЪ])в (?:Водолей|Везни|2-ри|2-ра|2-ро)", text), [], name)
+            self.assertEqual([v.detail for v in tc.check_language(text, facts)], [], name)
+        self.assertIn("е във Водолей (26°30'), в 9-ти дом.", self.load("natal_single_A"))
+        self.assertIn("Слънцето на Иван попада във 2-ри дом на Тест А одит.", self.load("natal_pair_A_IVAN_love"))
+        self.assertIn("Луната е във Везни или Скорпион, според часа.", self.load("natal_single_A_no_time"))
+        self.assertIn("Венера навлиза във Везни, идвайки от Скорпион", self.load("period_pair_A_IVAN_love"))
+
+    def test_the_independent_checks_accept_the_new_forms(self):
+        problems, counts = vc.verify(self.load("natal_single_A"), self.people(("A",)), None, "natal_single")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["placement"], counts["aspect"], counts["interpretations"], counts["closing"]), (8, 4, 12, 3))
+        problems, counts = vc.verify(self.load("natal_pair_A_IVAN_love"), self.people(("A", "IVAN")), None, "natal_pair")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["placement"], counts["aspect"], counts["overlay"], counts["interpretations"], counts["closing"]), (6, 9, 6, 21, 4))
+        problems, counts = vp.verify_period(self.load("period_pair_A_IVAN_love"), self.period_people, "2026-10-18", "2026-11-30")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["cards"], counts["ingress"], counts["lunation"], counts["closing"]), (16, 2, 3, 6))
+
+
 class LanguageFlowTest(FlowBase):
     """Какво става с английска дума в тълкуване на карта и в съвет за месеца, с подменения AI (като другите нарушения)."""
 
