@@ -171,14 +171,40 @@ def _when(value: str) -> str:
     return f"{_bg_date(value[:10])} {value[11:16]}".strip() if value else ""
 
 
+_FEMININE_BODIES = {"Venus", "Moon"}                  # Венера и Луна: „става директна“, „ретроградна“
+_STATION_RE = re.compile(r"^(\w+) turns (Retrograde|Direct) in (\w+)$")
+_INGRESS_RE = re.compile(r"^(\w+) enters (\w+)( \(moving retrograde\))?$")
+_LUNATION_RE = re.compile(r"^(New|Full) Moon in (\w+)")
+_ECLIPSE_RE = re.compile(r"^(Solar|Lunar) Eclipse in (\w+)")
+
+
+def _in_sign(english_sign: str) -> str:
+    return bg_text.in_form(SIGN_NAMES.get(english_sign, english_sign))
+
+
 def _event_text(e: Dict[str, Any]) -> str:
-    text = str(e.get("event") or "")
-    text = re.sub(r"\b(" + "|".join(PLANET_NAMES) + r")\b", lambda m: PLANET_NAMES[m.group(1)], text)
+    """Събитие от календара на български (таблицата на износа). Формите са целите изрази на календара, а не замяна дума по дума:
+    „New Moon in Libra“ → „Новолуние във Везни“, „Pluto turns Direct in Aquarius“ → „Плутон става директен във Водолей“."""
+    text = str(e.get("event") or "").strip()
+    m = _STATION_RE.match(text)
+    if m:
+        planet, direction, sign = m.groups()
+        word = {"Retrograde": ("ретрограден", "ретроградна"), "Direct": ("директен", "директна")}[direction][planet in _FEMININE_BODIES]
+        return f"{PLANET_NAMES.get(planet, planet)} става {word} {_in_sign(sign)}"
+    m = _INGRESS_RE.match(text)
+    if m:
+        planet, sign, back = m.groups()
+        return f"{PLANET_NAMES.get(planet, planet)} влиза {_in_sign(sign)}" + (" (на ретрограден ход)" if back else "")
+    m = _LUNATION_RE.match(text)
+    if m:
+        return f"{'Новолуние' if m.group(1) == 'New' else 'Пълнолуние'} {_in_sign(m.group(2))}"
+    m = _ECLIPSE_RE.match(text)
+    if m:
+        return f"{'Слънчево' if m.group(1) == 'Solar' else 'Лунно'} затъмнение {_in_sign(m.group(2))}"
+    # непознат вид събитие: старата замяна дума по дума (планети и знаци на български), без да се измислят изрази
+    text = re.sub(r"\b(" + "|".join(PLANET_NAMES) + r")\b", lambda m2: PLANET_NAMES[m2.group(1)], text)
     for en, bg in SIGN_NAMES.items():
         text = text.replace(en, bg)
-    text = (text.replace("turns Retrograde in", "става ретрограден в").replace("turns Direct in", "става директен в")
-            .replace("enters", "влиза в").replace("(moving retrograde)", "(на ретрограден ход)").replace("New Moon in", "Новолуние в")
-            .replace("Full Moon in", "Пълнолуние в"))
     return text
 
 

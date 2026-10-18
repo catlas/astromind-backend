@@ -8,7 +8,8 @@
   с посочени собственици, ако се разпознават; „точен“ само при аспект с точен момент; орбис, който съвпада с данните;
 - куспида и управител на дом, брой ретроградни планети;
 - за период и за дата: дата и час на станция, влизане в знак, новолуние, пълнолуние, затъмнение и на аспект;
-- вътрешни етикети, имена на полета, проценти за вероятност.
+- вътрешни етикети, имена на полета, проценти за вероятност;
+- английска дума насред български текст (check_language, код language, от 18.10.2026).
 
 Резултатът е списък от нарушения (Violation). Тежките (hard) означават, че твърдението противоречи на данните: текстът
 се връща на поправка и ако пак има такива, отчетът не се записва. Меките (soft) се поправят или чистят, но не го спират.
@@ -18,6 +19,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
+import bg_text
 
 # --------------------------------------------------------------------------------------------------------------
 # Речник
@@ -146,11 +149,12 @@ class Facts:
     question: str = ""                                                   # въпросът на потребителя (само за проверка на пълнотата; не влиза в дневници)
     known_times: Set[str] = field(default_factory=set)                   # часове „HH:MM“, които са изчислени: моментът на анализа и часовете на раждане
     birth_dates: Set[str] = field(default_factory=set)                   # „MM-DD“ на рождените дати (рожден ден не е транзитна дата)
+    latin_ok: Set[str] = field(default_factory=set)                      # латински думи, позволени в текста: тези от въпроса на потребителя (малки букви)
 
 
 @dataclass
 class Violation:
-    code: str            # house, sign, aspect, orb, exact, cusp, ruler, retro_count, date, time, event, label, english, percent
+    code: str            # house, sign, aspect, orb, exact, cusp, ruler, retro_count, date, time, event, label, english, percent, language
     severity: str        # hard | soft
     excerpt: str         # откъс от текста (до 160 знака)
     detail: str          # какво не е наред и какво е вярното (за поправката)
@@ -1735,6 +1739,37 @@ def check_leaks(raw: str) -> List[Violation]:
 
 
 # --------------------------------------------------------------------------------------------------------------
+# Латиница в български текст (18.10.2026)
+# --------------------------------------------------------------------------------------------------------------
+# AI понякога оставя английска дума насред български текст („…липсва лекота и spontaneity“, „…се чувства comfortable“). Латински букви са
+# позволени само за име на човек, часова зона („Europe/Sofia“), съкращение на ъгъл или формат („MC“, „ASC“, „UTC“, „PDF“) и за думите от
+# въпроса на самия потребител. Думи под три букви, римски цифри с главни букви и сложни думи с тире, наклонена черта, „@“ или точка не се броят.
+LATIN_WORD_RE = re.compile(r"(?<![\w/@.:-])[A-Za-z]+(?:['’][A-Za-z]+)*(?![\w/@-]|\.[A-Za-z]|://)")
+LATIN_ALLOWED = frozenset({"asc", "mc", "ic", "dsc", "utc", "gmt", "dst", "ai", "docx", "pdf", "sms"})
+_ROMAN_RE = re.compile(r"^[IVXLCDM]+$")
+
+
+def check_language(raw: str, facts: Facts) -> List[Violation]:
+    """Английска дума в текста е тежко нарушение: връща се на AI за поправка като всички останали. По една забележка за дума."""
+    allowed = set(LATIN_ALLOWED) | {w.lower() for w in facts.latin_ok}
+    for name in list(facts.names.values()) + list(bg_text.protected.get()):
+        allowed |= {w.lower() for w in re.findall(r"[A-Za-z]+", name or "")}
+    plain, _removed = clean_labels(re.sub(r"<[^>]+>", " ", raw or ""))     # служебните етикети на подканата text_guard маха преди проверката: не са английска дума на AI
+    out: List[Violation] = []
+    seen: Set[str] = set()
+    for m in LATIN_WORD_RE.finditer(plain):
+        word = m.group(0)
+        key = word.lower()
+        if len(re.sub(r"['’]", "", word)) < 3 or key in allowed or key in seen or _ROMAN_RE.match(word):
+            continue
+        seen.add(key)
+        out.append(Violation("language", "hard", _short(plain, max(0, m.start() - 30), m.end() + 30),
+                             f"В текста има английска дума „{word}“. Пиши само на български: замени я с българска дума или израз "
+                             "(латински букви са позволени само за име на човек и за градуси)."))
+    return out
+
+
+# --------------------------------------------------------------------------------------------------------------
 # Вход: проверка на цял текст
 # --------------------------------------------------------------------------------------------------------------
 def name_collides(facts: Facts) -> bool:
@@ -2229,7 +2264,7 @@ def protect_names(text: str, facts: Facts) -> str:
 
 def check_text(text: str, facts: Facts) -> List[Violation]:
     """Всички нарушения в текста. Редът е като в текста; повторенията се махат."""
-    found: List[Violation] = list(check_leaks(text or ""))
+    found: List[Violation] = list(check_leaks(text or "")) + check_language(text or "", facts)
     if name_collides(facts):
         return found                          # само служебните етикети и проценти: твърденията не могат да се разпознаят сигурно
     found += check_text_safety(text or "")
@@ -2278,7 +2313,7 @@ def _person_facts(chart: Dict) -> Tuple[Dict, Dict, int]:
     return natal, cusps_view(view.get("houses") or {}), int(view.get("retrograde_count") or 0)
 
 
-CHECKER_VERSION = "26"       # версия на правилата за проверка на текста (влиза в снимката на отчета); 24: прозорци в report_guard, 25: само съвет е препоръка, 26: общи думи и едно изречение (18.10.2026)
+CHECKER_VERSION = "27"       # версия на правилата за проверка на текста (влиза в снимката на отчета); 24: прозорци в report_guard, 25: само съвет е препоръка, 26: общи думи и едно изречение, 27: английска дума в текста е нарушение `language` (18.10.2026)
 
 
 class FactsUnavailable(Exception):
@@ -2333,6 +2368,7 @@ def build_facts(*, mode: str, user_name: Optional[str], natal_chart: Dict, partn
     from aspects_engine import calculate_natal_aspects
 
     facts = Facts(mode=mode, report_date=report_date, question=(question or "").strip())
+    facts.latin_ok = {w.lower() for w in re.findall(r"[A-Za-z]{3,}", facts.question)}            # дума от въпроса на потребителя не е английска дума на AI
     facts.names["user"] = factpack.display_name(user_name, factpack.FIRST_PERSON_DEFAULT)
     people = [("user", natal_chart)]
     if partner_chart is not None:

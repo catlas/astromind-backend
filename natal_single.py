@@ -15,6 +15,7 @@ card_engine.py.
 """
 from typing import Dict, List, Optional, Tuple
 
+import bg_text
 import card_engine
 import factpack
 import text_check
@@ -30,7 +31,7 @@ ANGLE_SCORE = {"ASC": -1.5, "MC": -0.5}              # ъглите са осн�
 
 
 def angle_heading(angle: str, owner: str, sign: str, degrees: str) -> str:
-    return f"{_DEFINITE[angle]} на {owner} е в {SIGN_BG.get(sign, sign)} ({degrees})."
+    return f"{_DEFINITE[angle]} на {owner} е {bg_text.in_form(SIGN_BG.get(sign, sign))} ({degrees})."
 
 
 def _placements(chart: Dict, owner: str, rel: Relevance) -> List[Card]:

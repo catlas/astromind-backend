@@ -14,6 +14,7 @@
 """
 from typing import Dict, List, Optional, Tuple
 
+import bg_text
 import card_engine
 import factpack
 from aspects_engine import calculate_natal_aspects
@@ -91,9 +92,9 @@ def _deg(position: str) -> str:
 
 
 def placement_heading(planet: str, owner: str, sign: str, degrees: str, house: Optional[int]) -> str:
-    where = f"в {SIGN_BG.get(sign, sign)} ({degrees})"
+    where = f"{bg_text.in_form(SIGN_BG.get(sign, sign))} ({degrees})"          # „във Водолей“, „във Везни“
     if house:
-        where += f", в {_ORDINAL[house]} дом"
+        where += f", {bg_text.in_form(_ORDINAL[house])} дом"                  # „във 2-ри дом“, но „в 5-ти дом“
     return f"{_DEFINITE.get(planet, planet)} на {owner} е {where}."
 
 
@@ -104,7 +105,7 @@ def natal_aspect_heading(row: Dict, owner: str) -> str:
 
 
 def overlay_heading(planet: str, planet_owner: str, house: int, house_owner: str) -> str:
-    return f"{_DEFINITE.get(planet, planet)} на {planet_owner} попада в {_ORDINAL[house]} дом на {house_owner}."
+    return f"{_DEFINITE.get(planet, planet)} на {planet_owner} попада {bg_text.in_form(_ORDINAL[house])} дом на {house_owner}."
 
 
 def _placements(chart: Dict, owner_key: str, owner: str, rel: Relevance) -> List[Card]:

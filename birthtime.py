@@ -14,6 +14,7 @@
 from contextvars import ContextVar, Token
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import bg_text
 from text_check import SIGN_BG
 
 current: ContextVar[str] = ContextVar("astro_birth_time_context", default="")
@@ -69,9 +70,9 @@ def sign_sentences(chart: Dict) -> List[str]:
         label = BODY_BG.get(planet, planet)
         signs = info.get("signs") or []
         if len(signs) == 1:
-            out.append(f"{label} е в {_signs_text(signs)} (знакът е сигурен, точният градус не е)")
+            out.append(f"{label} е {bg_text.in_form(_signs_text(signs))} (знакът е сигурен, точният градус не е)")
         elif signs:
-            out.append(f"{label} е в {_signs_text(signs)}, според часа")
+            out.append(f"{label} е {bg_text.in_form(_signs_text(signs))}, според часа")
     return out
 
 

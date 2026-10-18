@@ -35,7 +35,9 @@ _SIGN_UPPER_RE = re.compile(_any(k.upper() for k in SIGNS))
 _PLANET_RE = re.compile(_any(PLANETS))
 _ASPECT_RE = re.compile(_any(list(ASPECTS) + [k.capitalize() for k in ASPECTS]))
 _NATAL_RE = re.compile(r"(?<![\w-])([Nn]atal|NATAL|[Tt]ransit(?:ing)?)(?![\w-])(\s+)?([А-Яа-яA-Za-z]+)?")
-_PREP_RE = re.compile(r"(?<![\w-])([Вв])(\s+)(?=[ВвФф])")           # „в Везни“ → „във Везни“
+# „в Везни“ → „във Везни“, „в Водолей“ → „във Водолей“, „в 2-ри дом“ → „във 2-ри дом“ (втори: цифрата 2 в поредно число; 12-ти, 22-ри и 5-ти не се пипат)
+_PREP_RE = re.compile(r"(?<![\w-])([Вв])(\s+)(?=[ВвФф]|2-р[иао]\w*(?![\w-]))")
+_NEEDS_VAV_RE = re.compile(r"^(?:[ВвФф]|2-р[иао]\w*(?![\w-]))")
 # Известни грешни думи на AI (регресионен одит 11.10.2026): знакът Везни е писан „Либра“/„Либера“, „Накратко“ е писано „Накрасо“.
 # Работи само върху цели думи; имената на хората са защитени по-горе и остават непроменени.
 TERM_FIXES = {"либера": "Везни", "либра": "Везни", "накрасо": "Накратко"}
@@ -45,6 +47,17 @@ _TERM_RE = re.compile(r"(?<![\w-])(" + "|".join(TERM_FIXES) + r")(?![\w-])", re.
 def _term(m: re.Match) -> str:
     fixed = TERM_FIXES[m.group(1).lower()]
     return fixed if m.group(1)[0].isupper() else fixed[0].lower() + fixed[1:]
+
+
+def prep_v(next_word: str) -> str:
+    """„в“ или „във“ пред следващата дума: „във“, когато тя започва с в или ф („във Везни“, „във Водолей“) или е 2-ри, 2-ра, 2-ро
+    (втори: „във 2-ри дом“); иначе „в“ („в Телец“, „в 5-ти дом“, „в 12-ти дом“). Единственото място за правилото в шаблоните на кода."""
+    return "във" if _NEEDS_VAV_RE.match((next_word or "").lstrip()) else "в"
+
+
+def in_form(phrase: str) -> str:
+    """Думата с правилния предлог пред нея: in_form("Водолей") → „във Водолей“, in_form("Телец") → „в Телец“, in_form("2-ри") → „във 2-ри“."""
+    return f"{prep_v(phrase)} {phrase}"
 
 
 def bind(names: Iterable[str]) -> Token:

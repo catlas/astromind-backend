@@ -382,7 +382,7 @@ class PromptPayloadTest(Phase8Base):
                 refs = {("Иван", "A"): mapped(REF["overlays"]["IVAN_in_A"]), ("A", "Иван"): mapped(REF["overlays"]["A_in_IVAN"])}
                 found = set()
                 for line in (l for l in user.splitlines() if re.match(r"^H\d+: ", l)):
-                    m = re.match(r"^H\d+: (.+?) на (.+?) попада в (\S+) дом на (.+?)\.$", line)
+                    m = re.match(r"^H\d+: (.+?) на (.+?) попада (?:в|във) (\S+) дом на (.+?)\.$", line)         # „във 2-ри дом“ (18.10.2026), другите са „в N-ти дом“
                     self.assertTrue(m, line)
                     planet = next(k for k, v in text_check.PLANET_BG.items() if m.group(1) in (v, pair_snapshot._DEFINITE.get(k)))
                     reference = refs[(m.group(2), m.group(4))]

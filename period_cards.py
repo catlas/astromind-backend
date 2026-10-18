@@ -21,6 +21,7 @@ import dataclasses
 import re
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
+import bg_text
 import card_engine
 import factpack
 import natal_pair
@@ -106,13 +107,13 @@ def _houses_clause(row: Dict, first: str, second: str) -> str:
     """„в 4-ти дом на Иван“ за всеки човек с известен час (само от календара)."""
     houses = row.get("natal_house") or {}
     names = {"User": first, "Partner": second}
-    parts = [f"в {_ORDINAL[h]} дом на {names[k]}" for k, h in houses.items() if h and k in names and h in _ORDINAL]
+    parts = [f"{bg_text.in_form(_ORDINAL[h])} дом на {names[k]}" for k, h in houses.items() if h and k in names and h in _ORDINAL]       # „във 2-ри дом“
     return " (" + " и ".join(parts) + ")" if parts else ""
 
 
 def _in_sign(sign_bg: str) -> str:
-    """„в Телец“, но „във Везни“ и „във Водолей“."""
-    return f"във {sign_bg}" if sign_bg[:1] in ("В", "Ф") else f"в {sign_bg}"
+    """„в Телец“, но „във Везни“ и „във Водолей“ (правилото е в bg_text.prep_v)."""
+    return bg_text.in_form(sign_bg)
 
 
 def _gendered(planet: str, masculine: str, feminine: str) -> str:
