@@ -42,6 +42,7 @@ PEOPLE = {
     "A": dict(name="Тест А одит", date="1990-02-15", time="13:00", lat=42.6977, lon=23.3219, known=True),
     "IVAN": dict(name="Иван", date="1985-07-12", time="18:45", lat=48.2082, lon=16.3738, known=True),
     "IVAN_NO_TIME": dict(name="Иван", date="1985-07-12", time="12:00", lat=48.2082, lon=16.3738, known=False),
+    "A_NO_TIME": dict(name="Тест А без час", date="1990-02-15", time="12:00", lat=42.6977, lon=23.3219, known=False),      # само за --people при живи проби
     "CHILD": dict(name="Мария", date="2014-05-20", time="09:15", lat=42.1354, lon=24.7453, known=True),
 }
 MOMENTS = [("2026-10-14", "18:00", "Europe/Sofia"), ("2026-11-03", "09:30", "Europe/Sofia"), ("2026-01-03", "03:10", "Europe/Sofia"),

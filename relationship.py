@@ -114,6 +114,8 @@ def unbind(token: Token) -> None:
 
 # Заглавия и тон в шаблоните на темите, написани за романтична връзка („Romantic Atmosphere“, „sexual chemistry“): при друг
 # контекст се подменят, за да съответстват на избраните отношения (R08, регресионен одит 11.10.2026). Фактите не се пипат.
+# Шаблоните на темите са архивирани (archive/legacy_*.txt, 17–18.10.2026): подканите по карти не носят романтични заглавия,
+# а adapt остава предпазна мрежа за всяка подкана, която минава през ai_interpreter._call_api.
 _ATMOSPHERE = {"friend": "Atmosphere of the friendship this month", "family": "Atmosphere of closeness in the family this month",
                "parent_child": "Atmosphere of care and support this month", "work": "Atmosphere of the collaboration this month",
                "general": "Atmosphere of the connection this month"}

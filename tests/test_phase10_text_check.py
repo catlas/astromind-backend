@@ -706,13 +706,12 @@ class InterpreterIntegrationTest(unittest.TestCase):
         self.assertNotIn("7-ми дом и носи", text)
         self.assertIn("Това усилва близостта и носи топлина.", text)
 
-    def test_a_text_in_another_language_is_not_checked(self):
-        _, _, bad, _ = good_and_bad_text()
-        fake = mock.AsyncMock(return_value=bad)
+    def test_another_language_is_refused_before_any_ai_call(self):
+        fake = mock.AsyncMock(return_value="Plain English text.")
         with mock.patch.object(self.interp, "_call_api", fake):
-            text = asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван", language="en"))
-        self.assertEqual(text, bad)
-        self.assertEqual(fake.await_count, 1)
+            with self.assertRaises(ValueError):
+                asyncio.run(self.interp.interpret_chart(natal_chart=chart(IVAN_BIRTH), user_name="Иван", language="en"))
+        self.assertEqual(fake.await_count, 0)
 
     def test_facts_that_cannot_be_built_refuse_the_report_before_any_ai_call(self):
         """R01 (одит 11.10.2026): без факти за проверка непроверен текст не се доставя; отказът е ПРЕДИ разход на AI заявка."""

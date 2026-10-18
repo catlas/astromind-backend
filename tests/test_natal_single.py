@@ -290,7 +290,7 @@ class NatalFlowTest(unittest.TestCase):
 
 
 class NatalRouteTest(unittest.TestCase):
-    """interpret_chart: натален анализ за един човек на български минава по картите; другите езици остават по стария път."""
+    """interpret_chart: натален анализ за един човек на български минава по картите; другите езици се отказват (старият свободен ход е махнат)."""
 
     def interp_call(self, script, **kwargs):
         interp = ai_interpreter.AIInterpreter(api_key="test-dummy")
@@ -308,16 +308,17 @@ class NatalRouteTest(unittest.TestCase):
         self.assertEqual(quality(checks), "full")
         self.assertIn(f"## Натална карта на {FIRST}", text)
 
-    def test_the_old_path_is_still_used_for_other_languages(self):
+    def test_another_language_is_refused_before_any_ai_call(self):
+        """Старият свободен ход за други езици е махнат (archive/legacy_free_flows_2026-10-18.txt): само „bg“, без заявка към AI."""
         calls = []
 
-        async def old(system_prompt, user_prompt, max_tokens, **kw):
+        async def fake(system_prompt, user_prompt, max_tokens, **kw):
             calls.append(system_prompt)
             return "Plain English text."
-        with mock.patch.dict(os.environ, {"TEXT_CHECK_MODE": "off"}):
-            text, _checks = self.interp_call(old, language="en")
-        self.assertEqual(text, "Plain English text.")
-        self.assertFalse(any("MODE: ONE-PERSON NATAL ANALYSIS" in s for s in calls))
+        with self.assertRaises(ValueError) as caught:
+            self.interp_call(fake, language="en")
+        self.assertIn("само български", str(caught.exception))
+        self.assertEqual(calls, [])
 
 
 class NatalJobsTest(unittest.TestCase):

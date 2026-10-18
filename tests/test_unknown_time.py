@@ -18,9 +18,12 @@ from pydantic import ValidationError  # noqa: E402
 
 import aspects_engine  # noqa: E402
 import birthtime  # noqa: E402
+import card_engine  # noqa: E402
 import engine  # noqa: E402
 import factpack  # noqa: E402
 import main  # noqa: E402
+import natal_pair  # noqa: E402
+import single_snapshot  # noqa: E402
 import text_check  # noqa: E402
 from ai_interpreter import AIInterpreter  # noqa: E402
 from rate_limit import limiter  # noqa: E402
@@ -179,22 +182,36 @@ class FactPackTest(unittest.TestCase):
         self.assertIn("Ascendant_formatted", known)
         self.assertNotIn("UNKNOWN", known)
 
-    def test_overlays_exist_only_in_the_houses_of_a_person_with_a_known_time(self):
-        both_unknown = AIInterpreter._overlay_blocks(self.unknown, self.unknown, "Мария", "Ана")
-        self.assertEqual(both_unknown, "")
-        text = AIInterpreter._overlay_blocks(self.unknown, self.known, "Мария", "Иван")
-        self.assertNotIn("PARTNER PLANETS IN USER'S NATAL HOUSES", text)         # Мария няма домове
-        self.assertIn("МАРИЯ PLANETS IN ИВАН'S NATAL HOUSES", text)                # Иван има
-        reverse = AIInterpreter._overlay_blocks(self.known, self.unknown, "Иван", "Мария")
-        self.assertIn("PARTNER PLANETS IN USER'S NATAL HOUSES", reverse)
-        self.assertNotIn("ИВАН PLANETS IN МАРИЯ'S NATAL HOUSES", reverse)
+    def overlay_cards(self, first_chart, second_chart):
+        """Картите „планетите на единия в домовете на другия“ (натален анализ за двама, natal_pair.py)."""
+        ctx = card_engine.Context(natal_chart=first_chart, partner_chart=second_chart, transit_chart={}, user_name="Мария", partner_name="Иван",
+                                  first="Мария", second="Иван", question="", target_date="", theme="x", utc_today="2026-10-17", report_type="general")
+        return [c for c in natal_pair.build_cards(ctx) if c.row.get("kind") == "overlay"]
 
-    def test_transit_blocks_skip_the_houses_but_keep_the_aspects(self):
-        text = AIInterpreter._transit_blocks("МАРИЯ", "Мария", self.unknown, self.transit)
-        self.assertNotIn("NATAL HOUSES", text)
-        self.assertIn("TRANSIT ASPECTS TO МАРИЯ'S NATAL CHART", text)
-        with_time = AIInterpreter._transit_blocks("ИВАН", "Иван", self.known, self.transit)
-        self.assertIn("NATAL HOUSES", with_time)
+    def test_overlay_cards_exist_only_in_the_houses_of_a_person_with_a_known_time(self):
+        self.assertEqual(self.overlay_cards(self.unknown, self.unknown), [])                    # без час и при двамата: няма домове
+        for_known_second = self.overlay_cards(self.unknown, self.known)
+        self.assertTrue(for_known_second)
+        self.assertTrue(all(c.row["ho"] == "partner" for c in for_known_second))               # домовете са само на втория (Иван), Мария няма
+        self.assertTrue(all(c.heading.endswith("дом на Иван.") for c in for_known_second))
+        for_known_first = self.overlay_cards(self.known, self.unknown)
+        self.assertTrue(for_known_first)
+        self.assertTrue(all(c.row["ho"] == "user" for c in for_known_first))                   # обратно: домовете са само на първия
+        self.assertFalse(any("дом на Мария" in c.heading for c in for_known_second))
+
+    def test_transit_cards_skip_the_houses_but_keep_the_aspects(self):
+        ctx = card_engine.Context(natal_chart=self.unknown, partner_chart=None, transit_chart=self.transit, user_name="Мария", partner_name=None,
+                                  first="Мария", second="", question="", target_date="2026-10-10 12:00", theme="x", utc_today="2026-10-17",
+                                  report_type="general")
+        cards, extra = single_snapshot.MODE.build(ctx)
+        self.assertTrue(cards)                                                                  # аспектите към картата без час остават
+        self.assertTrue(all("дом" not in c.heading for c in cards))
+        self.assertEqual(extra.get("A", ""), "")                                                # няма ред „транзитните планети в домовете“
+        ctx_known = card_engine.Context(natal_chart=self.known, partner_chart=None, transit_chart=self.transit, user_name="Иван", partner_name=None,
+                                        first="Иван", second="", question="", target_date="2026-10-10 12:00", theme="x", utc_today="2026-10-17",
+                                        report_type="general")
+        _cards, extra_known = single_snapshot.MODE.build(ctx_known)
+        self.assertIn("дом", extra_known.get("A", ""))                                          # с час домовете са в реда за човека
 
 
 class RequestTest(unittest.TestCase):

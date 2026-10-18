@@ -133,20 +133,16 @@ class RelationshipTitlesTest(unittest.TestCase):
         self.assertEqual(self.adapted("romantic"), self.TEMPLATE)
         self.assertEqual(relationship.adapt(self.TEMPLATE), self.TEMPLATE)               # без контекст нищо не се променя
 
-    def test_the_real_templates_are_adapted_in_every_request(self):
-        """Шаблоните на темите за период са архивирани (archive/legacy_period_flow_2026-10-12.txt). Остава истинският текст на фокуса за двойка:
-        той се подменя при друг контекст, а подканите по карти не носят романтични шаблони, така че нищо не остава непроменено."""
-        templates = [text for kind in ("love", "general", "career", "money", "health", "karmic")
-                     for text in [ai_interpreter.AIInterpreter._get_synastry_type_focus(kind)]
-                     if any(old in text for old, _ in relationship._NEUTRAL)]
-        self.assertTrue(templates)
+    def test_every_request_goes_through_the_adaptation_and_the_binding_is_removed_after_the_analysis(self):
+        """Шаблоните на темите (период и свободен текст) са архивирани (archive/legacy_*.txt): нищо истинско вече не носи романтични
+        заглавия, но _call_api още прекарва всяка подкана през adapt (предпазна мрежа), а връзката се сваля след анализа."""
+        import inspect
+        call_api = inspect.getsource(ai_interpreter.AIInterpreter._call_api)
+        self.assertIn("relationship.adapt(system_prompt)", call_api)
         token = relationship.bind("friend")
         try:
-            for template in templates:
-                adapted = relationship.adapt(template)
-                self.assertNotEqual(adapted, template)
-                for old, _ in relationship._NEUTRAL:
-                    self.assertNotIn(old, adapted)
+            self.assertEqual(relationship.current_code.get(), "friend")
+            self.assertNotIn("Romantic Atmosphere", relationship.adapt("Romantic Atmosphere for this Month"))
         finally:
             relationship.unbind(token)
         self.assertEqual(relationship.current_code.get(), "")                                # връзката е свалена след анализа
