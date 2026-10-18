@@ -183,9 +183,10 @@ class CrossPartTest(unittest.TestCase):
             self.assertEqual(found, {}, msg=sentence)
 
     def test_waiting_until_a_date_and_after_a_date_are_still_postponements(self):
-        for sentence in ("Изчакайте до 14 ноември с решението. На 31 октомври вземете решение.",
+        # конкретни действия; общите думи („решение“, „разговор“) вече не се следят за „до / след дата“ — виж test_report_guard_generic.py
+        for sentence in ("Изчакайте до 14 ноември с подписването. На 31 октомври подписвайте договора.",
                          "Не финализирайте проекта до 14 ноември. На 31 октомври финализирайте проекта.",
-                         "Решението вземете след 14 ноември. На 31 октомври вземете решение."):
+                         "Подписването планирайте след 14 ноември. На 31 октомври подписвайте договора."):
             found = report_guard.cross_part_violations(self.parts("<p>Октомври е спокоен.</p>", overview="<p>%s</p>" % sentence), self.months, self.facts)
             self.assertIn("overview", found, msg=sentence)
 

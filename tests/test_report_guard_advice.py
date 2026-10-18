@@ -44,7 +44,7 @@ ADVICE = (
     "Около 13 ноември е добре да започнете разговора с близките си.",
     "Добри моменти за разговор и изясняване са около 13 ноември.",
     "От 3 март комуникацията се улеснява, така че използвайте този период за разговори и изясняване.",
-    "Решението вземете след 14 ноември.",
+    "Подписването планирайте след 14 ноември.",
     "Не финализирайте проекта на 24 октомври.",
 )
 
@@ -118,15 +118,16 @@ class RefusalScenariosTest(unittest.TestCase):
         self.assertEqual(self.found([("month:2026-10", october_advice), ("overview", overview)]), {})
 
     def test_a_later_month_after_date_is_not_compared_with_an_earlier_month(self):
-        december = "След 25 декември водете разговорите за партньорства и договорки с конкретика и ясни срокове."
-        self.assertEqual(self.found([("month:2026-10", DESCRIPTIVE[0] + " " + ADVICE[4].replace("13 ноември", "24 октомври")), ("month:2026-12", december)]), {})
+        december = "След 25 декември финализирайте договорките с конкретика и ясни срокове."
+        october = DESCRIPTIVE[0] + " Около 24 октомври е добър момент да финализирате проекта."
+        self.assertEqual(self.found([("month:2026-10", october), ("month:2026-12", december)]), {})
         # но вътре в същия месец е противоречие
-        found = self.found([("month:2026-12", december + " На 13 декември е добър момент за разговор.")])
+        found = self.found([("month:2026-12", december + " На 13 декември е добър момент да финализирате проекта.")])
         self.assertEqual(list(found), ["month:2026-12"])
         self.assertIn("отложено до 25 декември, а на 13 декември е препоръчано", found["month:2026-12"][0].detail)
 
     def test_after_a_date_in_the_overview_still_covers_every_earlier_date(self):
-        found = self.found([("month:2026-10", "Около 24 октомври е добър момент за разговор."), ("overview", "Разговорите водете след 25 декември.")])
+        found = self.found([("month:2026-10", "Около 24 октомври е добър момент да финализирате проекта."), ("overview", "Финализирането планирайте след 25 декември.")])
         self.assertEqual(list(found), ["overview"])
 
     def test_the_commitment_that_the_card_only_describes_is_not_a_recommendation(self):
@@ -155,8 +156,8 @@ class CanonicalContradictionsTest(unittest.TestCase):
             self.assertEqual(list(found), ["overview"], (first, second))
 
     def test_postponed_to_a_later_date_and_recommended_earlier(self):
-        for first, second in (("Изчакайте до 14 ноември с решението.", "На 31 октомври е добър момент да вземете решение."),
-                              ("Решението вземете след 14 ноември.", "На 31 октомври вземете решение."),
+        for first, second in (("Изчакайте до 14 ноември с финализирането на проекта.", "На 31 октомври е добър момент да финализирате проекта."),
+                              ("Подписването планирайте след 14 ноември.", "На 31 октомври подписвайте договора."),
                               ("Не финализирайте проекта до 14 ноември.", "На 31 октомври финализирайте проекта."),
                               ("Отложете подписването до 14 ноември.", "На 31 октомври подписвайте договора.")):
             found = self.found([("month:2026-10", second), ("overview", first)])
@@ -170,8 +171,8 @@ class CanonicalContradictionsTest(unittest.TestCase):
         self.assertEqual(list(found), ["overview"])
 
     def test_a_window_with_avoid_in_the_second_person_plural(self):
-        found = self.found([("month:2026-12", "На 13 декември е добър момент да вземете решение."),
-                            ("overview", "От 3 до 25 декември по-добре да избягвате решения.")])
+        found = self.found([("month:2026-12", "На 13 декември е добър момент да финализирате проекта."),
+                            ("overview", "От 3 до 25 декември по-добре да избягвате финализирането на проекта.")])
         self.assertEqual(list(found), ["overview"])
 
     def test_a_descriptive_sentence_does_not_hide_a_real_contradiction_next_to_it(self):

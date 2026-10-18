@@ -8,6 +8,8 @@
 - „от 3 до 25 декември“, „между 3 и 25 декември“, „3–25 декември“, „от 30 ноември до 5 декември“ са прозорци с начало и край: препоръка вътре в
   прозореца е противоречие, преди него — не е (отлагане: без самия край; забрана: с двата края).
 Проверката не е отслабена: противоречието вътре в прозореца и всички стари случаи остават.
+Тестовете са с КОНКРЕТНО действие („финализиране“): за общите думи („разговор“, „решение“, „ангажимент“, „започване“) „след / до / прозорец“ вече не се
+следят (18.10.2026, виж test_report_guard_generic.py).
 """
 import contextlib
 import io
@@ -25,12 +27,13 @@ import text_guard
 from scanner import TransitScanner
 
 MONTHS = ["2026-10", "2026-11", "2026-12"]
-OCTOBER = "На 31 октомври е добър момент да вземете решение за нова стъпка."
-NOVEMBER_END = "На 29 ноември е добър момент да вземете решение за нова стъпка."
+OCTOBER = "На 31 октомври е добър момент да финализирате проекта."
+NOVEMBER_END = "На 29 ноември е добър момент да финализирате проекта."
 
 
 def decide_on(day):
-    return f"На {day} е добър момент да вземете решение."
+    """Препоръка на дата за конкретно действие („финализиране“)."""
+    return f"На {day} е добър момент да финализирате проекта."
 
 
 class WindowTest(unittest.TestCase):
@@ -48,7 +51,7 @@ class WindowTest(unittest.TestCase):
 
     # --- „до дата“ само с край ---
     def test_until_only_in_a_month_block_counts_from_the_first_day_of_that_month(self):
-        sentence = "Не бързайте с решения до 25 декември."
+        sentence = "Не бързайте с финализирането на проекта до 25 декември."
         self.assertEqual(self.december(sentence, OCTOBER, "month:2026-10"), {})                  # октомври е преди декември: не е противоречие
         self.assertEqual(self.december(sentence, NOVEMBER_END, "month:2026-11"), {})
         found = self.december(sentence, decide_on("13 декември"))                                  # вътре в декември е
@@ -56,21 +59,21 @@ class WindowTest(unittest.TestCase):
         self.assertIn("отложено до 25 декември, а на 13 декември е препоръчано", found["month:2026-12"][0].detail)
 
     def test_until_only_in_the_overview_still_covers_every_earlier_date(self):
-        found = self.found([("month:2026-10", OCTOBER), ("overview", "Не бързайте с решения до 25 декември.")])
+        found = self.found([("month:2026-10", OCTOBER), ("overview", "Не бързайте с финализирането на проекта до 25 декември.")])
         self.assertEqual(list(found), ["overview"])
         self.assertIn("отложено до 25 декември, а на 31 октомври е препоръчано", found["overview"][0].detail)
 
     def test_until_in_a_month_block_reaches_back_to_its_own_month_only_when_the_end_is_later(self):
         # „до 5 ноември“ в октомврийския блок: прозорецът е от 1 октомври до 5 ноември и покрива 20 октомври
-        found = self.found([("month:2026-10", "Изчакайте до 5 ноември с решението. " + decide_on("20 октомври"))])
+        found = self.found([("month:2026-10", "Изчакайте до 5 ноември с финализирането на проекта. " + decide_on("20 октомври"))])
         self.assertEqual(list(found), ["month:2026-10"])
         # край преди началото на месеца (декември: „до 25 ноември“) няма начало: както преди, важи за всички по-ранни дати
-        found = self.found([("month:2026-11", decide_on("10 ноември")), ("month:2026-12", "Изчакайте до 25 ноември с решението.")])
+        found = self.found([("month:2026-11", decide_on("10 ноември")), ("month:2026-12", "Изчакайте до 25 ноември с финализирането на проекта.")])
         self.assertEqual(list(found), ["month:2026-12"])
 
     # --- прозорци с начало и край ---
     def test_a_window_with_avoid_covers_both_ends_and_nothing_before_the_start(self):
-        sentence = "От 3 до 25 декември избягвайте решения."
+        sentence = "От 3 до 25 декември избягвайте финализирането на проекта."
         for outside in ("1 декември", "2 декември", "26 декември"):
             self.assertEqual(self.december(sentence, decide_on(outside)), {}, outside)
         self.assertEqual(self.december(sentence, OCTOBER, "month:2026-10"), {})
@@ -80,7 +83,7 @@ class WindowTest(unittest.TestCase):
             self.assertIn("не се препоръчва от 3 декември до 25 декември", found["month:2026-12"][0].detail)
 
     def test_a_window_with_postponement_does_not_cover_its_end_day(self):
-        sentence = "От 3 до 25 декември отложете решението."
+        sentence = "От 3 до 25 декември отложете финализирането на проекта."
         for outside in ("2 декември", "25 декември", "30 декември"):
             self.assertEqual(self.december(sentence, decide_on(outside)), {}, outside)
         self.assertEqual(self.december(sentence, OCTOBER, "month:2026-10"), {})
@@ -88,15 +91,16 @@ class WindowTest(unittest.TestCase):
         self.assertIn("отложено до 25 декември, а на 13 декември е препоръчано", found["month:2026-12"][0].detail)
 
     def test_every_way_of_writing_a_window_is_read_as_a_window(self):
-        for sentence in ("Между 3 и 25 декември избягвайте решения.", "3–25 декември избягвайте решения.", "От 3 декември до 25 декември избягвайте решения.",
-                         "Избягвайте решения между 3 и 25 декември.", "Избягвайте решения от 3 до 25 декември."):
+        for sentence in ("Между 3 и 25 декември избягвайте финализирането на проекта.", "3–25 декември избягвайте финализирането на проекта.",
+                         "От 3 декември до 25 декември избягвайте финализирането на проекта.", "Избягвайте финализирането на проекта между 3 и 25 декември.",
+                         "Избягвайте финализирането на проекта от 3 до 25 декември."):
             self.assertEqual(self.december(sentence, OCTOBER, "month:2026-10"), {}, sentence)
             self.assertEqual(self.december(sentence, decide_on("2 декември")), {}, sentence)
             self.assertEqual(list(self.december(sentence, decide_on("13 декември"))), ["month:2026-12"], sentence)
 
     def test_a_window_across_two_months(self):
-        for sentence in ("От 30 ноември до 5 декември избягвайте решения.", "Между 30 ноември и 5 декември избягвайте решения.",
-                         "Избягвайте решения между 30 ноември и 5 декември."):
+        for sentence in ("От 30 ноември до 5 декември избягвайте финализирането на проекта.", "Между 30 ноември и 5 декември избягвайте финализирането на проекта.",
+                         "Избягвайте финализирането на проекта между 30 ноември и 5 декември."):
             self.assertEqual(self.found([("month:2026-11", NOVEMBER_END), ("month:2026-12", sentence)]), {}, sentence)      # 29 ноември е преди прозореца
             found = self.found([("month:2026-11", decide_on("30 ноември")), ("month:2026-12", sentence)])
             self.assertEqual(list(found), ["month:2026-12"], sentence)
@@ -104,32 +108,32 @@ class WindowTest(unittest.TestCase):
             self.assertEqual(self.december(sentence, decide_on("6 декември")), {}, sentence)                                # след края
 
     def test_a_window_in_the_overview_conflicts_with_a_recommendation_inside_it_in_any_month(self):
-        found = self.found([("month:2026-11", decide_on("9 ноември")), ("overview", "Между 3 и 17 ноември избягвайте решения.")])
+        found = self.found([("month:2026-11", decide_on("9 ноември")), ("overview", "Между 3 и 17 ноември избягвайте финализирането на проекта.")])
         self.assertEqual(list(found), ["overview"])
-        self.assertEqual(self.found([("month:2026-10", OCTOBER), ("overview", "Между 3 и 17 ноември избягвайте решения.")]), {})
+        self.assertEqual(self.found([("month:2026-10", OCTOBER), ("overview", "Между 3 и 17 ноември избягвайте финализирането на проекта.")]), {})
 
     def test_a_window_is_not_mixed_up_with_different_people_or_other_actions(self):
         pair = rs.facts("period", True, "2026-12-31")
-        sentence = f"{rs.IVAN}: от 3 до 25 декември избягвайте решения."
-        other = f"{rs.A_NAME}: на 13 декември вземете решение."
+        sentence = f"{rs.IVAN}: от 3 до 25 декември избягвайте финализирането на проекта."
+        other = f"{rs.A_NAME}: на 13 декември финализирайте проекта."
         self.assertEqual(report_guard.cross_part_violations([("month:2026-12", other + " " + sentence)], MONTHS, pair), {})
-        self.assertEqual(self.december("От 3 до 25 декември избягвайте решения.", "На 13 декември финализирайте проекта."), {})
+        self.assertEqual(self.december("От 3 до 25 декември избягвайте финализирането на проекта.", "На 13 декември подписвайте договора."), {})
 
     # --- вътрешни помощници ---
     def test_statements_carry_the_start_of_the_window(self):
-        rows = report_guard._statements("От 3 до 25 декември избягвайте решения.", self.facts)
-        self.assertEqual([(r[0], r[1], r[2], r[5]) for r in rows], [("решение", "avoid_window", date(2026, 12, 25), date(2026, 12, 3))])
-        rows = report_guard._statements("Изчакайте до 25 декември с решението.", self.facts, date(2026, 12, 1))
-        self.assertEqual([(r[0], r[1], r[2], r[5]) for r in rows], [("решение", "from", date(2026, 12, 25), date(2026, 12, 1))])
-        rows = report_guard._statements("Изчакайте до 25 декември с решението.", self.facts, None)
+        rows = report_guard._statements("От 3 до 25 декември избягвайте финализирането на проекта.", self.facts)
+        self.assertEqual([(r[0], r[1], r[2], r[5]) for r in rows], [("финализиране", "avoid_window", date(2026, 12, 25), date(2026, 12, 3))])
+        rows = report_guard._statements("Изчакайте до 25 декември с финализирането на проекта.", self.facts, date(2026, 12, 1))
+        self.assertEqual([(r[0], r[1], r[2], r[5]) for r in rows], [("финализиране", "from", date(2026, 12, 25), date(2026, 12, 1))])
+        rows = report_guard._statements("Изчакайте до 25 декември с финализирането на проекта.", self.facts, None)
         self.assertEqual([(r[1], r[5]) for r in rows], [("from", None)])
-        rows = report_guard._statements("Решението вземете след 14 ноември.", self.facts, date(2026, 11, 1))          # „след“ в месечен блок: от първия ден на месеца
+        rows = report_guard._statements("Финализирането планирайте след 14 ноември.", self.facts, date(2026, 11, 1))          # „след“ в месечен блок: от първия ден на месеца
         self.assertEqual([(r[1], r[5]) for r in rows], [("from", date(2026, 11, 1))])
-        rows = report_guard._statements("Решението вземете след 14 ноември.", self.facts, None)                        # в общия преглед няма начало
+        rows = report_guard._statements("Финализирането планирайте след 14 ноември.", self.facts, None)                        # в общия преглед няма начало
         self.assertEqual([(r[1], r[5]) for r in rows], [("from", None)])
 
     def test_a_deadline_and_a_recommended_window_are_not_followed_as_windows(self):
-        for sentence in ("Вземете решение до 25 декември.", "Започнете от 3 до 25 декември подготовката."):
+        for sentence in ("Финализирайте проекта до 25 декември.", "Финализирайте от 3 до 25 декември подготовката."):
             self.assertEqual([r for r in report_guard._statements(sentence, self.facts, date(2026, 12, 1)) if r[1] in ("from", "avoid_window")], [], sentence)
 
     def test_invalid_or_reversed_windows_are_not_windows(self):
