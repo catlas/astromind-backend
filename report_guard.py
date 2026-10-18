@@ -4,7 +4,17 @@
 Месечните части и общият преглед се проверяват поотделно (text_guard), но противоречие между тях се вижда само в цялото:
 - „няма данни за октомври“ в раздела за ноември, когато октомврийската част е в отчета;
 - една и съща дата за едно и също действие е едновременно препоръка и забрана („не финализирайте на 24 октомври“ и „финализирайте на 24 октомври“);
-- действие, отложено до по-късна дата, е препоръчано на по-ранна („втората граница след 14 ноември“ и „втората граница на 31 октомври“).
+- действие, отложено до по-късна дата, е препоръчано на по-ранна („втората граница след 14 ноември“ и „втората граница на 31 октомври“);
+- действие, забранено или отложено за прозорец („от 3 до 25 декември избягвайте решения“), е препоръчано на дата вътре в прозореца.
+
+Прозорец (18.10.2026, след живо приемане: съветите за декември се отказваха, защото „до 25 декември“ се сравняваше с препоръки от октомври):
+- „3–25 декември“, „от 3 до 25 декември“, „от 30 октомври до 2 ноември“, „между 3 и 25 декември“, „между 30 октомври и 2 ноември“ са прозорци
+  с начало и край;
+- прозорец с дума за отлагане („отложете“, „изчакайте“) покрива датите от началото до края, без самия край (отлагане ДО датата);
+- прозорец с отрицание („избягвайте“, „не започвайте“) покрива и двата края;
+- препоръка на дата преди началото на прозореца не е противоречие; вътре в него е;
+- „до 25 декември“ само с крайна дата в месечен блок е прозорец от първия ден на ТОЗИ месец (авторът на блока за декември вижда само
+  картите на декември); в общия преглед няма начало и важи за всички по-ранни дати, както преди.
 
 Проверката е детерминирана (без AI заявка). При нарушение частта се връща на поправка през text_guard с extra_check:
 поправеният текст се проверява и срещу останалите части. Не се твърди, че това е пълна семантична проверка: то хваща доказаните случаи.
@@ -33,6 +43,15 @@ _AVOID_RE = re.compile(r"(?<![\w])(?:не\s+\w+|избягвайте|избяг�
 _DEFER_WORD_RE = re.compile(r"(?<![\w])(?:отложете|отлагайте|изчакайте|изчакай|почакайте)(?![\w])", re.IGNORECASE)
 _NO_DATA_RE = re.compile(r"(?<![\w])няма\s+(?:данни|информация|анализ|събития)\s+за\s+(?:месец\s+)?(януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември)", re.IGNORECASE)
 
+# Прозорец от две пълни дати с „между“: „между 30 октомври и 2 ноември“ (между двете дати стои само „и“). „от 30 октомври до 2 ноември“ и
+# „30 октомври – 2 ноември“ вече са един диапазон за text_check.parse_dates (две дати, разделени с „до“ или тире, се слепват).
+_BETWEEN_BEFORE_RE = re.compile(r"(?<![\w])между\s*$", re.IGNORECASE)
+_AND_BETWEEN_RE = re.compile(r"^\s*и\s*$", re.IGNORECASE)
+# Прозорец с общ месец: „от 3 до 25 декември“, „между 3 и 25 декември“ (началото е само число пред втората дата)
+_BARE_START_RE = re.compile(r"(?<![\w])(?:от|между)\s+(\d{1,2})\s+(?:до|и)\s*$", re.IGNORECASE)
+
+Statement = Tuple[str, str, date, str, frozenset, Optional[date]]       # (действие, вид, дата, изречение, наречени хора, начало на прозореца)
+
 
 def _who(sentence: str, facts: Facts) -> frozenset:
     """Кои от двамата са наречени в изречението: съвет за единия не противоречи на съвет за другия."""
@@ -44,31 +63,95 @@ def _who(sentence: str, facts: Facts) -> frozenset:
     return frozenset(named)
 
 
-def _statements(text: str, facts: Facts) -> List[Tuple[str, str, date, str, frozenset]]:
-    """(действие, вид, дата, изречение, наречени хора): вид е do (препоръка на дата), avoid (забрана на дата) или from (препоръка/отлагане „след/до“ дата)."""
-    out: List[Tuple[str, str, date, str, frozenset]] = []
+def _month_start(stage: str) -> Optional[date]:
+    """Първият ден на месеца на частта „month:YYYY-MM“; за общия преглед няма."""
+    m = re.fullmatch(r"month:(\d{4})-(\d{2})", stage or "")
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)), int(m.group(2)), 1)
+    except ValueError:
+        return None
+
+
+def _windows(sentence: str, items: List["text_check.DateItem"]) -> Tuple[List[Tuple[date, date]], set]:
+    """Прозорците в изречението (начало, край) и индексите на датите, които те заемат. items е подредено по позиция."""
+    found: List[Tuple[date, date]] = []
+    taken: set = set()
+    for i, item in enumerate(items):
+        if item.is_range:                                           # „3–25 декември“, „от 3 декември до 25 декември“
+            found.append((item.dates[0], item.dates[-1]))
+            taken.add(i)
+            continue
+        if i in taken:
+            continue
+        before = sentence[:item.start]
+        bare = _BARE_START_RE.search(before)                        # „от 3 до 25 декември“, „между 3 и 25 декември“
+        if bare:
+            end = item.dates[0]
+            try:
+                start: Optional[date] = date(end.year, end.month, int(bare.group(1)))
+            except ValueError:
+                start = None
+            if start is not None and start <= end:
+                found.append((start, end))
+                taken.add(i)
+                continue
+        if i + 1 < len(items) and not items[i + 1].is_range:        # „между 30 октомври и 2 ноември“
+            nxt = items[i + 1]
+            if _BETWEEN_BEFORE_RE.search(before) and _AND_BETWEEN_RE.match(sentence[item.end:nxt.start]) and item.dates[0] <= nxt.dates[0]:
+                found.append((item.dates[0], nxt.dates[0]))
+                taken.update((i, i + 1))
+    return found, taken
+
+
+def _statements(text: str, facts: Facts, month_start: Optional[date] = None) -> List[Statement]:
+    """(действие, вид, дата, изречение, наречени хора, начало): вид е
+    - do — препоръка на дата;
+    - avoid — забрана на дата;
+    - from — препоръка/отлагане „след/до“ дата (до датата, без нея); началото е първият ден от който важи отлагането (None: от началото на отчета);
+    - avoid_window — забрана за прозорец, датата е краят му (включително), началото е началото му.
+    month_start е първият ден на месеца на частта: „до 25 декември“ само с крайна дата в месечен блок важи от този ден."""
+    out: List[Statement] = []
     for sentence in safety._plain_sentences(text):
         labels = [label for rx, label in _ACTION_RES if rx.search(sentence)]
         if not labels:
             continue
-        for item in text_check.parse_dates(sentence, facts):
-            if item.is_range:
+        items = sorted(text_check.parse_dates(sentence, facts), key=lambda it: it.start)
+        if not items:
+            continue
+        first_action = min((m.start() for rx, _ in _ACTION_RES for m in [rx.search(sentence)] if m), default=0)
+        negated = bool(_AVOID_RE.search(sentence[max(0, first_action - 25):first_action + 1]))
+        deferred = bool(_DEFER_WORD_RE.search(sentence))
+        who = _who(sentence, facts)
+        if deferred or negated:
+            windows, taken = _windows(sentence, items)
+            for start, end in windows:
+                for label in labels:
+                    out.append((label, "from" if deferred else "avoid_window", end, sentence[:160], who, start))
+        else:
+            # прозорец без отлагане и без отрицание е препоръка за периода: не се следи като прозорец, датите му се четат поотделно както преди
+            taken = {i for i, item in enumerate(items) if item.is_range}
+        for i, item in enumerate(items):
+            if i in taken or item.is_range:
                 continue
             day = item.dates[0]
             before = sentence[max(0, item.start - 12):item.start].lower()
-            first_action = min((m.start() for rx, _ in _ACTION_RES for m in [rx.search(sentence)] if m), default=0)
-            negated = bool(_AVOID_RE.search(sentence[max(0, first_action - 25):first_action + 1]))
             after = bool(re.search(r"(?<![\w])след\s*$", before))
             until = bool(re.search(r"(?<![\w])до\s*$", before))
-            deferred = bool(_DEFER_WORD_RE.search(sentence))
             # „след 14 ноември“ и „изчакайте до 14 ноември“ са отлагане. Но „финализирайте до 24 ноември“ е срок, а не отлагане:
             # срокът не противоречи на препоръка за по-ранна дата и не се следи (иначе нормален текст се отказва).
             if until and not (deferred or negated):
                 continue
             kind = "from" if (after or deferred or until) else ("avoid" if negated else "do")
+            start = month_start if (kind == "from" and until and month_start is not None and day >= month_start) else None
             for label in labels:
-                out.append((label, kind, day, sentence[:160], _who(sentence, facts)))
+                out.append((label, kind, day, sentence[:160], who, start))
     return out
+
+
+def _day(d: date) -> str:
+    return f"{d.day} {text_check._MONTH_NAMES[d.month]}"
 
 
 def cross_part_violations(parts: Sequence[Tuple[str, str]], months: Sequence[str], facts: Facts) -> Dict[str, List[Violation]]:
@@ -87,11 +170,11 @@ def cross_part_violations(parts: Sequence[Tuple[str, str]], months: Sequence[str
                 add(stage, Violation("consistency", "hard", m.group(0)[:160],
                                      f"Отчетът съдържа раздел за {month}: махни твърдението, че няма данни за този месец."))
 
-    # 2. препоръка и забрана на една дата; отлагане до по-късна дата и препоръка на по-ранна
-    entries: List[Tuple[str, str, str, date, str, frozenset]] = []          # (етап, действие, вид, дата, изречение, наречени хора)
+    # 2. препоръка и забрана на една дата; отлагане до по-късна дата или забрана за прозорец и препоръка вътре в него
+    entries: List[Tuple[str, str, str, date, str, frozenset, Optional[date]]] = []      # (етап, действие, вид, дата, изречение, хора, начало)
     for stage, text in parts:
-        for label, kind, day, sentence, who in _statements(text, facts):
-            entries.append((stage, label, kind, day, sentence, who))
+        for label, kind, day, sentence, who, start in _statements(text, facts, _month_start(stage)):
+            entries.append((stage, label, kind, day, sentence, who, start))
 
     def owner(a: str, b: str) -> str:
         if "overview" in (a, b):
@@ -99,18 +182,21 @@ def cross_part_violations(parts: Sequence[Tuple[str, str]], months: Sequence[str
         return max(a, b)                                          # по-късният месец
 
     seen = set()
-    for i, (stage_a, label_a, kind_a, day_a, text_a, who_a) in enumerate(entries):
-        for stage_b, label_b, kind_b, day_b, text_b, who_b in entries[i + 1:]:
+    for i, (stage_a, label_a, kind_a, day_a, text_a, who_a, start_a) in enumerate(entries):
+        for stage_b, label_b, kind_b, day_b, text_b, who_b, start_b in entries[i + 1:]:
             if label_a != label_b or who_a != who_b:
                 continue                                          # друго действие или друг човек: не е противоречие
             conflict: Optional[str] = None
             if {kind_a, kind_b} == {"do", "avoid"} and day_a == day_b:
-                conflict = f"на {day_a.day} {text_check._MONTH_NAMES[day_a.month]} за „{label_a}“ има и препоръка, и забрана"
+                conflict = f"на {_day(day_a)} за „{label_a}“ има и препоръка, и забрана"
             else:
-                for (k1, d1, k2, d2) in ((kind_a, day_a, kind_b, day_b), (kind_b, day_b, kind_a, day_a)):
-                    if k1 == "from" and k2 == "do" and d2 < d1:
-                        conflict = (f"„{label_a}“ е отложено до {d1.day} {text_check._MONTH_NAMES[d1.month]}, "
-                                    f"а на {d2.day} {text_check._MONTH_NAMES[d2.month]} е препоръчано")
+                for (k1, d1, s1, k2, d2) in ((kind_a, day_a, start_a, kind_b, day_b), (kind_b, day_b, start_b, kind_a, day_a)):
+                    if k2 != "do":
+                        continue
+                    if k1 == "from" and d2 < d1 and (s1 is None or s1 <= d2):
+                        conflict = f"„{label_a}“ е отложено до {_day(d1)}, а на {_day(d2)} е препоръчано"
+                    elif k1 == "avoid_window" and s1 is not None and s1 <= d2 <= d1:
+                        conflict = f"„{label_a}“ не се препоръчва от {_day(s1)} до {_day(d1)}, а на {_day(d2)} е препоръчано"
             if conflict is None:
                 continue
             key = (label_a, day_a, day_b, conflict)

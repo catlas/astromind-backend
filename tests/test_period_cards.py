@@ -844,6 +844,50 @@ class PromptExamplesTest(unittest.TestCase):
             self.assertIn("Begin each card in a different way: never start two cards with the same word.", prompt, name)
             self.assertIn("do NOT name any planet", prompt, name)                                # забраните не са пипани
 
+    def test_every_advice_prompt_demands_the_whole_window_with_both_dates_and_has_no_literal_example(self):
+        """„Изчакайте / отложете / избягвайте до дата“ само с край отказваше съветите на периода (18.10.2026: 3 отказа и 1 резервен от 10):
+        месечният съвет, съставянето му, общият преглед и новият опит искат целия прозорец с двете дати. Без буквален пример с дати."""
+        formatted = (("MONTH_SYSTEM", period_cards.MONTH_SYSTEM.format(theme="t", relation_line="", people="p", month="m", zone="z", tags="")),
+                     ("MONTH_COMPOSE_SYSTEM", period_cards.MONTH_COMPOSE_SYSTEM.format(theme="t", relation_line="", people="p", month="m", zone="z")),
+                     ("OVERVIEW_SYSTEM", period_cards.OVERVIEW_SYSTEM.format(theme="t", relation_line="", people="p", period="d", zone="z", answer_tag="")),
+                     ("CLOSING_AGAIN_SYSTEM", period_cards.CLOSING_AGAIN_SYSTEM.format(spec="s", theme="t", relation_line="", people="p", period="d", zone="z")))
+        for name, prompt in formatted:
+            self.assertIn(period_cards.WINDOW_RULE, prompt, name)
+        rule = period_cards.WINDOW_RULE
+        self.assertIn("name the WHOLE window with a start date and an end date", rule)
+        self.assertIn('never write "until <date>" with only an end date', rule)
+        self.assertIn("never recommend the same action on any day inside that window", rule)
+        self.assertNotRegex(rule, r"\d")                                      # никакви буквални дати или числа: AI копира примерите
+        self.assertNotIn("for example", rule.lower())
+
+
+class RefusalCodeTest(FlowBase):
+    """При отказ на месечния съвет редът в журнала и събитието носят истинския код (consistency), а не общото „complete“ (18.10.2026)."""
+
+    def test_a_refused_month_advice_reports_the_real_code_not_complete(self):
+        cal = rs.calendar(False)
+        card = next(c for c in cards_of(cal, False, limit=8) if c.row["event"]["type"] == "TRANSIT" and c.row["event"].get("exact"))
+        iso = card.row["event"]["exact"][0]["when"]
+        day = f"{int(iso[8:10])} {tc._MONTH_NAMES[int(iso[5:7])]}"
+        bad = f"Не финализирайте проекта на {day}."
+        base = self.ai(card=lambda i: f"Финализирайте проекта на {day}." if i == card.id else None, month=lambda _s: bad, repair=lambda _p: bad)
+
+        async def fake(system_prompt, user_prompt, max_tokens=None, temperature=None, **kwargs):
+            if system_prompt.startswith("MODE: MONTH ADVICE FROM VERIFIED CARDS"):
+                return f"[[MONTH]]\n{bad}"                                       # и съставянето наново противоречи на картата
+            return await base(system_prompt, user_prompt, max_tokens, temperature, **kwargs)
+        with self.assertRaises(period_report.ForecastGenerationError) as caught:
+            self.run_report(fake, calendar=cal)
+        failure = caught.exception
+        self.assertTrue(failure.stage.endswith(":compose:MONTH"), failure.stage)
+        self.assertEqual(failure.cause.outcome.codes(), "consistency")
+        self.assertEqual(failure.cause.outcome.reason, "violations_remain")
+
+    def test_the_outcome_lists_every_real_code_and_falls_back_to_complete_only_without_one(self):
+        self.assertEqual(period_cards._outcome_with_codes("s", "consistency,date", "d").codes(), "consistency,date")
+        self.assertEqual(period_cards._outcome_with_codes("s", "consistency,consistency", "d").codes(), "consistency")
+        self.assertEqual(period_cards._outcome_with_codes("s", "", "d").codes(), "complete")
+
 
 class LabelsTest(FlowBase):
     def test_an_internal_label_in_a_card_text_is_repaired_and_never_reaches_the_report(self):

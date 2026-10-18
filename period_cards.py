@@ -476,6 +476,14 @@ def closing_checks(question: str, tag: str, allowed: set, facts, prior_parts: Li
 # --------------------------------------------------------------------------------------------------------------
 # Подкани
 # --------------------------------------------------------------------------------------------------------------
+# Съвет „изчакайте / отложете / избягвайте“ винаги е с целия прозорец и двете дати (проверката за съгласуваност чете „до дата“ само с край
+# като отлагане от началото на отчета или на месеца и често отказва текста; „от <начало> до <край>“ е прозорец с начало и край: report_guard).
+# Без буквален пример с дати: AI копира примерите и би писал дати, които не са на карти.
+WINDOW_RULE = ("When you advise to wait, postpone or avoid something (a decision, a conversation, a start, a commitment, a signing, a boundary, "
+               "finalising), name the WHOLE window with a start date and an end date, in the form \"from <start date> to <end date>\", each a date "
+               "from a card heading; never write \"until <date>\" with only an end date, and never recommend the same action on any day inside "
+               "that window.")
+
 MONTH_SYSTEM = (
     "MODE: MONTHLY FORECAST BY FACT CARDS. You INTERPRET pre-written FACT CARDS; you do not state facts yourself.\n"
     "THEME: {theme} Keep EVERY section on this theme{relation_line}.\n"
@@ -497,6 +505,7 @@ MONTH_SYSTEM = (
     "5. Respect the relationship: never use a romantic or sexual frame unless it is romantic.\n"
     "6. Be direct and concrete. No filler, no mystic phrases.\n"
     "7. Address the reader consistently with the polite plural \"вие\" (ваш, ви, вас); never switch to \"ти\" (твой, те) in any section.\n"
+    "8. In MONTH: " + WINDOW_RULE + "\n"
 )
 
 OVERVIEW_SYSTEM = (
@@ -511,6 +520,7 @@ OVERVIEW_SYSTEM = (
     "[[CONCLUSION]]  2-3 sentences with a reasoned overall conclusion.\n\n"
     "RULES: name NO planet, aspect, sign or house: write only the meaning. Every recommendation must follow from a block. The same date "
     "may not be recommended and forbidden for the same action, and a task postponed until a later date may not be recommended earlier. "
+    + WINDOW_RULE + " "
     "The window of a transit is not the end of a life process. Respect the relationship (no romantic or sexual frame unless it is "
     "romantic). Direct, concrete style, no filler. Address the reader consistently with the polite plural \"вие\", never \"ти\".\n"
 )
@@ -529,7 +539,7 @@ CLOSING_AGAIN_SYSTEM = (
     "listed in the user message). Write that one section again from scratch, using ONLY the verified blocks:\n"
     "{spec}\n\n"
     "RULES: for ONE action on ONE date give ONE consistent recommendation: never recommend and forbid the same action on the same date and "
-    "never contradict a verified block. Prefer fewer dates; a date may be named only if it is a date from a card heading. Name NO planet, "
+    "never contradict a verified block. " + WINDOW_RULE + " Prefer fewer dates; a date may be named only if it is a date from a card heading. Name NO planet, "
     "aspect, sign or house: write only the meaning. Every recommendation must follow from a block. The window of a transit is not the end of "
     "a life process. Respect the relationship (no romantic or sexual frame unless it is romantic). Direct, concrete style, no filler. Address "
     "the reader consistently with the polite plural \"вие\", never \"ти\".\n"
@@ -541,7 +551,7 @@ MONTH_COMPOSE_SYSTEM = (
     "THEME: {theme}{relation_line}. People: {people}. Month: {month}. All times are local time ({zone}).\n"
     "Below are the ONLY verified cards of this month. Write ONE section: [[MONTH]]  3-5 sentences on what to focus on and what to avoid "
     "this month, only from them. Name NO planet, aspect, sign or house; name a date only if it is a date from a card heading; every "
-    "recommendation must follow from a card. Direct, concrete style. Address the reader consistently with the polite plural \"вие\", never \"ти\".\n"
+    "recommendation must follow from a card. " + WINDOW_RULE + " Direct, concrete style. Address the reader consistently with the polite plural \"вие\", never \"ти\".\n"
 )
 
 RESTORE_SYSTEM = (
@@ -619,6 +629,14 @@ async def _check_cards(interpreter, facts, cards: List[Card], sections: Dict[str
 
 def _outcome(stage: str, code: str, detail: str) -> text_guard.GuardOutcome:
     return text_guard.GuardOutcome(stage=stage, mode=text_guard.MODE_ENFORCE, text="", after=[Violation(code, "hard", "", detail)],
+                                   rejected=True, reason="violations_remain")
+
+
+def _outcome_with_codes(stage: str, codes: str, detail: str) -> text_guard.GuardOutcome:
+    """Отказ с кодовете на нарушенията, които наистина са останали след поправките (напр. consistency), а не с общото „complete“:
+    така редът в журнала и събитието сочат истинската причина (18.10.2026: отказ на месечния съвет се водеше „complete“)."""
+    real = [code for code in dict.fromkeys(codes.split(",")) if code] or ["complete"]
+    return text_guard.GuardOutcome(stage=stage, mode=text_guard.MODE_ENFORCE, text="", after=[Violation(code, "hard", "", detail) for code in real],
                                    rejected=True, reason="violations_remain")
 
 
@@ -737,12 +755,13 @@ async def run_period_report(
                                                                               month=title, zone=calendar.timezone),
                                      f"{identity}VERIFIED CARDS:\n{blocks}Write the section now, in Bulgarian.", f"month:{month}:compose", retry_pause)
                 parsed = parse_sections(composed, {"MONTH"})
+                compose_details: List[str] = []
                 checked, codes = await card_engine._check_block(
                     interpreter, restrict_events(facts, kept), f"period:{month}:compose:MONTH", parsed.get("MONTH", ""), checks,
-                    closing_checks("", "MONTH", allowed, facts, verified_parts, stage, months, ends))
+                    closing_checks("", "MONTH", allowed, facts, verified_parts, stage, months, ends), compose_details)
                 if checked is None:
-                    raise text_guard.TextCheckError(f"period:{month}:compose:MONTH", _outcome(f"period:{month}:compose:MONTH", "complete",
-                                                                                              f"Съветът за месеца не мина проверката ({codes})."))
+                    raise text_guard.TextCheckError(f"period:{month}:compose:MONTH", _outcome_with_codes(
+                        f"period:{month}:compose:MONTH", codes, "Съветът за месеца не мина проверката: " + "; ".join(dict.fromkeys(compose_details))[:300]))
                 advice = checked
             month_blocks[month] = advice
             verified_parts.append((stage, advice))

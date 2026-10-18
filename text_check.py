@@ -2278,7 +2278,7 @@ def _person_facts(chart: Dict) -> Tuple[Dict, Dict, int]:
     return natal, cusps_view(view.get("houses") or {}), int(view.get("retrograde_count") or 0)
 
 
-CHECKER_VERSION = "23"       # версия на правилата за проверка на текста (влиза в снимката на отчета)
+CHECKER_VERSION = "24"       # версия на правилата за проверка на текста (влиза в снимката на отчета); 24: прозорци в report_guard (18.10.2026)
 
 
 class FactsUnavailable(Exception):

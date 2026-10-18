@@ -109,7 +109,7 @@ class GuardOutcome:
                 "reason": self.reason}
 
 
-def _safe_detail(detail: str, facts) -> str:
+def _safe_detail(detail: str, facts, limit: int = 150) -> str:
     """Какво не е наред, без имената на хората (само планети, знаци, аспекти, градуси и дати): за диагностиката при отказ."""
     names = getattr(facts, "names", None) or {}
     safe = detail or ""
@@ -117,13 +117,18 @@ def _safe_detail(detail: str, facts) -> str:
         for token in sorted({str(full), *str(full).replace("—", " ").replace("-", " ").split()}, key=len, reverse=True):
             if len(token.strip()) >= 3:
                 safe = re.sub(re.escape(token.strip()), "[име]", safe, flags=re.IGNORECASE)
-    return " ".join(safe.split())[:150]
+    return " ".join(safe.split())[:limit]
 
 
 def _log_remaining(stage: str, violations: Sequence[Violation], facts) -> None:
-    """Остатъчните тежки нарушения при отказ: код и верните стойности, без текст на анализа и без имена (за да се види дали грешката е в текста или в проверката)."""
+    """Остатъчните тежки нарушения при отказ: код и верните стойности, без имена (за да се види дали грешката е в текста или в проверката).
+    Само при противоречие между части на отчета (код consistency) към реда се добавят и двете изречения, най-много по 80 знака всяко,
+    с маскирани имена: без тях не се вижда дали противоречието е истинско (18.10.2026). Другият текст на анализа не се записва в логовете."""
     for v in violations[:4]:
-        print(f"🔎 Остава ({stage}): {v.code}: {_safe_detail(v.detail, facts)}")
+        line = f"🔎 Остава ({stage}): {v.code}: {_safe_detail(v.detail, facts)}"
+        if v.code == "consistency" and v.excerpt:
+            line += f" || {_safe_detail(v.excerpt, facts, 200)}"
+        print(line)
 
 
 class TextCheckError(Exception):
