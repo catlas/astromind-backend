@@ -41,7 +41,8 @@ class OfflineVerificationTest(unittest.TestCase):
         import engine
         import regression_support as rs
         import text_check as tc
-        for name, key in (("live_2026_10_18_natal_single_A.txt", "A"), ("live_2026_10_18_natal_single_A_no_time.txt", "A_NO_TIME"),):
+        for name, key in (("live_2026_10_18_natal_single_A.txt", "A"), ("live_2026_10_18_natal_single_A_no_time.txt", "A_NO_TIME"),
+                          ("live_2026_10_18_natal_single_A_after_prompt.txt", "A"),):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
                 live = f.read()
             known = vc.PEOPLE[key]["known"]

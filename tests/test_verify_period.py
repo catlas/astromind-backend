@@ -138,7 +138,9 @@ class OfflineVerificationTest(unittest.TestCase):
         from scanner import TransitScanner
         person = [p for p in self.people if p["name"] == "Тест А одит"]
         self.assertEqual(len(person), 1)
-        for name, start, end in (("live_2026_10_18_period_single_first.txt", "2026-10-01", "2026-12-31"), ("live_2026_10_18_period_single_next.txt", "2027-01-01", "2027-03-31"),):
+        for name, start, end in (("live_2026_10_18_period_single_first.txt", "2026-10-01", "2026-12-31"), ("live_2026_10_18_period_single_next.txt", "2027-01-01", "2027-03-31"),
+                                 ("live_2026_10_18_period_single_past_start_after_changes.txt", "2026-10-01", "2026-12-31"),
+                                 ("live_2026_10_18_period_single_today_after_changes.txt", "2026-10-18", "2026-12-31"),):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name), encoding="utf-8") as f:
                 live = f.read()
             problems, counts = vp.verify_period(live, person, start, end)
