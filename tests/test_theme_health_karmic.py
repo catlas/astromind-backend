@@ -106,8 +106,14 @@ class ThemeStyleModuleTest(unittest.TestCase):
     def test_the_blocks_never_override_what_may_be_named_or_the_facts(self):
         for block in (theme_style.HEALTH_BLOCK, theme_style.KARMIC_BLOCK):
             self.assertIn("adds no fact", block)
-        self.assertIn("never print a sign, planet, house or aspect name and never speak of the direction of planetary motion", theme_style.HEALTH_BLOCK)
-        self.assertIn("never name a sign, house, aspect, angle or the direction of planetary motion", theme_style.KARMIC_BLOCK)
+        self.assertIn("never print a sign, planet, house, angle or aspect name and never speak of the direction of planetary motion", theme_style.HEALTH_BLOCK)
+        self.assertIn("never print a planet, sign, house, aspect or angle name and never speak of the direction of planetary motion", theme_style.KARMIC_BLOCK)
+
+    def test_the_blocks_give_no_permission_to_name_planets(self):
+        # 19.10.2026, живата проба: „само планетите на самата карта“ беше прочетено като разрешение и осем карти на наталното „Здраве“ бяха поправени
+        for block in (theme_style.HEALTH_BLOCK, theme_style.KARMIC_BLOCK):
+            self.assertNotIn("only the planets of that very card", block)
+            self.assertNotIn("you may name", block)
         self.assertIn("rules above about the facts, about what may be named in each section", theme_style.KARMIC_BLOCK)
 
     def test_theme_focus_changed_only_for_the_two_themes(self):
