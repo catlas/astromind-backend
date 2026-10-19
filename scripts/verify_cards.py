@@ -35,6 +35,9 @@ PLANETS = {"Слънце": "Sun", "Слънцето": "Sun", "Луна": "Moon",
            "Възходящ възел": "Node", "Възходящия възел": "Node", "Възходящият възел": "Node", "Асцендент": "ASC", "Асцендента": "ASC",
            "Асцендентът": "ASC", "MC": "MC"}
 SIGNS = ["Овен", "Телец", "Близнаци", "Рак", "Лъв", "Дева", "Везни", "Скорпион", "Стрелец", "Козирог", "Водолей", "Риби"]
+# Ретроградните тела (като factpack.RETROGRADE_BODIES) и думата в заглавието на „Карма и род“ (20.10.2026); Венера е от женски род
+RETRO_BODIES = {"Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron"}
+RETRO_WORD = {"Venus": "ретроградна"}
 ORDINALS = {"1-ви": 1, "2-ри": 2, "3-ти": 3, "4-ти": 4, "5-ти": 5, "6-ти": 6, "7-ми": 7, "8-ми": 8, "9-ти": 9, "10-и": 10, "11-ти": 11, "12-ти": 12}
 
 # Фиксирани синтетични данни (както в одита): име, дата, час, ширина, дължина, известен ли е часът
@@ -90,6 +93,24 @@ class Chart:
             self.points["ASC"], self.points["MC"] = raw["angles"]["Ascendant"], raw["angles"]["MC"]
         self.cusps = [raw["houses"][f"House{i}"] for i in range(1, 13)] if self.known and raw.get("houses") else None
         self.sign_ranges = set((raw.get("sign_ranges") or {}).keys())
+        self.motion_changes = set(raw.get("motion_changes") or ())          # без час: тела, чиято посока се сменя през деня
+        self.retro = self._retrograde_flags(engine, raw)
+
+    @staticmethod
+    def _retrograde_flags(engine, raw):
+        """Ретроградно ли е движението на тялото в момента на картата: сверка по ДВЕ позиции (±6 часа) от Swiss Ephemeris, не по полето за скорост."""
+        import swisseph as swe
+        jd = raw.get("julian_day")
+        flags = {}
+        if jd is None:
+            return flags
+        engine.ensure_ephemeris()
+        for name in RETRO_BODIES & set(raw["planets"]):
+            body = engine.AstrologyEngine.PLANETS[name]
+            before = swe.calc_ut(jd - 0.25, body, engine.AstrologyEngine.CALC_FLAGS)[0][0]
+            after = swe.calc_ut(jd + 0.25, body, engine.AstrologyEngine.CALC_FLAGS)[0][0]
+            flags[name] = ((after - before + 540.0) % 360.0 - 180.0) < 0
+        return flags
 
 
 def find_planet(text):
@@ -101,7 +122,7 @@ def find_planet(text):
 
 TRANSIT_RE = re.compile(r"^(?:Транзитн\S+) (.+?) е в (съвпад|секстил|квадратура|тригон|опозиция) с (?:натал\S+) (.+?) на (.+?) \(орб ([\d,]+)°")
 ASPECT_RE = re.compile(r"^(.+?) на (.+?) е в (съвпад|секстил|квадратура|тригон|опозиция) (?:със|с) (.+?) на (.+?) \(орб ([\d,]+)°")
-PLACEMENT_RE = re.compile(r"^(.+?) на (.+?) е (?:в|във) (\S+) \((\d+)°(\d+)'\)(?:, (?:в|във) (\S+) дом)?\.$")      # „във“ пред Везни, Водолей и 2-ри дом (18.10.2026); старите текстове са с „в“
+PLACEMENT_RE = re.compile(r"^(.+?) на (.+?) е (?:в|във) (\S+) \((\d+)°(\d+)'\)(?:, (?:в|във) (\S+) дом)?(?:, (ретрограден|ретроградна))?\.$")      # „във“ пред Везни, Водолей и 2-ри дом (18.10.2026); старите текстове са с „в“
 OVERLAY_RE = re.compile(r"^(.+?) на (.+?) попада (?:в|във) (\S+) дом на (.+?)\.$")
 HOUSE_LINE_RE = re.compile(r"^Транзитните планети в домовете на (.+?): (.+)\.$")
 
@@ -187,12 +208,13 @@ def check_interpretations(text):
     return problems, cards, closing
 
 
-def verify(text, people, sky=None, mode="natal_pair", limit=None, require_complete=True):
-    """people: [{name, chart: Chart, known}] в реда на хората; sky: Chart на небето за режимите „за дата“. Връща списък от несъответствия."""
+def verify(text, people, sky=None, mode="natal_pair", limit=None, require_complete=True, theme=None):
+    """people: [{name, chart: Chart, known}] в реда на хората; sky: Chart на небето за режимите „за дата“. Връща списък от несъответствия.
+    theme: ако е „karmic“, заглавието на всяка позиция на ретрограден планета (без смяна на посоката през деня) трябва да носи думата „ретрограден“."""
     problems = []
     by_name = {p["name"]: p for p in people}
     transit_sets = {p["name"]: set() for p in people}
-    counts = {"transit": 0, "aspect": 0, "placement": 0, "overlay": 0, "house_line": 0, "interpretations": 0, "closing": 0}
+    counts = {"transit": 0, "aspect": 0, "placement": 0, "overlay": 0, "house_line": 0, "interpretations": 0, "closing": 0, "retrograde": 0}
     for line in (l.strip() for l in text.splitlines()):
         heading = line[4:] if line.startswith("### ") else line
         m = TRANSIT_RE.match(heading)
@@ -245,6 +267,17 @@ def verify(text, people, sky=None, mode="natal_pair", limit=None, require_comple
                 problems.append(f"липсва домът: {heading[:70]}")
             if not owner["chart"].known and planet in owner["chart"].sign_ranges:
                 problems.append(f"неуверен знак без час: {heading[:70]}")
+            chart = owner["chart"]
+            settled = chart.known or planet not in chart.motion_changes             # без час: посоката трябва да е една и съща през целия ден
+            retro_now = bool(chart.retro.get(planet)) and settled
+            if m.group(7):
+                counts["retrograde"] += 1
+                if planet not in RETRO_BODIES or not retro_now:
+                    problems.append(f"ретроградност: планетата не е ретроградна: {heading[:70]}")
+                elif m.group(7) != RETRO_WORD.get(planet, "ретрограден"):
+                    problems.append(f"ретроградност: родът на думата: {heading[:70]}")
+            elif theme == "karmic" and retro_now and planet in RETRO_BODIES:
+                problems.append(f"липсва ретроградност (планетата е ретроградна): {heading[:70]}")
             counts["placement"] += 1
             continue
         m = OVERLAY_RE.match(heading)
@@ -348,7 +381,7 @@ def run_offline():
                         person["name"] = name
                     sky = Chart(date=moment[0], time=moment[1], lat=PEOPLE[keys[0]]["lat"], lon=PEOPLE[keys[0]]["lon"], zone=moment[2]) if moment else None
                     limit = None if natal else (8 if case == "single_snapshot" else 6)
-                    problems, counts = verify(text, people, sky, case, limit)
+                    problems, counts = verify(text, people, sky, case, limit, theme=variant[0])
                     total += 1
                     if problems:
                         failures += 1
@@ -363,6 +396,7 @@ def main(argv=None):
     parser.add_argument("--report-file")
     parser.add_argument("--people", help="ключове от PEOPLE, например A,IVAN (по подразбиране първата двойка на случая)")
     parser.add_argument("--moment", help="дата,час,зона за режимите „за дата“, например 2026-10-14,18:00,Europe/Sofia")
+    parser.add_argument("--theme", help="темата на отчета (например karmic): при „karmic“ се иска и думата „ретрограден“ в заглавията на ретроградните планети")
     args = parser.parse_args(argv)
     if not args.report_file:
         return 1 if run_offline() else 0
@@ -377,7 +411,7 @@ def main(argv=None):
         date, time, zone = args.moment.split(",")
         sky = Chart(date=date, time=time, lat=PEOPLE[keys[0]]["lat"], lon=PEOPLE[keys[0]]["lon"], zone=zone)
         limit = 8 if args.case == "single_snapshot" else 6
-    problems, counts = verify(text, people, sky, args.case, limit)
+    problems, counts = verify(text, people, sky, args.case, limit, theme=args.theme)
     print("Проверени:", counts)
     for line in problems:
         print("НЕСЪОТВЕТСТВИЕ:", line)

@@ -650,6 +650,10 @@ class AstrologyEngine:
         morning = self._planet_positions(self._datetime_to_julian_day(start_utc))
         evening = self._planet_positions(self._datetime_to_julian_day(end_utc))
 
+        # Планета, чиято посока (ретроградна или директна) се сменя през този ден: без час не е ясно в кое от двете състояния е родена
+        motion_changes = sorted(name for name in planets
+                                if morning[name].get("speed") is not None and evening[name].get("speed") is not None
+                                and (morning[name]["speed"] < 0) != (evening[name]["speed"] < 0))
         sign_ranges: Dict[str, Dict] = {}
         for name, noon_data in planets.items():
             first, last = morning[name].get("longitude"), evening[name].get("longitude")
@@ -672,6 +676,7 @@ class AstrologyEngine:
             "time_known": False,
             "ephemeris": self._ephemeris_info(jd, planets, intentional=set(sign_ranges)),   # Луната без час няма дължина нарочно
             "sign_ranges": sign_ranges,
+            "motion_changes": motion_changes,
             "julian_day": jd,
             "datetime_utc": noon_utc.isoformat(),
             "timezone": timezone_str,

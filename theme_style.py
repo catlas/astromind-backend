@@ -3,9 +3,11 @@
 
 Собственикът поиска две малки допълнения към генератора и каза, че всичко останало му харесва:
 - „Здраве“: по-конкретно. Потенциалните здравословни проблеми не се филтрират до „символична тема“, а се назовават
-  конкретно: зона на тялото, система, вид оплаквания, какво ги задейства. Остава безопасната рамка: склонност, не диагноза;
-  без сигурна бъдеща болест, без тежки диагнози, без дати, без лекарства, без отлагане на лекар. Текстовете „Застраховка“
-  (safety.HEALTH_NOTE_HTML и safety.DISCLAIMER_HTML) остават непроменени и се добавят както досега.
+  конкретно: зона на тялото, система, вид оплаквания, какво ги задейства. От 20.10.2026, по искане на собственика, и тежко заболяване
+  (рак, инфаркт, инсулт, диабет) се назовава, когато картата дава основание за по-голяма вероятност: като повишен риск, който се
+  проверява и предотвратява навреме. Остава рамката: склонност или риск, не диагноза и не сигурна бъдеща болест; без дати, без лекарства,
+  без отлагане на лекар. Текстовете „Застраховка“ (safety.HEALTH_NOTE_HTML и safety.DISCLAIMER_HTML) остават непроменени; в отчет от много
+  части (период) стоят веднъж, накрая (safety.add_closing_notes).
 - „Карма и род“: по системата на Хули Леонис (Xyli Leonis, български астролог, който съчетава класическата астрология с
   родов анализ): карма като път на душата, уроците на Сатурн, Луната като истинска същност, възлите като посока на душата,
   ретроградните планети като кармичен показател, родови модели и родова памет. Гласът е по-мистичен и духовен. Фактите,
@@ -16,7 +18,8 @@
 целия анализ и който ai_interpreter._call_api добавя към системния промпт на всяка AI заявка (и на поправките), затова
 шаблоните на режимите не се пипат. Кодът на темата върви в ContextVar и за проверките на текста (safety.health_findings,
 safety.biography_findings): „Здраве“ позволява да се назове слабо място, „Карма и род“ позволява езика на родовите модели.
-Само тези две теми се променят; всички останали (общ, кариера, пари, любов) остават точно както бяха.
+Към тях от 20.10.2026 са „Любов“ и „Кариера“: открит и пълен анализ вместо нежния и предпазливия (виж LOVE_BLOCK, CAREER_BLOCK и safety.rules_for).
+Общият анализ и „Пари“ остават точно както бяха.
 """
 from contextvars import ContextVar, Token
 from typing import Optional
@@ -28,6 +31,16 @@ current_theme: ContextVar[str] = ContextVar("astro_theme_code", default="")
 
 HEALTH = "health"
 KARMIC = "karmic"
+LOVE = "love"
+CAREER = "career"
+
+# Живата проба (20.10.2026): периодът за „Здраве“ за 3 месеца се отказваше на етапа „формат на общия преглед“ (4 от 5 пъти; AI пишеше свои заглавия вместо
+# таговете [[SUMMARY]], [[ADVICE]], [[CONCLUSION]]): блокът в края на системната подкана надделяваше над изискването за формата. Затова всеки блок завършва с това.
+FORMAT_KEEP = (
+    "FORMAT: this block changes only the content, the tone and the completeness. Keep exactly the output format that the mode "
+    "instructions above demand: when they ask for tagged sections ([[A1]], [[SUMMARY]], [[ADVICE]], [[ANSWER]], [[CONCLUSION]] and so "
+    "on), output exactly those tags, each alone on its own line, and no other headings, titles or text outside the tagged sections."
+)
 
 HEALTH_BLOCK = (
     "THEME STYLE: HEALTH. The reader chose the Health theme and asked for CONCRETE content, not a diluted one. This block changes how "
@@ -38,8 +51,8 @@ HEALTH_BLOCK = (
     "претоварване тялото първо реагира със схващане във врата и раменете …\"). A potential weak point is named openly. It is never "
     "hidden behind words such as \"енергия\", \"баланс\" or \"символична тема\". This replaces the earlier wish for only symbolic "
     "and neutral health wording.\n"
-    "- Frame every weak point as a tendency or potential of the chart (a tendency to, a sensitive area, possible complaints, worth "
-    "attention), in different words from card to card. Never state it as a diagnosis, never as an illness the person has now "
+    "- Frame every weak point as a tendency or potential of the chart (a tendency to, a sensitive area, possible complaints, a risk worth "
+    "watching), in different words from card to card. Never state it as a diagnosis, never as an illness the person has now "
     "(\"имате гастрит\") and never as a certain future illness (\"ще получите …\"). Say what triggers or worsens it (stress, "
     "overload, irregular rhythm, cold, too little rest, too much of something) and how it shows itself early. Write all of this as "
     "ordinary sentences in plain Bulgarian: no labels such as \"Навик:\" or \"Тригер:\" and not the anglicism \"тригер\".\n"
@@ -61,10 +74,13 @@ HEALTH_BLOCK = (
     "deep hormonal and reproductive themes; Chiron an old sore spot that comes back.\n"
     "  Houses (only when the heading gives a house): house 1 body and vitality; house 6 daily health, work stress and routine; house 8 "
     "crises and regeneration; house 12 hidden, chronic or exhausting complaints and sleep.\n"
-    "- Stay with body systems and common functional complaints (digestion, nerves and sleep, muscles and joints, skin, breathing, "
-    "circulation and blood pressure, hormonal rhythm, immunity, headaches, injuries from haste or overload). Never name a grave disease "
-    "(рак, тумор, инфаркт, инсулт, диабет, шизофрения and the like) as a potential of this person. Never tie an illness or injury to a "
-    "date as an event (a period of pressure that the cards state can be mentioned), and give no percentages and no diagnosis.\n"
+    "- Stay with the body systems the card points to and name the complaints and conditions typical for them (digestion, nerves and "
+    "sleep, muscles and joints, skin, breathing, circulation and blood pressure, hormonal rhythm, immunity, headaches, injuries from "
+    "haste or overload). Serious conditions (for example cancer, heart attack, stroke, diabetes) are named too, when the card gives a "
+    "reason for a higher likelihood in that body system: always as an elevated risk or tendency that deserves early checking and "
+    "prevention, never as a diagnosis, never as certain, never with a date, and together with the concrete prevention and the kind of "
+    "check-up that fits. Never tie an illness or injury to a date as an event (a period of pressure that the cards state can be "
+    "mentioned), and give no percentages.\n"
     "- In every card (2-3 sentences): the area and the concrete potential problem; what triggers or worsens it; one practical habit. "
     "The closing blocks name the person's main sensitive areas in words (still without planet, sign or house names), concrete "
     "prevention habits and, where it fits, regular check-ups of those areas. Mention a doctor (when symptoms repeat or last) in the "
@@ -72,6 +88,7 @@ HEALTH_BLOCK = (
     "tell the person to wait or postpone.\n"
     "- Tone: calm, matter-of-fact and caring, like a careful doctor-astrologer, not a fortune teller. All safety limits stay: no "
     "diagnoses, no medicines or doses, no stopping or delaying treatment, no fear and no fatalism."
+    + "\n" + FORMAT_KEEP
 )
 
 KARMIC_BLOCK = (
@@ -80,8 +97,9 @@ KARMIC_BLOCK = (
     "dates and about safety all stay in force, and this block adds no fact: use only what the cards state.\n"
     "NAMING DISCIPLINE: the headings already state the planets, signs, houses, aspects and angles, and the section rules forbid naming "
     "them in card texts and in the closing blocks. The lens below is for your understanding only: never print a planet, sign, house, "
-    "aspect or angle name and never speak of the direction of planetary motion (retrograde or direct); say the meaning in plain words "
-    "(the teacher of limits and duty, the direction of the soul, the inner essence).\n"
+    "aspect or angle name and never speak of the direction of planetary motion (retrograde or direct), except as the retrograde "
+    "bullet below says; say the meaning in plain words (the teacher of limits and duty, the direction of the soul, the inner "
+    "essence).\n"
     "LENS, how this system reads the cards:\n"
     "- Karma is the path of the soul: the lessons the soul came to learn and the thread that links lives and generations. It is a "
     "lesson and a choice, never a punishment and never a fixed fate. What is seen and understood heals: the past is not erased, it is "
@@ -95,6 +113,11 @@ KARMIC_BLOCK = (
     "towards, and the old comfort and habit to release lie opposite (say the meaning, never name the opposite point). Saturn is the "
     "teacher of karma: where the soul meets its limit, its fear and its duty, and the lesson that matures through patience and work. "
     "Chiron is the wound that teaches healing. Pluto is deep transformation and what must end for something new to begin.\n"
+    "- Retrograde planets are one of the important karmic indicators. A card heading may end with the word \"ретрограден\" or "
+    "\"ретроградна\": that planet is retrograde in this chart. Read it as an energy turned inward: private, intimate and shy about "
+    "showing itself, like a prisoner who is also his own guard, asking to be lived consciously, worked through again and brought "
+    "into the world in a healthy way. Say this in plain words in the card whose heading says it, without naming the planet. Never say "
+    "that a planet is retrograde when its heading does not, and never state how many planets are retrograde.\n"
     "- A relationship is a meeting of souls with a lesson for both. With two people describe the bond that way, without predicting "
     "events, a breakup or a certain future.\n"
     "The system is only a lens: never name Хули Леонис, any other astrologer, author or book in the text and never attribute a statement "
@@ -114,9 +137,72 @@ KARMIC_BLOCK = (
     "of a past-life story, no prediction of life events (name only the dates and periods that the cards state). Do not use the word \"смърт\" in any form, even as an image: say \"край на "
     "цикъл\", \"отмиране на стария модел\", \"преход\". Spiritual work never replaces medical or psychological help. End with what the "
     "person can choose and do: free will always."
+    + "\n" + FORMAT_KEEP
 )
 
-BLOCKS = {HEALTH: HEALTH_BLOCK, KARMIC: KARMIC_BLOCK}
+# „Любов“ и „Кариера“ (20.10.2026, по искане на собственика: „много е нежно и внимателно“, „искам достоверност, пълнота и точност“): открит и пълен
+# анализ. Блоковете сваляят само смекчаването (тон, утеха, премълчани трудни места); фактите, правилата кое какво се назовава, проверките на текста и
+# границите, които пазят точността (без измислени събития, без твърдение за чужди мотиви, без проценти, без дати за измяна, раздяла, повишение),
+# остават. Без цитирани формули и без изброени забрани на имена: виж уроците от живите проби на Фаза 31 (HANDOVER, раздел 5).
+LOVE_BLOCK = (
+    "THEME STYLE: LOVE, FRANK AND COMPLETE. The reader asked for a frank, complete and accurate analysis, not a gentle one. This block "
+    "changes the tone and the completeness of the Love theme. It adds no fact and removes none of the limits that protect accuracy.\n"
+    "NAMING DISCIPLINE: the headings already state the planets, signs, houses, aspects and angles, and the section rules forbid naming "
+    "them in card texts and in the closing blocks: never print a planet, sign, house, aspect or angle name and never speak of the "
+    "direction of planetary motion; say the meaning in plain words.\n"
+    "- Say it straight. Name the real strengths and the real problems of the person (or of the two people) in love: what attracts, what "
+    "repeats, what hurts, where the person is hard to live with, what the other person will find difficult, where the two clash and "
+    "what does not fit. No euphemisms, no automatic reassurance, no flattery, no padding and no empty comfort. A hard truth is written "
+    "as a plain sentence, not as a hint.\n"
+    "- Use every card fully: each one gives something concrete (a need, a fear, a habit, a pattern in closeness, a source of friction or "
+    "of passion). Give the uncomfortable cards the same weight as the pleasant ones. When the cards show it, name the risky tendencies "
+    "plainly: jealousy and possessiveness, control and power struggles, coldness and avoidance, dependence, fear of rejection or of "
+    "commitment, impatience, unequal giving, restlessness and temptation. They are tendencies of the chart, never accusations and "
+    "never predictions of a breakup or a betrayal.\n"
+    "- Credibility: a card describes a tendency of the chart, so write what the pattern tends to do and never present your "
+    "interpretation as calculated fact (the headings are the facts). Never state another person's real motive, feeling or loyalty as "
+    "an established fact, never invent events, give no percentages and no dates for a betrayal, a breakup, a marriage or a pregnancy. "
+    "Apply all of this to the kind of relationship the user chose; the relationship rules above (the kind of relationship, minors) "
+    "prevail over this block, so nothing romantic or sexual is written unless the relationship is romantic.\n"
+    "- The closing blocks are complete and decisive: the summary names the main strengths and the main risks in plain words and gives an "
+    "overall verdict (strong, mixed or difficult) with the reason from the cards; the advice gives concrete steps (what to say, what to "
+    "stop doing, what to watch); the answer to the question starts with the answer.\n"
+    "- Start every card text from what the person feels or does in love (for two people: what happens between them), never from a "
+    "planet, a sign, a house or an aspect. Do not give every card the same pattern.\n"
+    "- Tone: direct, adult and respectful, like an experienced relationship consultant who tells the truth. Not cruel, not mocking, not "
+    "fatalistic: a chart shows a tendency and the person can act on it."
+    + "\n" + FORMAT_KEEP
+)
+
+CAREER_BLOCK = (
+    "THEME STYLE: CAREER, FRANK AND COMPLETE. The reader asked for a frank, complete and accurate analysis, not a gentle one. This block "
+    "changes the tone and the completeness of the Career theme. It adds no fact and removes none of the limits that protect accuracy.\n"
+    "NAMING DISCIPLINE: the headings already state the planets, signs, houses, aspects and angles, and the section rules forbid naming "
+    "them in card texts and in the closing blocks: never print a planet, sign, house, aspect or angle name and never speak of the "
+    "direction of planetary motion; say the meaning in plain words.\n"
+    "- Say it straight. Name the real professional strengths and the real weaknesses and risks: what work fits and what drains, where "
+    "the person clashes with authority or with colleagues, where the person stalls (procrastination, perfectionism, overwork, "
+    "indecision, pride, restlessness), what limits advancement and where burnout or conflict is likely. No euphemisms, no flattery, no "
+    "filler and no empty encouragement.\n"
+    "- Give a concrete direction: the kinds of work, roles, environments and ways of working that the cards favour and those they do "
+    "not, how the person deals with bosses, colleagues, clients, competition and negotiation, and what to do next. Be decisive: state "
+    "the recommendation and its reason from the cards (an aspect alone never justifies an absolute order, so the reason is always "
+    "named).\n"
+    "- Use every card fully: each one gives something concrete (a talent, a pressure point, a habit, a pattern at work). Give the "
+    "uncomfortable cards the same weight as the pleasant ones.\n"
+    "- Credibility: tendencies of the chart, not guarantees. Never present your interpretation as calculated fact (the headings are "
+    "the facts), give no percentages, no promises of a promotion, success or income, no dates for such events, and never invent "
+    "companies, positions or events that the user did not write.\n"
+    "- The closing blocks are complete and decisive: the summary names the main strengths, the main risks and the main obstacle in "
+    "plain words and gives an overall assessment of the career potential with the reason from the cards; the advice gives concrete "
+    "steps and priorities; the answer to the question starts with the answer.\n"
+    "- Start every card text from what the person does or experiences at work, never from a planet, a sign, a house or an aspect. Do "
+    "not give every card the same pattern.\n"
+    "- Tone: direct, businesslike and honest, like an experienced career consultant who tells the truth."
+    + "\n" + FORMAT_KEEP
+)
+
+BLOCKS = {HEALTH: HEALTH_BLOCK, KARMIC: KARMIC_BLOCK, LOVE: LOVE_BLOCK, CAREER: CAREER_BLOCK}
 
 
 def normalize(theme: Optional[str]) -> str:

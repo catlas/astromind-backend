@@ -80,6 +80,11 @@ def _retrograde(planet: Dict) -> bool:
     return bool(speed is not None and speed < 0)
 
 
+def is_retrograde(planet: Dict) -> bool:
+    """Ретрограден ли е записът на планета в картата (скорост < 0): едно и също правило за заглавията на картите и за фактите към проверката."""
+    return _retrograde(planet)
+
+
 def house_table(chart: Dict) -> Dict[str, Dict[str, str]]:
     """Куспида (знак и градус) и управител за всичките 12 дома. Управител: модерен (Плутон, Уран, Нептун)."""
     houses = chart.get("houses") or {}

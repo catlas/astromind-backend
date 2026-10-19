@@ -55,9 +55,9 @@ ASPECTS_NOTE = (
 THEME_FOCUS = {
     "general": "General life overview: main patterns, tensions, resources and priorities.",
     "health": "Health and well-being: name concretely the body areas and systems the chart marks as sensitive, the potential problems they may bring and the habits that protect them (tendencies, never diagnoses).",
-    "career": "Career and work: responsibilities, communication, negotiation and the concrete action asked about.",
+    "career": "Career and work, told frankly and completely: real strengths, weaknesses and risks, responsibilities, communication, negotiation and the concrete action asked about.",
     "money": "Money and success: resources, priorities, habits and the alternatives named in the question (no investment advice).",
-    "love": "Relationships and love: emotions, communication, boundaries and the exact context of the relationship.",
+    "love": "Relationships and love, told frankly and completely: real strengths, problems and risks, emotions, communication, boundaries and the exact context of the relationship.",
     "karmic": "Karma and family lineage in the system of Хули Леонис: the path of the soul, karmic lessons, ancestral patterns and memory, read as symbols and spiritual guidance (never facts about ancestors or parents).",
 }
 
@@ -385,7 +385,8 @@ class AIInterpreter:
             "(forbidden: \"няма данни за заболявания или инциденти\"), and never present a bodily reaction as a fact derived from the chart. "
             "Write tendencies and themes (\"картата подсказва тема за ...\") and practical routine advice: sleep, rest, load limits, boundaries, "
             "and a medical check-up when the person is worried. In the Health theme the potential weak points stay named concretely (body "
-            "area, system, kind of complaints) as tendencies of the chart: never make them vaguer while correcting something else.\n\n"
+            "area, system, kind of complaints, and serious conditions as an elevated risk) as tendencies of the chart: never make them vaguer "
+            "while correcting something else.\n\n"
             "11. **DECISIONS (career, money, contracts):** do not give absolute orders based only on an aspect or a retrograde "
             "(forbidden: \"не напускайте\", \"не приемайте оферта\", \"не инвестирайте\", \"не подписвайте\"). Keep the direct tone but give a "
             "concrete action to check the real conditions: \"прегледайте условията, бюджета и алтернативите и си дайте време за обмисляне\".\n\n"

@@ -42,11 +42,13 @@ def _rule_line(prefix: str) -> str:
 # Всяко друго правило остава: диагнози, лекарства, спиране и отлагане на лечение, смърт и дати, страх и фатализъм, свободна воля.
 _ORGAN_RULE = _rule_line("- Не описвай органи или болести")
 _FAMILY_RULE = _rule_line("- Не твърди като факт нищо за родители")
+_TENDENCY_RULE = _rule_line("- Астрологията е инструмент за себепознание")
+_FEAR_RULE = _rule_line("- Не плаши, не използвай фатализъм")
 HEALTH_RULE = (
-    "- В темата „Здраве“ назовавай конкретно потенциалните слаби места: зона на тялото, система и вид оплаквания, като склонност или "
-    "уязвимост по картата. Не ги представяй като диагноза, като болест, която човекът има сега, или като сигурна бъдеща болест. Не "
-    "назовавай тежки заболявания (рак, тумор, инфаркт, инсулт, диабет) като потенциал на човека, не посочвай дати за болест или "
-    "травма и не давай лекарства. Покажи как се разпознава ранният сигнал и кога да се потърси лекар.")
+    "- В темата „Здраве“ назовавай конкретно потенциалните слаби места: зона на тялото, система и вид оплаквания и състояния, включително тежки "
+    "(например рак, инфаркт, инсулт, диабет), когато картата дава основание за по-голяма вероятност. Винаги като склонност или повишен риск, "
+    "който си струва да се проверява и предотвратява навреме, не като диагноза, не като болест, която човекът има сега, и не като сигурна бъдеща "
+    "болест; без дати за болест или травма и без лекарства. Покажи как се разпознава ранният сигнал и кога да се потърси лекар.")
 KARMIC_RULE = (
     "- В темата „Карма и род“ духовният език е позволен: пиши за пътя на душата, кармичните уроци, родовите модели и родовата памет като "
     "символ и тълкуване на картата, с различни думи във всяка карта. Не твърди като факт нищо "
@@ -54,12 +56,26 @@ KARMIC_RULE = (
     "освен ако потребителят изрично го е написал. Не обвинявай родител или род и не говори за проклятие, наказание или неизбежна съдба.")
 
 
+# „Любов“ и „Кариера“ (20.10.2026): отвореният и пълен анализ сваля смекчаването, не точността. Двете правила, които подтикват към утеха и мекота
+# („пиши за възможности и избор“, „не плаши… подчертавай свободната воля“), се заместват; всяко друго правило остава: без сигурни събития (развод, раздяла,
+# изневяра, загуба), без дати за тях, без проценти, без правни и инвестиционни съвети, без твърдения за чужди мотиви, без измислени факти.
+FRANK_TENDENCY_RULE = (
+    "- Астрологията описва тенденции и вероятности, а не неизбежни събития. Назовавай ясно и без смекчаване силните и слабите страни, рисковете и "
+    "трудните места; не замествай истината с утеха.")
+FRANK_FEAR_RULE = (
+    "- Не използвай фатализъм (картата е тенденция, не присъда) и не внушавай зависимост от астролог, но не смекчавай: рисковете и трудните места "
+    "се назовават ясно, без заплахи и без излишно успокоение. Свободната воля се споменава, когато е полезна, не във всяко изречение.")
+
+
 def rules_for(theme: Optional[str] = None) -> str:
-    """Правилата за безопасност на заявката. За всяка тема освен „Здраве“ и „Карма и род“ текстът е точно SAFETY_RULES."""
+    """Правилата за безопасност на заявката. „Здраве“, „Карма и род“, „Любов“ и „Кариера“ заместват само по няколко правила; за всяка друга тема
+    (общ анализ, „Пари“) текстът е точно SAFETY_RULES."""
     if theme == theme_style.HEALTH:
         return SAFETY_RULES.replace(_ORGAN_RULE, HEALTH_RULE)
     if theme == theme_style.KARMIC:
         return SAFETY_RULES.replace(_FAMILY_RULE, KARMIC_RULE)
+    if theme in (theme_style.LOVE, theme_style.CAREER):
+        return SAFETY_RULES.replace(_TENDENCY_RULE, FRANK_TENDENCY_RULE).replace(_FEAR_RULE, FRANK_FEAR_RULE)
     return SAFETY_RULES
 
 
@@ -156,30 +172,24 @@ _FACTUAL_ORGAN_RE = re.compile(
 _ORGAN_RE = re.compile(r"(?<![\w])" + _ORGAN, re.IGNORECASE)
 _HEDGE_HEALTH_RE = re.compile(r"символи\w*|тенденци\w*|чувствителност|склонност|възможно|може\s+да|понякога|не\s+е\s+диагноза|в\s+астрологичен\s+смисъл|темата\s+за|свързва\w*|подсказва\w*|\bако\b|без\s+да", re.IGNORECASE)
 
-# „Здраве“ (19.10.2026): слабото място се назовава конкретно, затова „слабо място“, „уязвим“ и „проблеми“ с орган не са нарушение. Нарушение остават
-# сигурната бъдеща болест, болестта „която имате сега“, „доказаната“ уязвимост и тежкото заболяване, назовано като потенциал на човека.
+# „Здраве“ (19.10.2026, 20.10.2026): слабото място се назовава конкретно, затова „слабо място“, „уязвим“ и „проблеми“ с орган не са нарушение; от 20.10.2026
+# по искане на собственика и тежко заболяване (рак, инфаркт, инсулт, диабет) може да се назове, когато има вероятност. Нарушение остават сигурната бъдеща
+# болест („ще получите инфаркт“), болестта „която имате сега“ и „доказаната“ уязвимост.
 _CERTAIN_ILLNESS_RE = re.compile(
     r"(?:ще\s+(?:получите|развиете|заболеете|страдате|заболее|заболеят|се\s+разболеете|имате\s+(?:проблем\w*|заболяван\w*|болест\w*|болк\w*))|"
-    r"(?:имате|имаш|страдате\s+от|страдаш\s+от)\s+(?:\w+\s+){0,2}(?:заболяван\w*|възпал\w*|болест\w*)|"
+    r"(?:имате|имаш|страдате\s+от|страдаш\s+от)\s+(?:\w+\s+){0,2}(?:заболяван\w*|възпал\w*|болест\w*|онколог\w*|злокачествен\w*|тумор\w*|левкеми\w*|"
+    r"инфаркт\w*|инсулт\w*|диабет\w*|шизофрени\w*|(?-i:рак(?![\w])))|"
     r"ще\s+(?:причини|предизвика|доведе\s+до)\s+(?:\w+\s+){0,3}(?:проблем\w*|заболяван\w*|болест\w*|възпал\w*|болк\w*)|"
     r"доказан\w*\s+(?:уязвимост|заболяван\w*))", re.IGNORECASE)
 # „ще получите / ще имате …“ са обичайни думи: сигурна болест е само когато в изречението има орган или дума за болест
 _ILLNESS_WORD_RE = re.compile(
     r"(?<![\w])(?:заболяван\w*|болест\w*|болк\w*|възпал\w*|гастрит\w*|язв\w*|мигрен\w*|алерги\w*|артрит\w*|остеопороз\w*|хипертони\w*|невроз\w*|"
-    r"синдром\w*|инфекци\w*|травм\w*|счупван\w*|операци\w*)", re.IGNORECASE)
-_GRAVE_RE = re.compile(r"(?<![\w])(?:онколог\w*|злокачествен\w*|тумор\w*|левкеми\w*|инфаркт\w*|инсулт\w*|диабет\w*|шизофрени\w*)", re.IGNORECASE)
-_GRAVE_LOWER_RE = re.compile(r"(?<![\w])рак(?:ов\w*)?(?![\w])")        # само с малка буква: „Рак“ с главна е зодия
-
-
-def _grave_stems(text: str) -> set:
-    """Основите (първите 5 букви) на тежките заболявания в текста."""
-    return {m.group(0).lower()[:5] for rx in (_GRAVE_RE, _GRAVE_LOWER_RE) for m in rx.finditer(text or "")}
-
+    r"синдром\w*|инфекци\w*|травм\w*|счупван\w*|операци\w*|онколог\w*|злокачествен\w*|тумор\w*|левкеми\w*|инфаркт\w*|инсулт\w*|диабет\w*|"
+    r"шизофрени\w*)", re.IGNORECASE)
+_CANCER_LOWER_RE = re.compile(r"(?<![\w])рак(?:ов\w*)?(?![\w])")        # само с малка буква: „Рак“ с главна е зодия
 
 HEALTH_CERTAIN_ADVICE = ("Не твърди, че човекът има болест сега или ще получи такава. Остави конкретната зона и вида оплаквания, но като склонност "
                          "или уязвима зона по картата („склонност към …“, „уязвима зона е …“, „възможни са …“), без сигурност и без прогноза.")
-HEALTH_GRAVE_ADVICE = ("Не назовавай тежко заболяване (рак, тумор, инфаркт, инсулт, диабет и подобни) като потенциал на човека. Опиши зоната и вида "
-                       "оплаквания по-общо (натоварване на сърдечносъдовата система, обмяна на веществата, нервно изтощение), без диагноза.")
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
@@ -189,14 +199,12 @@ def _plain_sentences(text: str) -> List[str]:
     return [x.strip() for x in _SENTENCE_SPLIT_RE.split(plain) if x and x.strip()]
 
 
-def health_findings(text: str, theme: Optional[str] = None, question: str = "") -> List[Tuple[str, str]]:
+def health_findings(text: str, theme: Optional[str] = None) -> List[Tuple[str, str]]:
     """(код, изречение): health_delay - отлагане на медицинска помощ заради астрологичен период; health_organ - органи или болести като факт.
-    В тема „Здраве“ (theme или theme_style.current_theme) органът не е нарушение; вместо него: health_certain - сигурна или настояща болест,
-    health_grave - тежко заболяване, назовано като потенциал. Тежка дума, която потребителят сам е написал във въпроса си („имам диабет“),
-    не е потенциал, който AI измисля, и не е нарушение."""
+    В тема „Здраве“ (theme или theme_style.current_theme) органът и тежкото заболяване като вероятност не са нарушение; вместо това:
+    health_certain - сигурна или настояща болест („ще получите инфаркт“, „имате диабет“)."""
     found: List[Tuple[str, str]] = []
     health = (theme_style.current_theme.get() if theme is None else theme) == theme_style.HEALTH
-    written = _grave_stems(question) if health else set()
     sentences = _plain_sentences(text)
     for i, sentence in enumerate(sentences):
         if _SAFE_MARK_RE.search(sentence):
@@ -212,10 +220,9 @@ def health_findings(text: str, theme: Optional[str] = None, question: str = "") 
                 found.append(("health_delay", sentence[:200]))
                 continue
         if health:
-            if _grave_stems(sentence) - written:
-                found.append(("health_grave", sentence[:200]))
-            elif (_CERTAIN_ILLNESS_RE.search(sentence) and (_ORGAN_RE.search(sentence) or _ILLNESS_WORD_RE.search(sentence))
-                  and not _HEDGE_HEALTH_RE.search(sentence)):
+            if (_CERTAIN_ILLNESS_RE.search(sentence)
+                    and (_ORGAN_RE.search(sentence) or _ILLNESS_WORD_RE.search(sentence) or _CANCER_LOWER_RE.search(sentence))
+                    and not _HEDGE_HEALTH_RE.search(sentence)):
                 found.append(("health_certain", sentence[:200]))
             continue
         if _ORGAN_RE.search(sentence) and _FACTUAL_ORGAN_RE.search(sentence) and not _HEDGE_HEALTH_RE.search(sentence):
@@ -290,8 +297,30 @@ def _remove_sentences(html: str, pattern: re.Pattern) -> Tuple[str, int]:
     return sentence.subn("", html)
 
 
-def check_output(html: str, report_type: str = "general") -> Tuple[str, List[str]]:
-    """Връща (почистен_текст, списък_с_флагове)."""
+def closing_notes(report_type: str = "general") -> str:
+    """Бележките „Застраховка“, които винаги стоят накрая на отчета: здравната бележка и общата уговорка за „Здраве“, общата уговорка за „Пари“."""
+    text = ""
+    if report_type == "health":
+        text += "\n" + HEALTH_NOTE_HTML
+    if report_type in ("health", "money"):
+        text += "\n" + DISCLAIMER_HTML
+    return text
+
+
+def add_closing_notes(html: str, report_type: str = "general") -> str:
+    """Добавя closing_notes накрая (здравната бележка преди общата уговорка). Уговорка заради флаг на самата част не се повтаря, а се премества накрая."""
+    html = html or ""
+    had_disclaimer = DISCLAIMER_HTML in html
+    html = html.replace("\n" + DISCLAIMER_HTML, "")
+    notes = closing_notes(report_type)
+    if had_disclaimer and DISCLAIMER_HTML not in notes:
+        notes += "\n" + DISCLAIMER_HTML
+    return html + notes
+
+
+def check_output(html: str, report_type: str = "general", notes: bool = True) -> Tuple[str, List[str]]:
+    """Връща (почистен_текст, списък_с_флагове). notes=False е за частите на отчет от много части (периодът): бележките „Застраховка“ не се
+    добавят към всяка част, а веднъж накрая (add_closing_notes); уговорка заради флаг остава при частта, която го е предизвикала."""
     flags: List[str] = []
     text = html or ""
     text, replaced = replace_health_delays(text)
@@ -304,8 +333,11 @@ def check_output(html: str, report_type: str = "general") -> Tuple[str, List[str
     for name, pattern in _SOFT_RE.items():
         if pattern.search(text):
             flags.append(name)
-    if report_type == "health":
-        text += "\n" + HEALTH_NOTE_HTML
-    if flags or report_type in ("health", "money"):
+    if notes:
+        if report_type == "health":
+            text += "\n" + HEALTH_NOTE_HTML
+        if flags or report_type in ("health", "money"):
+            text += "\n" + DISCLAIMER_HTML
+    elif flags:
         text += "\n" + DISCLAIMER_HTML
     return text, flags

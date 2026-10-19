@@ -21,7 +21,7 @@ import factpack
 import text_check
 from aspects_engine import calculate_natal_aspects
 from card_engine import Card, CardMode, Context
-from natal_pair import NATAL_RESTORE_SYSTEM, Relevance, _deg, natal_aspect_heading, placement_heading
+from natal_pair import NATAL_RESTORE_SYSTEM, Relevance, _deg, natal_aspect_heading, placement_heading, shows_retrograde
 from pair_snapshot import _DEFINITE
 from text_check import PLANET_BG, SIGN_BG, Violation
 
@@ -52,8 +52,9 @@ def _placements(chart: Dict, owner: str, rel: Relevance) -> List[Card]:
         house = info.get("house") if known else None
         if sign not in SIGN_BG:
             continue
-        cards.append(Card("", "A", placement_heading(planet, owner, sign, _deg(formatted), house),
-                          row={"kind": "placement", "owner": "user", "planet": planet, "sign": sign, "house": house},
+        retro = shows_retrograde(rel, planet, info, chart)
+        cards.append(Card("", "A", placement_heading(planet, owner, sign, _deg(formatted), house, retro),
+                          row={"kind": "placement", "owner": "user", "planet": planet, "sign": sign, "house": house, "retrograde": retro},
                           score=-weight(planet) + rel.order(planet) / 100.0))
     return cards
 

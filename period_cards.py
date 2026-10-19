@@ -769,7 +769,9 @@ async def run_period_report(
                 advice = checked
             month_blocks[month] = advice
             verified_parts.append((stage, advice))
-            text, month_flags = safety.check_output(month_text(cards, advice), report_type)
+            text, month_flags = safety.check_output(month_text(cards, advice), report_type, notes=False)
+            if index == len(months):                       # бележките „Застраховка“ стоят веднъж, накрая на целия отчет (20.10.2026, по искане на собственика)
+                text = safety.add_closing_notes(text, report_type)
             flags.extend(month_flags)
             month_titles.append((title, text))
             month_keys.append(month)
@@ -787,11 +789,15 @@ async def run_period_report(
         system = OVERVIEW_SYSTEM.format(theme=theme, relation_line=_relation_line(relation), people=people, period=f"{calendar.start} - {calendar.end}",
                                         zone=calendar.timezone, answer_tag=answer_tag)
         context = f"User question: {question or 'none'}\n\n{identity}VERIFIED BLOCKS:\n{blocks_text}{advice_text}"
-        user = f"{context}Write the sections now, in Bulgarian."
         needed = ["SUMMARY", "ADVICE"] + (["ANSWER"] if question else []) + ["CONCLUSION"]
+        tags = ", ".join(f"[[{t}]]" for t in needed)
+        # Живата проба (20.10.2026): при 3 месеца и стил на тема AI пишеше свои заглавия вместо таговете и формата на прегледа се отказваше (4 от 5 пъти).
+        # Последното, което AI чете, са таговете; втори опит напомня, че първият отговор не ги е ползвал.
+        user = f"{context}Write the sections now, in Bulgarian. Output ONLY the tagged sections {tags}, each tag alone on its own line, and no other headings or text."
         overview_blocks: Dict[str, str] = {}
         for attempt in (1, 2):
-            raw = await _ai(interpreter, system, user, "overview", retry_pause, 4000)
+            again = "" if attempt == 1 else f"\n\nYour previous answer did not contain the required section tags. Answer again with ONLY the tagged sections {tags}."
+            raw = await _ai(interpreter, system, user + again, "overview", retry_pause, 4000)
             sections = parse_sections(raw, set(needed))
             if all(sections.get(t) for t in needed):
                 break
@@ -826,7 +832,7 @@ async def run_period_report(
     overview = assemble_overview(kept_all, overview_blocks, calendar, question, months)
     if quality != "full":
         overview = f"{card_engine.QUALITY_NOTES[quality]}\n\n{overview}"
-    overview, overview_flags = safety.check_output(overview, report_type)
+    overview, overview_flags = safety.check_output(overview, report_type, notes=False)
     flags.extend(overview_flags)
     # Цялостна проверка на сглобения отчет: факти (само включените събития), пълнота и противоречия между всички части
     final: List[Violation] = []

@@ -1984,6 +1984,8 @@ def check_motion(seg: str, mentions: List[Mention], groups: List[Group], facts: 
     stations = [(e["planet"], e["direction"], e["when"]) for e in (facts.calendar or [])
                 if e.get("type") == "RETROGRADE" and e.get("direction") and e.get("when")]
     for c in claims:
+        if facts.mode == "natal" and not c["kind"]:
+            c = {**c, "kind": "natal"}          # в натален анализ няма транзити: „Сатурн е ретрограден“ е твърдение за наталната карта и се сверява с нея (20.10.2026)
         for planet in c["planets"]:
             if c["station"]:
                 # посоката на станцията на дата: сверява се със станцията на същото тяло в рамките на един ден
@@ -2232,15 +2234,13 @@ def check_invented_precision(seg: str, facts: Facts) -> List[Violation]:
 
 def check_text_safety(text: str, question: str = "") -> List[Violation]:
     """Здраве (R05) и самокорекция на редактор (R15): тежки нарушения, които се връщат на AI за поправка като всички останали.
-    question е въпросът на потребителя: дума или име, което той сам е написал, не е нарушение в отговора."""
+    question е въпросът на потребителя: името, което той сам е написал, не е нарушение в отговора."""
     import safety
     import theme_style
     out: List[Violation] = []
-    for code, sentence in safety.health_findings(text, question=question):
+    for code, sentence in safety.health_findings(text):
         if code == "health_delay":
             out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_DELAY_ADVICE))
-        elif code == "health_grave":
-            out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_GRAVE_ADVICE))
         elif code == "health_certain":
             out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_CERTAIN_ADVICE))
         else:

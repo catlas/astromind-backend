@@ -73,6 +73,7 @@ class Relevance:
     """Колко е важна планета или дом за темата, отношенията и въпроса. Само подрежда; не променя фактите."""
 
     def __init__(self, report_type: str, relation: str, question: str):
+        self.report_type = report_type
         self.theme = THEME_PLANETS.get(report_type, THEME_PLANETS["general"])
         self.theme_weight = THEME_WEIGHT.get(report_type, 1)
         self.relation = RELATION_PLANETS.get(relation or "general", RELATION_PLANETS["general"])
@@ -95,10 +96,29 @@ def _deg(position: str) -> str:
     return position.split(" ", 1)[1] if " " in position else position
 
 
-def placement_heading(planet: str, owner: str, sign: str, degrees: str, house: Optional[int]) -> str:
+# Ретроградността е факт в заглавието на позицията само в „Карма и род“ (20.10.2026, по искане на собственика: ретроградните планети са кармичен
+# показател в системата на Хули Леонис). Венера е от женски род; останалите тела от factpack.RETROGRADE_BODIES: „ретрограден“.
+RETROGRADE_WORD = {"Venus": "ретроградна"}
+
+
+def retrograde_word(planet: str) -> str:
+    return RETROGRADE_WORD.get(planet, "ретрограден")
+
+
+def shows_retrograde(rel: "Relevance", planet: str, info: Dict, chart: Dict) -> bool:
+    """Само в „Карма и род“, само за тела с ретроградно движение по скоростта в картата (същото правило като във фактите към проверката). Без
+    известен час на раждане картата е за местния пладне: ако посоката на планетата се сменя през деня (engine: motion_changes), не се твърди нищо."""
+    if rel.report_type != "karmic" or planet not in factpack.RETROGRADE_BODIES or not factpack.is_retrograde(info):
+        return False
+    return chart.get("time_known") is not False or planet not in set(chart.get("motion_changes") or ())
+
+
+def placement_heading(planet: str, owner: str, sign: str, degrees: str, house: Optional[int], retrograde: bool = False) -> str:
     where = f"{bg_text.in_form(SIGN_BG.get(sign, sign))} ({degrees})"          # „във Водолей“, „във Везни“
     if house:
         where += f", {bg_text.in_form(_ORDINAL[house])} дом"                  # „във 2-ри дом“, но „в 5-ти дом“
+    if retrograde:
+        where += f", {retrograde_word(planet)}"                               # „…, в 6-ти дом, ретрограден.“
     return f"{_DEFINITE.get(planet, planet)} на {owner} е {where}."
 
 
@@ -124,8 +144,9 @@ def _placements(chart: Dict, owner_key: str, owner: str, rel: Relevance) -> List
         house = info.get("house") if known else None
         if sign not in SIGN_BG:
             continue
-        cards.append(Card("", "", placement_heading(planet, owner, sign, _deg(formatted), house),
-                          row={"kind": "placement", "owner": owner_key, "planet": planet, "sign": sign, "house": house},
+        retro = shows_retrograde(rel, planet, info, chart)
+        cards.append(Card("", "", placement_heading(planet, owner, sign, _deg(formatted), house, retro),
+                          row={"kind": "placement", "owner": owner_key, "planet": planet, "sign": sign, "house": house, "retrograde": retro},
                           score=-1.0 * rel.planet(planet) + rel.order(planet) / 100.0))
     return cards
 
