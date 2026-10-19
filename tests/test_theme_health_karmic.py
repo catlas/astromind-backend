@@ -94,8 +94,8 @@ class ThemeStyleModuleTest(unittest.TestCase):
         block = theme_style.HEALTH_BLOCK
         for needle in ("CONCRETE", "Do not water the topic down", "Start every card text from the body area", "never hidden behind", "tendency or potential",
                        "never as an illness the person has now", "never as a certain future illness",
-                       "Serious conditions (for example cancer, heart attack, stroke, diabetes) are named too", "never as a diagnosis, never as certain, never with a date", "Never tie an illness or injury to a date as an event", "give no percentages", "no diagnoses",
-                       "never the same sentence in several cards", "Never tell the person to wait or postpone", "no medicines or doses", "no stopping or delaying treatment", "no fear and no fatalism",
+                       "SERIOUS CONDITIONS are named, not avoided", "a hard aspect (conjunction, square or opposition) that involves Saturn, Mars, Pluto, Uranus, Neptune or Chiron", "high blood pressure, heart attack, stroke", "diabetes, kidney disease", "cancer (a risk to follow with regular screening)", "none in a harmonious card (trine, sextile, a gift of the chart)", "the answer block names those serious risks in plain words", "never as a diagnosis, never as certain, never as something the person has now", "never tied to a date as an event", "with no percentages", "no diagnoses",
+                       "never the same sentence in several cards or in several monthly advices", "Never tell the person to wait or postpone", "no medicines or doses", "no stopping or delaying treatment", "no fear and no fatalism",
                        "adds no fact and removes no safety limit"):
             self.assertIn(needle, block, needle)
 
@@ -293,7 +293,7 @@ class RulesForThemeTest(unittest.TestCase):
 
     def test_the_health_rule_keeps_the_boundaries_and_the_karmic_rule_keeps_the_boundaries(self):
         for needle in ("не като диагноза", "не като болест, която човекът има сега", "не като сигурна бъдеща болест", "включително тежки (например рак, инфаркт, инсулт, диабет)",
-                       "повишен риск", "без дати за болест или травма", "без лекарства", "кога да се потърси лекар"):
+                       "повишен риск", "винаги когато картата показва напрежение в съответната система", "не ги заобикаляй с общи думи", "без дати за болест или травма", "без лекарства", "кога да се потърси лекар"):
             self.assertIn(needle, safety.HEALTH_RULE, needle)
         for needle in ("символ и тълкуване на картата, с различни думи във всяка карта", "реални родители, предци, детство, минали животи или семейна история",
                        "освен ако потребителят изрично го е написал", "Не обвинявай родител или род", "проклятие", "неизбежна съдба"):
@@ -1061,6 +1061,82 @@ class LivePhase31TextsTest(unittest.TestCase):
             problems, counts = vp.verify_period(self.load(name), self.period_people, "2026-10-19", "2026-11-30")
             self.assertEqual(problems, [], name)
             self.assertEqual((counts["cards"], counts["ingress"], counts["lunation"], counts["closing"]), (14, 3, 3, 7), name)
+
+
+class LivePhase32TextsTest(unittest.TestCase):
+    """Пет реални отчета с кода на 12a3052 (20.10.2026, продукция, реален AI, безплатна бета), записани точно както са доставени: „Здраве“ за три месеца
+    (20.10–31.12), „Карма и род“ натален и за двама (с ретроградните планети в заглавията), „Любов“ за двама и „Кариера“ натален за профила „Тест А — одит“
+    (и „Иван“). Независимите сверки ги четат без несъответствие, включително ретроградността, смятана по две позиции от ефемеридите."""
+    BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+    PERIOD = ("2026-10-20", "2026-12-31")
+
+    def load(self, name):
+        with open(os.path.join(self.BASE, f"live_2026_10_20_phase32_{name}.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def people(self, keys):
+        people = vc.build_people(keys)
+        for person, key in zip(people, keys):
+            person["name"] = re.sub(r"\s*[—-]\s*", " ", vc.PEOPLE[key]["name"]).strip()
+        return people
+
+    def test_the_three_month_health_period_is_complete_with_the_notes_once_and_last(self):
+        text = self.load("health_period_A")
+        self.assertNotIn("Резервен анализ", text)
+        self.assertNotIn("[[", text)
+        for section in ("### Най-силни моменти", "### Обща картина", "### Съгласуван план", "### Отговор на вашия въпрос", "### Заключение"):
+            self.assertIn(section, text, section)
+        self.assertEqual([m for m in ("Октомври", "Ноември", "Декември") if f"## 📅 {m} 2026" in text], ["Октомври", "Ноември", "Декември"])
+        self.assertEqual(text.count('class="astro-disclaimer"'), 2)
+        self.assertEqual(text.count(safety.HEALTH_NOTE_HTML), 1)
+        self.assertEqual(text.count(safety.DISCLAIMER_HTML), 1)
+        self.assertTrue(text.rstrip().endswith(safety.HEALTH_NOTE_HTML + "\n" + safety.DISCLAIMER_HTML))
+        self.assertEqual(safety.health_findings(text, "health"), [])
+        _text, period_people = vp.offline_text(("A",), *self.PERIOD)
+        problems, counts = vp.verify_period(text, period_people, *self.PERIOD)
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["cards"], counts["ingress"], counts["lunation"], counts["station"], counts["closing"]), (22, 5, 5, 4, 8))
+
+    def test_the_karmic_headings_carry_the_retrograde_planets_and_the_independent_check_agrees(self):
+        natal = self.load("karmic_natal_A")
+        self.assertIn("Хирон на Тест А одит е в Рак (11°08'), в 1-ви дом, ретрограден.", natal)
+        problems, counts = vc.verify(natal, self.people(("A",)), None, "natal_single", theme="karmic")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["placement"], counts["aspect"], counts["interpretations"], counts["closing"], counts["retrograde"]), (8, 4, 12, 4, 1))
+        pair = self.load("karmic_pair_A_IVAN")
+        self.assertIn("Сатурн на Иван е в Скорпион (21°36'), в 11-ти дом, ретрограден.", pair)
+        problems, counts = vc.verify(pair, self.people(("A", "IVAN")), None, "natal_pair", theme="karmic")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["placement"], counts["aspect"], counts["overlay"], counts["interpretations"], counts["closing"], counts["retrograde"]), (6, 9, 6, 21, 4, 1))
+        for text in (natal, pair):
+            self.assertEqual(safety.attribution_findings(text), [])
+            self.assertEqual(safety.biography_findings(text, "karmic"), [])
+            self.assertNotIn("ретроград", text.split("\n## Обща картина")[0].replace("ретрограден.", "").replace("ретроградна.", ""))     # думата стои само в заглавията
+
+    def test_the_verifier_rejects_a_missing_a_wrong_and_a_misgendered_marker_on_the_real_texts(self):
+        natal = self.load("karmic_natal_A")
+        marked = "Хирон на Тест А одит е в Рак (11°08'), в 1-ви дом, ретрограден."
+        unmarked = marked.replace(", ретрограден.", ".")
+        problems, _ = vc.verify(natal.replace(marked, unmarked), self.people(("A",)), None, "natal_single", theme="karmic")
+        self.assertTrue(any("липсва ретроградност" in p for p in problems), problems)
+        wrong = natal.replace("Сатурн на Тест А одит е в Козирог (20°47'), в 8-ми дом.", "Сатурн на Тест А одит е в Козирог (20°47'), в 8-ми дом, ретрограден.")
+        problems, _ = vc.verify(wrong, self.people(("A",)), None, "natal_single", theme="karmic")
+        self.assertTrue(any("планетата не е ретроградна" in p for p in problems), problems)
+        gender = natal.replace(marked, marked.replace("ретрограден.", "ретроградна."))
+        problems, _ = vc.verify(gender, self.people(("A",)), None, "natal_single", theme="karmic")
+        self.assertTrue(any("родът на думата" in p for p in problems), problems)
+
+    def test_the_love_and_career_texts_pass_the_independent_fact_checks(self):
+        problems, counts = vc.verify(self.load("love_pair_A_IVAN"), self.people(("A", "IVAN")), None, "natal_pair")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["placement"], counts["aspect"], counts["overlay"], counts["interpretations"], counts["closing"]), (6, 9, 6, 21, 4))
+        problems, counts = vc.verify(self.load("career_natal_A"), self.people(("A",)), None, "natal_single")
+        self.assertEqual(problems, [])
+        self.assertEqual((counts["placement"], counts["aspect"], counts["interpretations"], counts["closing"]), (8, 4, 12, 4))
+        for name in ("love_pair_A_IVAN", "career_natal_A"):
+            text = self.load(name)
+            self.assertEqual(safety.attribution_findings(text), [], name)
+            self.assertNotIn("ретроград", text, name)                     # маркерът е само за „Карма и род“
 
 
 if __name__ == "__main__":
