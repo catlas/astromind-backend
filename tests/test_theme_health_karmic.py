@@ -80,7 +80,7 @@ class ThemeStyleModuleTest(unittest.TestCase):
         for needle in ("CONCRETE", "Do not water the topic down", "never hidden behind", "tendency or potential",
                        "never as an illness the person has now", "never as a certain future illness",
                        "Never name a grave disease", "Never tie an illness or injury to a date as an event", "no percentages", "no diagnosis",
-                       "a doctor should be seen", "never tell the person to wait or postpone", "no medicines or doses", "no stopping or delaying treatment", "no fear and no fatalism",
+                       "never the same sentence in several cards", "Never tell the person to wait or postpone", "no medicines or doses", "no stopping or delaying treatment", "no fear and no fatalism",
                        "adds no fact and removes no safety limit"):
             self.assertIn(needle, block, needle)
 
@@ -93,8 +93,9 @@ class ThemeStyleModuleTest(unittest.TestCase):
 
     def test_the_karmic_block_carries_the_leonis_lens_and_every_limit(self):
         block = theme_style.KARMIC_BLOCK
-        for needle in ("Хули Леонис", "path of the soul", "Saturn is the teacher of karma", "true essence", "retrograde", "родова памет",
+        for needle in ("Хули Леонис", "path of the soul", "Saturn is the teacher of karma", "true essence", "NAMING DISCIPLINE", "родова памет",
                        "родов модел", "ARCHETYPES", "lesson and a choice, never a punishment", "overrides the earlier wish for no mystic phrases",
+                       "Vary the structure of the cards", "never with the same formula in several cards",
                        "adds no fact", "use only what the cards state", "Never describe what happened to real relatives",
                        "never name Хули Леонис, any other astrologer, author or book in the text",
                        "nothing concrete about real parents, ancestors, childhood, past lives or family history", "No curses",
@@ -105,7 +106,8 @@ class ThemeStyleModuleTest(unittest.TestCase):
     def test_the_blocks_never_override_what_may_be_named_or_the_facts(self):
         for block in (theme_style.HEALTH_BLOCK, theme_style.KARMIC_BLOCK):
             self.assertIn("adds no fact", block)
-        self.assertIn("you never print the sign, planet or house names where the section rules forbid them", theme_style.HEALTH_BLOCK)
+        self.assertIn("never print a sign, planet, house or aspect name and never speak of the direction of planetary motion", theme_style.HEALTH_BLOCK)
+        self.assertIn("never name a sign, house, aspect, angle or the direction of planetary motion", theme_style.KARMIC_BLOCK)
         self.assertIn("rules above about the facts, about what may be named in each section", theme_style.KARMIC_BLOCK)
 
     def test_theme_focus_changed_only_for_the_two_themes(self):
@@ -155,7 +157,7 @@ class RulesForThemeTest(unittest.TestCase):
         for needle in ("Не ги представяй като диагноза", "като болест, която човекът има сега", "като сигурна бъдеща болест", "Не назовавай тежки заболявания",
                        "не посочвай дати", "не давай лекарства", "кога да се потърси лекар"):
             self.assertIn(needle, safety.HEALTH_RULE, needle)
-        for needle in ("символ и тълкуване на картата", "реални родители, предци, детство, минали животи или семейна история",
+        for needle in ("символ и тълкуване на картата, с различни думи във всяка карта", "реални родители, предци, детство, минали животи или семейна история",
                        "освен ако потребителят изрично го е написал", "Не обвинявай родител или род", "проклятие", "неизбежна съдба"):
             self.assertIn(needle, safety.KARMIC_RULE, needle)
 
