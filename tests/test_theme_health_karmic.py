@@ -35,6 +35,8 @@ from schemas import ChartRequest  # noqa: E402
 OTHER_THEMES = ("general", "career", "money", "love")
 SIGNS_BG = ("Овен", "Телец", "Близнаци", "Рак", "Лъв", "Дева", "Везни", "Скорпион", "Стрелец", "Козирог", "Водолей", "Риби")
 PLANETS_BG = ("Слънце", "Луна", "Меркурий", "Венера", "Марс", "Юпитер", "Сатурн", "Уран", "Нептун", "Плутон", "Хирон")
+SIGNS_EN = ("Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces")
+PLANETS_EN = ("Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron")
 
 # Конкретно, но като склонност: в тема „Здраве“ минава, в друга тема е „орган като известен проблем“
 HEALTH_CARD = ("Стомахът и храносмилането са уязвима зона: възможни са киселини, подуване и нервен стомах при стрес. "
@@ -77,7 +79,7 @@ class ThemeStyleModuleTest(unittest.TestCase):
 
     def test_the_health_block_asks_for_concrete_weak_points_and_keeps_every_safety_limit(self):
         block = theme_style.HEALTH_BLOCK
-        for needle in ("CONCRETE", "Do not water the topic down", "never hidden behind", "tendency or potential",
+        for needle in ("CONCRETE", "Do not water the topic down", "Start every card text from the body area", "never hidden behind", "tendency or potential",
                        "never as an illness the person has now", "never as a certain future illness",
                        "Never name a grave disease", "Never tie an illness or injury to a date as an event", "no percentages", "no diagnosis",
                        "never the same sentence in several cards", "Never tell the person to wait or postpone", "no medicines or doses", "no stopping or delaying treatment", "no fear and no fatalism",
@@ -86,8 +88,10 @@ class ThemeStyleModuleTest(unittest.TestCase):
 
     def test_the_health_block_names_every_sign_and_planet_with_its_body_area(self):
         block = theme_style.HEALTH_BLOCK
-        for name in SIGNS_BG + PLANETS_BG:
+        for name in SIGNS_EN + PLANETS_EN:
             self.assertIn(name, block, name)
+        for name in SIGNS_BG + PLANETS_BG:          # 19.10.2026: кирилските имена в речника се преписваха в текста на картите (знак и дом във всяка карта)
+            self.assertNotIn(name + " ", block.replace("Рак ", "рак "), name)
         for area in ("stomach", "heart", "intestines", "kidneys", "bones", "joints", "nerves", "liver", "skin", "lymph"):
             self.assertIn(area, block, area)
 
@@ -106,7 +110,7 @@ class ThemeStyleModuleTest(unittest.TestCase):
     def test_the_blocks_never_override_what_may_be_named_or_the_facts(self):
         for block in (theme_style.HEALTH_BLOCK, theme_style.KARMIC_BLOCK):
             self.assertIn("adds no fact", block)
-        self.assertIn("never print a sign, planet, house, angle or aspect name and never speak of the direction of planetary motion", theme_style.HEALTH_BLOCK)
+        self.assertIn("Never print a sign, planet, house, angle or aspect name and never speak of the direction of planetary motion", theme_style.HEALTH_BLOCK)
         self.assertIn("never print a planet, sign, house, aspect or angle name and never speak of the direction of planetary motion", theme_style.KARMIC_BLOCK)
 
     def test_the_blocks_give_no_permission_to_name_planets(self):
