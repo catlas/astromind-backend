@@ -94,7 +94,7 @@ class ThemeStyleModuleTest(unittest.TestCase):
         block = theme_style.HEALTH_BLOCK
         for needle in ("CONCRETE", "Do not water the topic down", "Start every card text from the body area", "never hidden behind", "tendency or potential",
                        "never as an illness the person has now", "never as a certain future illness",
-                       "SERIOUS CONDITIONS are named, not avoided", "a hard aspect (conjunction, square or opposition) that involves Saturn, Mars, Pluto, Uranus, Neptune or Chiron", "high blood pressure, heart attack, stroke", "diabetes, kidney disease", "cancer (a risk to follow with regular screening)", "none in a harmonious card (trine, sextile, a gift of the chart)", "the answer block names those serious risks in plain words", "never as a diagnosis, never as certain, never as something the person has now", "never tied to a date as an event", "with no percentages", "no diagnoses",
+                       "SERIOUS CONDITIONS ARE NAMED BY THEIR ORDINARY NAMES", "do not hide them behind soft euphemisms (complications, serious problems, strain on the system)", "They do NOT forbid naming a serious condition as an elevated risk or tendency of the chart", "a hard aspect (conjunction, square or opposition) that involves Saturn, Mars, Pluto, Uranus, Neptune or Chiron", "high blood pressure, heart attack, stroke", "diabetes, kidney disease", "cancer (a risk to follow with regular screening)", "none in a harmonious card (trine, sextile, a gift of the chart)", "name the main serious risks of the whole chart by those ordinary names", "the answer starts with those serious risks, named plainly", "never a diagnosis, never certain, never something the person has now", "never tied to a date as an event", "with no percentages", "no diagnoses",
                        "never the same sentence in several cards or in several monthly advices", "Never tell the person to wait or postpone", "no medicines or doses", "no stopping or delaying treatment", "no fear and no fatalism",
                        "adds no fact and removes no safety limit"):
             self.assertIn(needle, block, needle)
@@ -201,7 +201,7 @@ class FrankThemesTest(unittest.TestCase):
             for needle in ("FRANK AND COMPLETE", "not a gentle one", "adds no fact and removes none of the limits that protect accuracy", "NAMING DISCIPLINE",
                            "never print a planet, sign, house, aspect or angle name", "Say it straight", "No euphemisms", "uncomfortable cards the same weight",
                            "Credibility", "present your interpretation as calculated fact", "give no percentages", "no dates", "never invent",
-                           "closing blocks are complete and decisive", "starts with the answer", "Start every card text from", "Do not give every card the same pattern",
+                           "closing blocks are complete and decisive", "starts with the answer and repeats the key words of the question (its topic and its verb)", "Start every card text from", "Do not give every card the same pattern",
                            "who tells the truth"):
                 self.assertIn(needle, block, (theme, needle))
         for needle in ("jealousy and possessiveness", "never predictions of a breakup or a betrayal", "Never state another person's real motive",
@@ -211,6 +211,19 @@ class FrankThemesTest(unittest.TestCase):
         for needle in ("procrastination, perfectionism, overwork", "no promises of a promotion, success or income", "an aspect alone never justifies an absolute order",
                        "never invent companies, positions or events", "overall assessment of the career potential"):
             self.assertIn(needle, theme_style.CAREER_BLOCK, needle)
+
+    def test_the_repair_of_an_answer_that_ignores_the_question_names_the_words_to_reuse(self):
+        # живата проба (20.10.2026): „Кариера“ за дата отказа, защото отговорът не повтаряше нито една основа от въпроса, а съветът казваше „със свои думи“
+        check = card_engine.question_coverage("Какво да направя за кариерата си в този момент?")
+        off = "Фокусирайте се върху стабилността и ясните приоритети в работата, като поемате отговорностите една по една и без излишна бързина. " * 2
+        found = check(off)
+        self.assertEqual([v.code for v in found], ["complete"])
+        for word in ("направя", "кариерата", "момент"):
+            self.assertIn(word, found[0].detail)
+        self.assertNotIn("със свои думи", found[0].detail)
+        self.assertEqual(check("В този момент " + off), [])
+        self.assertEqual([v.code for v in check("кратко")], ["complete"])
+        self.assertEqual(card_engine.question_coverage("")(off), [])             # без въпрос няма какво да се иска
 
     def test_the_two_rules_that_push_towards_comfort_are_replaced_and_every_other_rule_stays(self):
         old = safety.SAFETY_RULES.split("\n")

@@ -167,7 +167,12 @@ def restrict(facts, cards: List[Card]):
 def question_coverage(question: str):
     """extra_check за отговора: достатъчно дълъг и свързан с въпроса (споделя основа на дума с него). Не е семантична проверка:
     хваща празния и несвързания отговор; смисълът му се проверява от фактите и от преглед на готовите текстове."""
-    stems = {w[:5] for w in re.findall(r"[а-яА-Я]{5,}", (question or "").lower()) if w not in _QUESTION_STOP}
+    words: Dict[str, str] = {}
+    for w in re.findall(r"[а-яА-Я]{5,}", (question or "").lower()):
+        if w not in _QUESTION_STOP:
+            words.setdefault(w[:5], w)
+    stems = set(words)
+    topic = ", ".join(list(words.values())[:4])           # думите на въпроса, които отговорът трябва да повтори (проверката е по основа от 5 букви)
 
     def check(text: str) -> List[Violation]:
         plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text or "")).strip()
@@ -176,8 +181,8 @@ def question_coverage(question: str):
             out.append(Violation("complete", "hard", plain[:80], f"Отговорът е твърде кратък за въпроса: напиши поне {MIN_ANSWER_CHARS} знака, "
                                  "конкретно за зададения въпрос, само с фактите от проверените карти."))
         elif stems and not any(s in plain.lower() for s in stems):
-            out.append(Violation("complete", "hard", plain[:80], "Отговорът не се отнася до зададения въпрос: отговори директно на него, "
-                                 "като назовеш темата му със свои думи и я свържеш с проверените карти."))
+            out.append(Violation("complete", "hard", plain[:80], "Отговорът не се отнася до зададения въпрос: отговори директно на него и употреби в "
+                                 f"отговора поне една от думите на въпроса ({topic}), като го свържеш с проверените карти."))
         return out
     return check
 
