@@ -10,6 +10,9 @@
 Пускане: python -m unittest discover -s tests -p "test_theme_health_karmic.py"
 """
 import asyncio
+import os
+import re
+import sys
 import unittest
 from unittest import mock
 
@@ -31,6 +34,10 @@ import safety  # noqa: E402
 import text_check as tc  # noqa: E402
 import theme_style  # noqa: E402
 from schemas import ChartRequest  # noqa: E402
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+import verify_cards as vc  # noqa: E402
+import verify_period as vp  # noqa: E402
 
 OTHER_THEMES = ("general", "career", "money", "love")
 SIGNS_BG = ("Овен", "Телец", "Близнаци", "Рак", "Лъв", "Дева", "Везни", "Скорпион", "Стрелец", "Козирог", "Водолей", "Риби")
@@ -683,6 +690,74 @@ class FlowTest(unittest.TestCase):
         text, checks = run_flow("karmic", script)
         self.assertEqual((quality(checks), script.calls["repair"]), ("full", 1))
         self.assertNotIn("Майка ви е била строга", text)
+
+
+class LivePhase31TextsTest(unittest.TestCase):
+    """Четири реални отчета с кода на Фаза 31 (19.10.2026, продукция, реален AI, безплатна бета), записани точно както са доставени върху екрана веднага
+    след генерацията: натален и период за „Здраве“ и за „Карма и род“ за профила „Тест А — одит“. Всички са „пълни“ (без резервен и частичен анализ);
+    независимите сверки ги четат без несъответствие. Не е пробван на живо анализ за двама по тези две теми."""
+    BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+    NAMES = ("health_natal_A", "karmic_natal_A", "health_period_A", "karmic_period_A")
+
+    @classmethod
+    def setUpClass(cls):
+        _text, cls.period_people = vp.offline_text(("A",), "2026-10-19", "2026-11-30")
+
+    def load(self, name):
+        with open(os.path.join(self.BASE, f"live_2026_10_19_phase31_{name}.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def people(self, keys):
+        people = vc.build_people(keys)
+        for person, key in zip(people, keys):
+            person["name"] = re.sub(r"\s*[—-]\s*", " ", vc.PEOPLE[key]["name"]).strip()
+        return people
+
+    def test_every_text_is_full_in_bulgarian_and_names_no_astrologer(self):
+        facts = rs.facts("period", True)
+        for name in self.NAMES:
+            text = self.load(name)
+            self.assertNotIn("Резервен анализ", text, name)
+            self.assertNotIn("Частичен анализ", text, name)
+            self.assertEqual([v.detail for v in tc.check_language(text, facts)], [], name)
+            self.assertEqual(safety.attribution_findings(text), [], name)
+            self.assertNotIn("смърт", text.lower(), name)
+
+    def test_the_health_texts_name_the_weak_points_and_keep_the_limits_and_the_insurance_texts(self):
+        for name in ("health_natal_A", "health_period_A"):
+            text = self.load(name)
+            self.assertEqual(safety.health_findings(text, "health"), [], name)                         # без сигурна болест и без тежко заболяване
+            self.assertIn(safety.HEALTH_NOTE_HTML, text, name)
+            self.assertIn(safety.DISCLAIMER_HTML, text, name)
+            low = text.lower()
+            for area in ("стомах", "стави", "кожа", "сън"):
+                self.assertIn(area, low, (name, area))                                                 # конкретни зони, не „символична тема“
+            for grave in ("рак на", "инфаркт", "инсулт", "диабет", "тумор"):
+                self.assertNotIn(grave, low, (name, grave))
+        # дума за отлагане на лекар заради периода няма; в периода е изрично казано обратното
+        self.assertIn("без да ги отлагате заради периода", self.load("health_period_A"))
+
+    def test_the_karmic_texts_speak_the_lens_without_facts_about_real_relatives(self):
+        for name in ("karmic_natal_A", "karmic_period_A"):
+            text = self.load(name)
+            self.assertEqual(safety.biography_findings(text, "karmic"), [], name)
+            low = text.lower()
+            for word in ("родов", "душата", "урок"):
+                self.assertIn(word, low, (name, word))
+        natal = self.load("karmic_natal_A")
+        self.assertIn("Възходящият възел на Тест А одит е във Водолей", natal)                         # възелът е сред картите (преди двойната тежест го нямаше)
+        self.assertIn("Сатурн на Тест А одит е в Козирог", natal)
+        self.assertIn("Хирон на Тест А одит е в Рак", natal)
+
+    def test_the_independent_checks_accept_the_four_texts(self):
+        for name in ("health_natal_A", "karmic_natal_A"):
+            problems, counts = vc.verify(self.load(name), self.people(("A",)), None, "natal_single")
+            self.assertEqual(problems, [], name)
+            self.assertEqual((counts["placement"], counts["aspect"], counts["interpretations"], counts["closing"]), (8, 4, 12, 4), name)
+        for name in ("health_period_A", "karmic_period_A"):
+            problems, counts = vp.verify_period(self.load(name), self.period_people, "2026-10-19", "2026-11-30")
+            self.assertEqual(problems, [], name)
+            self.assertEqual((counts["cards"], counts["ingress"], counts["lunation"], counts["closing"]), (14, 3, 3, 7), name)
 
 
 if __name__ == "__main__":
