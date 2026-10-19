@@ -99,7 +99,7 @@ class ThemeStyleModuleTest(unittest.TestCase):
         block = theme_style.KARMIC_BLOCK
         for needle in ("Хули Леонис", "path of the soul", "Saturn is the teacher of karma", "true essence", "NAMING DISCIPLINE", "родова памет",
                        "родов модел", "ARCHETYPES", "lesson and a choice, never a punishment", "overrides the earlier wish for no mystic phrases",
-                       "Vary the structure of the cards", "never with the same formula in several cards",
+                       "Vary the structure of the cards", "never with the same formula in several cards", "Start every card text from the lesson",
                        "adds no fact", "use only what the cards state", "Never describe what happened to real relatives",
                        "never name Хули Леонис, any other astrologer, author or book in the text",
                        "nothing concrete about real parents, ancestors, childhood, past lives or family history", "No curses",
