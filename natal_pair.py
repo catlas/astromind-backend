@@ -31,8 +31,11 @@ THEME_PLANETS = {
     "career": {"Sun", "Mars", "Saturn", "Jupiter", "Mercury", "MC"},
     "money": {"Venus", "Jupiter", "Saturn", "Mercury"},
     "health": {"Moon", "Mars", "Saturn", "Sun"},
-    "karmic": {"Node", "Saturn", "Moon", "Pluto", "Chiron"},
+    "karmic": {"Node", "Saturn", "Moon", "Pluto", "Chiron", "Sun"},         # системата на Хули Леонис: възел, Сатурн, Луна (майчина линия), Слънце (бащина линия), Хирон, Плутон
 }
+# „Карма и род“ (19.10.2026): планетите на темата тежат двойно. Иначе общите планети на отношението „общо“ (Слънце, Луна, Меркурий, Венера, Марс)
+# вземат по точка от отношението и изместват възела, Сатурн, Хирон и Плутон, които са сърцето на темата. Другите теми не се пипат (тежест 1).
+THEME_WEIGHT = {"karmic": 2}
 RELATION_PLANETS = {
     "romantic": {"Venus", "Mars", "Moon", "Sun"},
     "friend": {"Mercury", "Jupiter", "Sun", "Moon"},
@@ -71,13 +74,14 @@ class Relevance:
 
     def __init__(self, report_type: str, relation: str, question: str):
         self.theme = THEME_PLANETS.get(report_type, THEME_PLANETS["general"])
+        self.theme_weight = THEME_WEIGHT.get(report_type, 1)
         self.relation = RELATION_PLANETS.get(relation or "general", RELATION_PLANETS["general"])
         self.asked = question_planets(question)
         self.theme_houses = THEME_HOUSES.get(report_type, THEME_HOUSES["general"])
         self.relation_houses = RELATION_HOUSES.get(relation or "general", RELATION_HOUSES["general"])
 
     def planet(self, name: str) -> int:
-        return (name in self.theme) + (name in self.relation) + (name in self.asked)
+        return (name in self.theme) * self.theme_weight + (name in self.relation) + (name in self.asked)
 
     def house(self, number: int) -> int:
         return (number in self.theme_houses) + (number in self.relation_houses)

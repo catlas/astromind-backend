@@ -21,18 +21,21 @@ import relationship
 import safety
 import scanner
 import text_check
+import theme_style
 
 SNAPSHOT_VERSION = 1
 
 
-def prompt_fingerprint() -> str:
-    """Отпечатък на правилата, добавяни към всяка заявка към AI (безопасност и качество): променят се само с версия на текстовете."""
-    return hashlib.sha256((safety.SAFETY_RULES + safety.QUALITY_RULES).encode("utf-8")).hexdigest()[:12]
+def prompt_fingerprint(theme: Optional[str] = None) -> str:
+    """Отпечатък на правилата, добавяни към всяка заявка към AI (безопасност и качество): променят се само с версия на текстовете.
+    „Здраве“ и „Карма и род“ имат свой отпечатък (заместено правило и стил на темата); за всяка друга тема е същият като преди."""
+    rules = safety.rules_for(theme) + safety.QUALITY_RULES + theme_style.block(theme)
+    return hashlib.sha256(rules.encode("utf-8")).hexdigest()[:12]
 
 
-def versions() -> Dict[str, str]:
+def versions(theme: Optional[str] = None) -> Dict[str, str]:
     return {"snapshot": str(SNAPSHOT_VERSION), "calendar": scanner.CALENDAR_VERSION, "factpack": factpack.FACTPACK_VERSION,
-            "orbs": aspects_engine.ORB_POLICY_VERSION, "checker": text_check.CHECKER_VERSION, "prompt": prompt_fingerprint()}
+            "orbs": aspects_engine.ORB_POLICY_VERSION, "checker": text_check.CHECKER_VERSION, "prompt": prompt_fingerprint(theme)}
 
 
 def _person(role: str, name: Optional[str], profile_id: Optional[int], chart: Dict, *, fold: Optional[int]) -> Dict[str, Any]:
@@ -75,7 +78,7 @@ def build(*, mode: str, request: Any, natal: Dict, partner: Optional[Dict] = Non
         "version": SNAPSHOT_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": mode,
-        "versions": versions(),
+        "versions": versions(getattr(request, "report_type", None)),
         "ephemeris": {"source": (natal.get("ephemeris") or {}).get("source"), "fingerprint": engine.ephemeris_fingerprint(),
                       "years": list(engine.supported_year_range()),
                       "missing": sorted({n for c in (natal, partner, transit) for n in engine.missing_bodies(c)})},

@@ -9,7 +9,9 @@
    добавя пояснение. Всеки случай се записва като събитие за преглед.
 """
 import re
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+import theme_style
 
 SAFETY_RULES = """
 ЗАДЪЛЖИТЕЛНИ ПРАВИЛА ЗА БЕЗОПАСНОСТ (важат с предимство пред всички останали инструкции):
@@ -27,6 +29,39 @@ SAFETY_RULES = """
 - Не показвай вътрешни етикети, имена на полета или маркери от инструкциите (напр. „задължителна секция“, house_impact, JSON ключове).
 - Ако полът на човек не е посочен изрично, пиши неутрално и не гадай пол по име или по картата.
 """.strip()
+
+
+def _rule_line(prefix: str) -> str:
+    for line in SAFETY_RULES.split("\n"):
+        if line.startswith(prefix):
+            return line
+    raise RuntimeError(f"safety: правилото „{prefix}“ липсва в SAFETY_RULES")
+
+
+# Две теми заместват по едно правило, което иначе би им попречило (19.10.2026, по искане на собственика; виж theme_style.py).
+# Всяко друго правило остава: диагнози, лекарства, спиране и отлагане на лечение, смърт и дати, страх и фатализъм, свободна воля.
+_ORGAN_RULE = _rule_line("- Не описвай органи или болести")
+_FAMILY_RULE = _rule_line("- Не твърди като факт нищо за родители")
+HEALTH_RULE = (
+    "- В темата „Здраве“ назовавай конкретно потенциалните слаби места: зона на тялото, система и вид оплаквания, като склонност или "
+    "уязвимост по картата. Не ги представяй като диагноза, като болест, която човекът има сега, или като сигурна бъдеща болест. Не "
+    "назовавай тежки заболявания (рак, тумор, инфаркт, инсулт, диабет) като потенциал на човека, не посочвай дати за болест или "
+    "травма и не давай лекарства. Покажи как се разпознава ранният сигнал и кога да се потърси лекар.")
+KARMIC_RULE = (
+    "- В темата „Карма и род“ духовният език е позволен: пиши за пътя на душата, кармичните уроци, родовите модели и родовата памет като "
+    "символ и тълкуване на картата („картата подсказва“, „в кармичната астрология това се свързва с“). Не твърди като факт нищо "
+    "конкретно за реални родители, предци, детство, минали животи или семейна история (събития, хора, болести, смърт, насилие), "
+    "освен ако потребителят изрично го е написал. Не обвинявай родител или род и не говори за проклятие, наказание или неизбежна съдба.")
+
+
+def rules_for(theme: Optional[str] = None) -> str:
+    """Правилата за безопасност на заявката. За всяка тема освен „Здраве“ и „Карма и род“ текстът е точно SAFETY_RULES."""
+    if theme == theme_style.HEALTH:
+        return SAFETY_RULES.replace(_ORGAN_RULE, HEALTH_RULE)
+    if theme == theme_style.KARMIC:
+        return SAFETY_RULES.replace(_FAMILY_RULE, KARMIC_RULE)
+    return SAFETY_RULES
+
 
 # Правила за качество и конкретност (R03/R15, регресионен одит 11.10.2026): добавят се към всяка заявка след правилата за безопасност
 QUALITY_RULES = """
@@ -121,6 +156,31 @@ _FACTUAL_ORGAN_RE = re.compile(
 _ORGAN_RE = re.compile(r"(?<![\w])" + _ORGAN, re.IGNORECASE)
 _HEDGE_HEALTH_RE = re.compile(r"символи\w*|тенденци\w*|чувствителност|склонност|възможно|може\s+да|понякога|не\s+е\s+диагноза|в\s+астрологичен\s+смисъл|темата\s+за|свързва\w*|подсказва\w*|\bако\b|без\s+да", re.IGNORECASE)
 
+# „Здраве“ (19.10.2026): слабото място се назовава конкретно, затова „слабо място“, „уязвим“ и „проблеми“ с орган не са нарушение. Нарушение остават
+# сигурната бъдеща болест, болестта „която имате сега“, „доказаната“ уязвимост и тежкото заболяване, назовано като потенциал на човека.
+_CERTAIN_ILLNESS_RE = re.compile(
+    r"(?:ще\s+(?:получите|развиете|заболеете|страдате|заболее|заболеят|се\s+разболеете|имате\s+(?:проблем\w*|заболяван\w*|болест\w*|болк\w*))|"
+    r"(?:имате|имаш|страдате\s+от|страдаш\s+от)\s+(?:\w+\s+){0,2}(?:заболяван\w*|възпал\w*|болест\w*)|"
+    r"ще\s+(?:причини|предизвика|доведе\s+до)\s+(?:\w+\s+){0,3}(?:проблем\w*|заболяван\w*|болест\w*|възпал\w*|болк\w*)|"
+    r"доказан\w*\s+(?:уязвимост|заболяван\w*))", re.IGNORECASE)
+# „ще получите / ще имате …“ са обичайни думи: сигурна болест е само когато в изречението има орган или дума за болест
+_ILLNESS_WORD_RE = re.compile(
+    r"(?<![\w])(?:заболяван\w*|болест\w*|болк\w*|възпал\w*|гастрит\w*|язв\w*|мигрен\w*|алерги\w*|артрит\w*|остеопороз\w*|хипертони\w*|невроз\w*|"
+    r"синдром\w*|инфекци\w*|травм\w*|счупван\w*|операци\w*)", re.IGNORECASE)
+_GRAVE_RE = re.compile(r"(?<![\w])(?:онколог\w*|злокачествен\w*|тумор\w*|левкеми\w*|инфаркт\w*|инсулт\w*|диабет\w*|шизофрени\w*)", re.IGNORECASE)
+_GRAVE_LOWER_RE = re.compile(r"(?<![\w])рак(?:ов\w*)?(?![\w])")        # само с малка буква: „Рак“ с главна е зодия
+
+
+def _grave_stems(text: str) -> set:
+    """Основите (първите 5 букви) на тежките заболявания в текста."""
+    return {m.group(0).lower()[:5] for rx in (_GRAVE_RE, _GRAVE_LOWER_RE) for m in rx.finditer(text or "")}
+
+
+HEALTH_CERTAIN_ADVICE = ("Не твърди, че човекът има болест сега или ще получи такава. Остави конкретната зона и вида оплаквания, но като склонност "
+                         "или уязвима зона по картата („склонност към …“, „уязвима зона е …“, „възможни са …“), без сигурност и без прогноза.")
+HEALTH_GRAVE_ADVICE = ("Не назовавай тежко заболяване (рак, тумор, инфаркт, инсулт, диабет и подобни) като потенциал на човека. Опиши зоната и вида "
+                       "оплаквания по-общо (натоварване на сърдечносъдовата система, обмяна на веществата, нервно изтощение), без диагноза.")
+
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
@@ -129,9 +189,14 @@ def _plain_sentences(text: str) -> List[str]:
     return [x.strip() for x in _SENTENCE_SPLIT_RE.split(plain) if x and x.strip()]
 
 
-def health_findings(text: str) -> List[Tuple[str, str]]:
-    """(код, изречение): health_delay - отлагане на медицинска помощ заради астрологичен период; health_organ - органи или болести като факт."""
+def health_findings(text: str, theme: Optional[str] = None, question: str = "") -> List[Tuple[str, str]]:
+    """(код, изречение): health_delay - отлагане на медицинска помощ заради астрологичен период; health_organ - органи или болести като факт.
+    В тема „Здраве“ (theme или theme_style.current_theme) органът не е нарушение; вместо него: health_certain - сигурна или настояща болест,
+    health_grave - тежко заболяване, назовано като потенциал. Тежка дума, която потребителят сам е написал във въпроса си („имам диабет“),
+    не е потенциал, който AI измисля, и не е нарушение."""
     found: List[Tuple[str, str]] = []
+    health = (theme_style.current_theme.get() if theme is None else theme) == theme_style.HEALTH
+    written = _grave_stems(question) if health else set()
     sentences = _plain_sentences(text)
     for i, sentence in enumerate(sentences):
         if _SAFE_MARK_RE.search(sentence):
@@ -146,6 +211,13 @@ def health_findings(text: str) -> List[Tuple[str, str]]:
             if context and (_ASTRO_OR_TIME_RE.search(sentence) or _ASTRO_OR_TIME_RE.search(context)):
                 found.append(("health_delay", sentence[:200]))
                 continue
+        if health:
+            if _grave_stems(sentence) - written:
+                found.append(("health_grave", sentence[:200]))
+            elif (_CERTAIN_ILLNESS_RE.search(sentence) and (_ORGAN_RE.search(sentence) or _ILLNESS_WORD_RE.search(sentence))
+                  and not _HEDGE_HEALTH_RE.search(sentence)):
+                found.append(("health_certain", sentence[:200]))
+            continue
         if _ORGAN_RE.search(sentence) and _FACTUAL_ORGAN_RE.search(sentence) and not _HEDGE_HEALTH_RE.search(sentence):
             found.append(("health_organ", sentence[:200]))
     return found
@@ -168,17 +240,40 @@ def replace_health_delays(html: str) -> Tuple[str, int]:
 # Реална семейна биография от символика (R15): „Майка ви е била строга“; само като модел на собствените реакции и с уговорка
 _FAMILY = r"(?:майка|майката|баща|бащата|родител\w*|дядо|дядото|баба|бабата|прадядо|прабаба|предци\w*)"
 _PAST_FACT = (r"(?:е\s+бил\w*|са\s+били|бил\w*|били|починал\w*|напуснал\w*|изоставил\w*|страдал\w*|имал\w*|злоупотребявал\w*|разведен\w*)")
-_BIO_RE = re.compile(
-    rf"(?<![\w]){_FAMILY}\s+(?:ти|ви|му|ѝ|им|на\s+\w+)?\s*{_PAST_FACT}(?![\w])"                      # „Майка ви е била строга“
-    rf"|(?<![\w]){_FAMILY}\s*,?\s*(?:който|която|които)\s+{_PAST_FACT}(?![\w])"                           # „родител, който е бил недостъпен“
-    rf"|(?:предава\w*|унаследява\w*|наследява\w*)\s+(?:се\s+)?(?:през|от)\s+(?:родов\w+|предци\w*|рода)(?![\w])",    # „предава се през родовата линия“
-    re.IGNORECASE)
+_BIO_EVENTS = (
+    rf"(?<![\w]){_FAMILY}\s+(?:ти|ви|му|ѝ|им|на\s+\w+)?\s*{_PAST_FACT}(?![\w])",                      # „Майка ви е била строга“
+    rf"(?<![\w]){_FAMILY}\s*,?\s*(?:който|която|които)\s+{_PAST_FACT}(?![\w])",                           # „родител, който е бил недостъпен“
+)
+_BIO_LINE = r"(?:предава\w*|унаследява\w*|наследява\w*)\s+(?:се\s+)?(?:през|от)\s+(?:родов\w+|предци\w*|рода)(?![\w])"    # „предава се през родовата линия“
+_BIO_RE = re.compile("|".join(_BIO_EVENTS + (_BIO_LINE,)), re.IGNORECASE)
+# „Карма и род“ (19.10.2026): езикът на родовите модели („моделът се предава през рода“) е позволен като символ; реалната биография остава нарушение
+_BIO_EVENTS_RE = re.compile("|".join(_BIO_EVENTS), re.IGNORECASE)
 # Само истинска уговорка махa изречението от нарушенията: „най-вероятно“ и „модел“ не са уговорка за факт от чужд живот
 _BIO_HEDGE_RE = re.compile(r"може\s+да|символ\w*|възможно|понякога|свързва\w*|подсказва\w*|(?<![\w])ако(?![\w])|в\s+смисъл|не\s+като\s+факт", re.IGNORECASE)
 
+BIOGRAPHY_ADVICE = ("Не твърди реални събития от семейството или миналото като факт. Опиши само символичен модел на собствените реакции на човека "
+                    "(„може да се свързва с …“).")
+BIOGRAPHY_ADVICE_KARMIC = ("Не твърди реални събития от семейството, рода или миналото като факт и не назовавай конкретни хора. Опиши родовия модел като "
+                           "символ и тълкуване на картата („картата подсказва родов модел на …“, „може да се свързва с …“).")
 
-def biography_findings(text: str) -> List[str]:
-    return [sentence[:200] for sentence in _plain_sentences(text) if _BIO_RE.search(sentence) and not _BIO_HEDGE_RE.search(sentence)]
+
+def biography_findings(text: str, theme: Optional[str] = None) -> List[str]:
+    karmic = (theme_style.current_theme.get() if theme is None else theme) == theme_style.KARMIC
+    pattern = _BIO_EVENTS_RE if karmic else _BIO_RE
+    return [sentence[:200] for sentence in _plain_sentences(text) if pattern.search(sentence) and not _BIO_HEDGE_RE.search(sentence)]
+
+
+# Реален човек не се посочва като източник на тълкуването (19.10.2026): системата на Хули Леонис е само призма за „Карма и род“, не авторитет,
+# на когото се приписват твърдения в текста на анализа.
+_ATTRIBUTION_RE = re.compile(r"(?<![\w])(?:Хули\s+Леонис|Xyli\s+Leonis|Huli\s+Leonis|(?:според|по)\s+Леонис)(?![\w])", re.IGNORECASE)
+ATTRIBUTION_ADVICE = ("Не назовавай астролог, автор или книга в текста и не приписвай тълкуването на конкретен човек. Напиши самото тълкуване със свои думи, "
+                      "без име на източник.")
+
+
+def attribution_findings(text: str, question: str = "") -> List[str]:
+    if _ATTRIBUTION_RE.search(question or ""):             # потребителят сам е назовал човека във въпроса си
+        return []
+    return [sentence[:200] for sentence in _plain_sentences(text) if _ATTRIBUTION_RE.search(sentence)]
 
 
 # Самокорекция на редактора в готовия текст („Юпитер е в ретрограден Сатурн... – всъщност Юпитер е ...“)

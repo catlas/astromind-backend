@@ -3,7 +3,8 @@ AI Интерпретатор за астрологични карти
 Използва Together.ai API за анализ и интерпретация
 """
 
-from safety import QUALITY_RULES, SAFETY_RULES
+from safety import QUALITY_RULES, rules_for
+import theme_style
 import pair_snapshot
 import single_snapshot
 import natal_pair
@@ -53,11 +54,11 @@ ASPECTS_NOTE = (
 # Темата на анализа: подава се на AI в подканите по карти (THEME)
 THEME_FOCUS = {
     "general": "General life overview: main patterns, tensions, resources and priorities.",
-    "health": "Health and well-being: workload, rhythm, recovery and daily routine (tendencies only, never diagnoses).",
+    "health": "Health and well-being: name concretely the body areas and systems the chart marks as sensitive, the potential problems they may bring and the habits that protect them (tendencies, never diagnoses).",
     "career": "Career and work: responsibilities, communication, negotiation and the concrete action asked about.",
     "money": "Money and success: resources, priorities, habits and the alternatives named in the question (no investment advice).",
     "love": "Relationships and love: emotions, communication, boundaries and the exact context of the relationship.",
-    "karmic": "Karma and family patterns: symbolic and personal patterns of reaction (never facts about ancestors or parents).",
+    "karmic": "Karma and family lineage in the system of Хули Леонис: the path of the soul, karmic lessons, ancestral patterns and memory, read as symbols and spiritual guidance (never facts about ancestors or parents).",
 }
 
 
@@ -153,11 +154,16 @@ class AIInterpreter:
 
         if add_context:
             # Правилата за безопасност важат за всеки анализ, независимо от режима
-            system_prompt = f"{relationship.adapt(system_prompt)}\n\n{SAFETY_RULES}\n\n{QUALITY_RULES}"
+            # „Здраве“ и „Карма и род“ заместват по едно правило (safety.rules_for); за всяка друга тема е точно SAFETY_RULES
+            system_prompt = f"{relationship.adapt(system_prompt)}\n\n{rules_for(theme_style.current_theme.get())}\n\n{QUALITY_RULES}"
             # Контекстът на отношенията между двамата души (Фаза 12), ако анализът е за двама
             relation_context = relationship.current.get()
             if relation_context:
                 system_prompt = f"{system_prompt}\n\n{relation_context}"
+            # Стилът на темата „Здраве“ или „Карма и род“ (theme_style.py): преди правилото за непознат час, което трябва да надделее
+            theme_context = theme_style.current.get()
+            if theme_context:
+                system_prompt = f"{system_prompt}\n\n{theme_context}"
             # Човек без известен час на раждане: без Асцендент, МС и домове (последното правило, за да надделее над шаблоните)
             time_context = birthtime.current.get()
             if time_context:
@@ -378,7 +384,8 @@ class AIInterpreter:
             "10. **HEALTH:** never diagnose, never recommend treatment or medication, never reassure that there is no illness, accident or danger "
             "(forbidden: \"няма данни за заболявания или инциденти\"), and never present a bodily reaction as a fact derived from the chart. "
             "Write tendencies and themes (\"картата подсказва тема за ...\") and practical routine advice: sleep, rest, load limits, boundaries, "
-            "and a medical check-up when the person is worried.\n\n"
+            "and a medical check-up when the person is worried. In the Health theme the potential weak points stay named concretely (body "
+            "area, system, kind of complaints) as tendencies of the chart: never make them vaguer while correcting something else.\n\n"
             "11. **DECISIONS (career, money, contracts):** do not give absolute orders based only on an aspect or a retrograde "
             "(forbidden: \"не напускайте\", \"не приемайте оферта\", \"не инвестирайте\", \"не подписвайте\"). Keep the direct tone but give a "
             "concrete action to check the real conditions: \"прегледайте условията, бюджета и алтернативите и си дайте време за обмисляне\".\n\n"

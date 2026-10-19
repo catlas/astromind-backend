@@ -154,7 +154,7 @@ class Facts:
 
 @dataclass
 class Violation:
-    code: str            # house, sign, aspect, orb, exact, cusp, ruler, retro_count, date, time, event, label, english, percent, language
+    code: str            # house, sign, aspect, orb, exact, cusp, ruler, retro_count, date, time, event, label, english, percent, language, attribution
     severity: str        # hard | soft
     excerpt: str         # откъс от текста (до 160 знака)
     detail: str          # какво не е наред и какво е вярното (за поправката)
@@ -2230,21 +2230,28 @@ def check_invented_precision(seg: str, facts: Facts) -> List[Violation]:
     return out
 
 
-def check_text_safety(text: str) -> List[Violation]:
-    """Здраве (R05) и самокорекция на редактор (R15): тежки нарушения, които се връщат на AI за поправка като всички останали."""
+def check_text_safety(text: str, question: str = "") -> List[Violation]:
+    """Здраве (R05) и самокорекция на редактор (R15): тежки нарушения, които се връщат на AI за поправка като всички останали.
+    question е въпросът на потребителя: дума или име, което той сам е написал, не е нарушение в отговора."""
     import safety
+    import theme_style
     out: List[Violation] = []
-    for code, sentence in safety.health_findings(text):
+    for code, sentence in safety.health_findings(text, question=question):
         if code == "health_delay":
             out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_DELAY_ADVICE))
+        elif code == "health_grave":
+            out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_GRAVE_ADVICE))
+        elif code == "health_certain":
+            out.append(Violation("health", "hard", sentence[:160], safety.HEALTH_CERTAIN_ADVICE))
         else:
             out.append(Violation("health", "hard", sentence[:160],
                                  "Не описвай орган или болест като известен проблем или доказана уязвимост. Преформулирай символично и неутрално "
                                  "(например „темата за храносмилането и стреса“), без прогноза за заболяване."))
+    advice = safety.BIOGRAPHY_ADVICE_KARMIC if theme_style.is_karmic() else safety.BIOGRAPHY_ADVICE
     for sentence in safety.biography_findings(text):
-        out.append(Violation("biography", "hard", sentence[:160],
-                             "Не твърди реални събития от семейството или миналото като факт. Опиши само символичен модел на собствените реакции на човека "
-                             "(„може да се свързва с …“)."))
+        out.append(Violation("biography", "hard", sentence[:160], advice))
+    for sentence in safety.attribution_findings(text, question):
+        out.append(Violation("attribution", "hard", sentence[:160], safety.ATTRIBUTION_ADVICE))
     for leak in safety.editor_leaks(text):
         out.append(Violation("editor", "hard", leak[:160], "В текста има самокорекция на редактор („… – всъщност …“). Остави само верното твърдение, без поправката."))
     return out
@@ -2267,7 +2274,7 @@ def check_text(text: str, facts: Facts) -> List[Violation]:
     found: List[Violation] = list(check_leaks(text or "")) + check_language(text or "", facts)
     if name_collides(facts):
         return found                          # само служебните етикети и проценти: твърденията не могат да се разпознаят сигурно
-    found += check_text_safety(text or "")
+    found += check_text_safety(text or "", facts.question)
     found += check_completeness(text or "", facts)
     for seg in segments(protect_names(text or "", facts)):
         mentions = find_mentions(seg)
@@ -2313,7 +2320,7 @@ def _person_facts(chart: Dict) -> Tuple[Dict, Dict, int]:
     return natal, cusps_view(view.get("houses") or {}), int(view.get("retrograde_count") or 0)
 
 
-CHECKER_VERSION = "27"       # версия на правилата за проверка на текста (влиза в снимката на отчета); 24: прозорци в report_guard, 25: само съвет е препоръка, 26: общи думи и едно изречение, 27: английска дума в текста е нарушение `language` (18.10.2026)
+CHECKER_VERSION = "28"       # версия на правилата за проверка на текста (влиза в снимката на отчета); 24: прозорци в report_guard, 25: само съвет е препоръка, 26: общи думи и едно изречение, 27: английска дума в текста е нарушение `language` (18.10.2026), 28: здравните и родовите проверки зависят от темата („Здраве“, „Карма и род“) и нарушение `attribution` за име на астролог (19.10.2026)
 
 
 class FactsUnavailable(Exception):

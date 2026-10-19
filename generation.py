@@ -34,6 +34,7 @@ import relationship
 import report_snapshot
 import safety
 import text_guard
+import theme_style
 from ai_interpreter import get_interpreter
 from aspects_engine import calculate_natal_aspects
 from database import SessionLocal, User
@@ -339,6 +340,8 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         unknown_names.append(factpack.display_name(request.partner_name, factpack.SECOND_PERSON_DEFAULT))
     time_token = birthtime.bind(unknown_names) if unknown_names else None
     names_token = bg_text.bind([request.name, request.partner_name])         # имената на хората не се превеждат
+    # Стилът на темата „Здраве“ или „Карма и род“ (theme_style.py): към системния промпт на всяка AI заявка и към проверките на текста
+    theme_token = theme_style.bind(request.report_type or "general")
     try:
         if request.is_dynamic:
             return await run_period(request, user_id, emit)
@@ -357,6 +360,7 @@ async def run(request: ChartRequest, user_id: int, emit: Emit) -> Outcome:
         what = "прогнозата" if request.is_dynamic else "анализа"
         raise internal_failure("generation", exc, f"Не успяхме да генерираме {what}. Опитайте отново след малко.") from exc
     finally:
+        theme_style.unbind(theme_token)
         bg_text.unbind(names_token)
         if time_token is not None:
             birthtime.unbind(time_token)

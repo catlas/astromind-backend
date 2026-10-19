@@ -257,7 +257,7 @@ class LanguageCheckTest(unittest.TestCase):
         self.assertGreater(checked, 25)
 
     def test_the_checker_version_names_the_new_rule(self):
-        self.assertEqual(tc.CHECKER_VERSION, "27")
+        self.assertEqual(tc.CHECKER_VERSION, "28")
 
 
 class LivePhase30TextsTest(unittest.TestCase):
