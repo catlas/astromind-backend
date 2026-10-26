@@ -3,17 +3,46 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException
+import hmac
+import os
+from datetime import timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import ai_budget
 from database import AIUsage, CoinTransaction, Event, Job, Purchase, Report, User, get_db
 from events_api import require_admin
+from rate_limit import client_ip, enforce
 
 router = APIRouter(prefix="/admin")
 
 ACTIVE = ("queued", "running")
+ADMIN_TOKEN_MINUTES = 480
+
+
+class AdminLogin(BaseModel):
+    username: str = Field(..., max_length=100)
+    password: str = Field(..., max_length=200)
+
+
+@router.post("/login")
+def admin_login(data: AdminLogin, request: Request):
+    """Отделен вход на собственика: ADMIN_USERNAME (по подразбиране „admin“) и ADMIN_PASSWORD от environment в Render. Дава токен за 8 часа."""
+    expected = os.getenv("ADMIN_PASSWORD", "")
+    if len(expected) < 10:
+        raise HTTPException(status_code=503, detail="Админ входът не е настроен: задайте ADMIN_PASSWORD (поне 10 символа) в Render.")
+    enforce(f"admin-login:{client_ip(request)}", 5, 900, "Твърде много опити за вход.")
+    user_ok = hmac.compare_digest(data.username.strip().encode(), os.getenv("ADMIN_USERNAME", "admin").strip().encode())
+    pass_ok = hmac.compare_digest(data.password.encode(), expected.encode())
+    if not (user_ok and pass_ok):
+        raise HTTPException(status_code=401, detail="Грешно потребителско име или парола")
+    import jwt
+    from auth import ALGORITHM, SECRET_KEY
+    exp = datetime.utcnow() + timedelta(minutes=ADMIN_TOKEN_MINUTES)
+    return {"token": jwt.encode({"typ": "admin", "exp": exp}, SECRET_KEY, algorithm=ALGORITHM), "expires_minutes": ADMIN_TOKEN_MINUTES}
 
 
 def _day(value) -> str:

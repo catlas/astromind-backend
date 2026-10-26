@@ -70,6 +70,24 @@ class AdminApiTest(unittest.TestCase):
             self.assertEqual(self.client.get(f"/admin/data/{table['id']}", headers=self.boss).status_code, 200, table["id"])
         self.assertEqual(set(admin_api.TABLES), {"users", "jobs", "reports", "events", "purchases", "balance", "ai_usage"})
 
+    def test_the_separate_admin_login_gives_access_without_a_user_account(self):
+        with mock.patch.dict(os.environ, {"ADMIN_PASSWORD": "dalga-parola-123", "ADMIN_USERNAME": "owner"}):
+            bad = self.client.post("/admin/login", json={"username": "owner", "password": "greshna-parola"})
+            self.assertEqual(bad.status_code, 401)
+            ok = self.client.post("/admin/login", json={"username": "owner", "password": "dalga-parola-123"})
+            self.assertEqual(ok.status_code, 200, ok.text)
+            header = {"Authorization": f"Bearer {ok.json()['token']}"}
+            self.assertEqual(self.client.get("/admin/overview", headers=header).status_code, 200)
+            self.assertEqual(self.client.get("/admin/metrics", headers=header).status_code, 200)
+            self.assertEqual(self.client.get("/admin/data/users", headers=header).status_code, 200)
+            self.assertEqual(self.client.get("/me", headers=header).status_code, 401)           # токенът не е потребителски вход
+
+    def test_without_a_configured_password_the_login_is_closed_and_a_user_token_is_not_an_admin(self):
+        with mock.patch.dict(os.environ, {"ADMIN_PASSWORD": ""}):
+            self.assertEqual(self.client.post("/admin/login", json={"username": "admin", "password": "whatever-long-1"}).status_code, 503)
+        with mock.patch.dict(os.environ, {"ADMIN_EMAILS": "", "ADMIN_PASSWORD": "dalga-parola-123"}):
+            self.assertEqual(self.client.get("/admin/overview", headers=self.boss).status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

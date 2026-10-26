@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import ai_budget
 import events
 from database import User, get_db
-from deps import get_current_user
+from deps import auth_scheme, get_current_user
 from rate_limit import enforce
 
 router = APIRouter()
@@ -20,10 +20,24 @@ def is_admin(user: User) -> bool:
     return bool(user and user.email and user.email.lower() in admins and user.email_verified)
 
 
-def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if not is_admin(current_user):
+def admin_token_ok(token: str) -> bool:
+    """Отделният вход на собственика (admin_api.login): токен с typ=admin."""
+    import jwt
+    from auth import ALGORITHM, SECRET_KEY
+    try:
+        return jwt.decode(token or "", SECRET_KEY, algorithms=[ALGORITHM]).get("typ") == "admin"
+    except Exception:
+        return False
+
+
+def require_admin(credentials=Depends(auth_scheme), db: Session = Depends(get_db)):
+    """Администратор е или токенът от отделния вход (ADMIN_PASSWORD), или потребител от ADMIN_EMAILS с потвърден имейл."""
+    if credentials and credentials.scheme.lower() == "bearer" and admin_token_ok(credentials.credentials):
+        return None
+    user = get_current_user(credentials, db)
+    if not is_admin(user):
         raise HTTPException(status_code=403, detail="Нямате достъп")
-    return current_user
+    return user
 
 
 class EventIn(BaseModel):
