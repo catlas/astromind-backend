@@ -14,7 +14,7 @@ import main  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from testenv import register_and_login  # noqa: E402
 
-BIRTH = {"name": "Иван", "birth_date": "1990-05-15", "birth_time": "14:30", "lat": 42.6977, "lon": 23.3219,
+BIRTH = {"gender": "female", "name": "Иван", "birth_date": "1990-05-15", "birth_time": "14:30", "lat": 42.6977, "lon": 23.3219,
          "birth_place": "София"}
 
 
@@ -56,6 +56,13 @@ class OnboardingApiTest(unittest.TestCase):
         again = self.client.get("/insights/big-three", headers=h).json()
         self.assertEqual(again["ascendant"]["sign_bg"], "Дева")
         self.assertEqual(len(self.client.get("/profiles", headers=h).json()), 1)
+
+    def test_the_gender_is_required_for_the_main_profile(self):
+        h = register_and_login(self.client, "onboard-gender@test.bg")
+        body = {k: v for k, v in BIRTH.items() if k != "gender"}
+        r = self.client.post("/onboarding", json=body, headers=h)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("пол", r.json()["detail"])
 
     def test_invalid_birth_data(self):
         h = register_and_login(self.client, "onboard-bad@test.bg")

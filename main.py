@@ -32,7 +32,9 @@ import time_api
 import geocode_api
 import mailer
 import deployment
+import admin_api
 import onboarding_api
+from data_api import upsert_profile
 import memory_api
 from auth import (
     hash_password, verify_password, create_user_token,
@@ -83,6 +85,7 @@ app.include_router(account_api.router)
 app.include_router(data_api.router)
 app.include_router(billing_api.router)
 app.include_router(events_api.router)
+app.include_router(admin_api.router)
 app.include_router(geocode_api.router)
 app.include_router(onboarding_api.router)
 app.include_router(memory_api.router)
@@ -204,6 +207,7 @@ class UserRegister(BaseModel):
     password: str = Field(..., max_length=128)
     full_name: str = Field(..., max_length=100)
     accept_terms: bool = False
+    profile: Optional[onboarding_api.StartProfile] = None       # данните от „Безплатен анализ“: основният профил се създава с акаунта
 
 class UserLogin(BaseModel):
     email: str = Field(..., max_length=254)
@@ -225,6 +229,8 @@ async def register(user_data: UserRegister, http_request: Request, background_ta
     if error:
         raise HTTPException(status_code=400, detail=error)
 
+    start_profile = onboarding_api.start_profile_in(user_data.profile) if user_data.profile else None     # невалидни данни спират регистрацията
+
     # Проверка дали имейлът съществува, без значение от главни и малки букви
     existing_user = db.query(User).filter(func.lower(func.trim(User.email)) == email).first()
     if existing_user:
@@ -241,6 +247,9 @@ async def register(user_data: UserRegister, http_request: Request, background_ta
     )
     db.add(new_user)
     db.flush()
+    if start_profile:
+        upsert_profile(db, new_user, start_profile)
+        new_user.onboarding_completed = True
     gift = billing.signup_gift_cents()
     if gift > 0:
         billing.apply_transaction(db, new_user.id, "signup_gift", gift=gift, ref=f"signup:{new_user.id}",
@@ -249,7 +258,9 @@ async def register(user_data: UserRegister, http_request: Request, background_ta
     db.refresh(new_user)
     account_api.queue_verification(background_tasks, new_user)
     account_api._track(db, "register", new_user.id)
-    return {"message": "Успешна регистрация"}
+    if start_profile:
+        events.track(db, "onboarding_completed", new_user.id)
+    return {"message": "Успешна регистрация", "verification_required": account_api.verification_required(new_user)}
 
 @app.post("/login")
 def login(user_data: UserLogin, http_request: Request, db: Session = Depends(get_db)):
@@ -263,7 +274,9 @@ def login(user_data: UserLogin, http_request: Request, db: Session = Depends(get
     user = account_api.find_user_by_email(db, user_data.email)
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Грешен имейл или парола")
-    
+    if account_api.verification_required(user) and not user.email_verified:
+        raise HTTPException(status_code=403, detail=account_api.NOT_VERIFIED_MESSAGE)
+
     events.track(db, "login", user.id)
     return {
         "access_token": create_user_token(user),

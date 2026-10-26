@@ -549,6 +549,23 @@ def purge_old() -> int:
         return db.query(Job).filter(Job.status.notin_(ACTIVE), Job.created_at < cutoff).delete(synchronize_session=False)
 
 
+_last_unverified_purge = 0.0
+
+
+def _purge_unverified() -> None:
+    """Веднъж на час: непотвърдените акаунти по-стари от 7 дни се изтриват."""
+    global _last_unverified_purge
+    import time
+    if time.monotonic() - _last_unverified_purge < 3600 and _last_unverified_purge:
+        return
+    _last_unverified_purge = time.monotonic()
+    import account_api
+    with session_scope() as db:
+        removed = account_api.purge_unverified(db)
+    if removed:
+        print(f"🧹 Изтрити непотвърдени акаунти: {removed}")
+
+
 async def sweeper() -> None:
     """Периодично: връща прекъснатите задачи и чисти старите."""
     while True:
@@ -557,6 +574,7 @@ async def sweeper() -> None:
             for job_id in recover_stale():
                 launch(job_id)
             purge_old()
+            _purge_unverified()
         except Exception as exc:
             print(f"⚠️ Проверката на задачите не успя ({type(exc).__name__}: {str(exc)[:120]})")
 

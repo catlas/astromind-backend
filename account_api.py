@@ -2,7 +2,8 @@
 Акаунт: профил на потребителя, смяна и нулиране на парола, потвърждение на
 имейл, изтриване на акаунт и експорт на данните (GDPR).
 """
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -40,6 +41,30 @@ def user_payload(user: User) -> dict:
         "memory_enabled": bool(user.memory_enabled),
         "terms_accepted": user.terms_version == TERMS_VERSION,
     }
+
+
+# Вход само след потвърден имейл (26.10.2026). Важи за акаунти, създадени от този момент нататък: по-старите не се заключват.
+REQUIRE_EMAIL_VERIFICATION = os.getenv("REQUIRE_EMAIL_VERIFICATION", "1") == "1"
+VERIFICATION_REQUIRED_FROM = datetime(2026, 10, 26)
+UNVERIFIED_KEEP_DAYS = 7
+NOT_VERIFIED_MESSAGE = "Потвърдете имейла си, за да влезете. Изпратихме ви писмо с линк; ако не го виждате, проверете в „Спам“ или поискайте ново."
+
+
+def verification_required(user: User) -> bool:
+    return bool(REQUIRE_EMAIL_VERIFICATION and user.created_at and user.created_at >= VERIFICATION_REQUIRED_FROM)
+
+
+def purge_unverified(db: Session, days: int = UNVERIFIED_KEEP_DAYS) -> int:
+    """Изтрива непотвърдените акаунти (нови правила), по-стари от `days` дни, без внесени средства. Връща колко са изтрити."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = db.query(User).filter(User.email_verified.is_(False), User.created_at < cutoff, User.created_at >= VERIFICATION_REQUIRED_FROM,
+                                 User.paid_cents == 0).all()
+    for user in rows:
+        for model in _user_owned_models():
+            db.query(model).filter(model.user_id == user.id).delete(synchronize_session=False)
+        db.delete(user)
+    db.commit()
+    return len(rows)
 
 
 def _is_admin(user: User) -> bool:
@@ -211,7 +236,9 @@ def verify_email(data: TokenIn, db: Session = Depends(get_db)):
         user.email_verified = True
         db.commit()
         _track(db, "email_verified", user.id)
-    return {"message": "Имейлът е потвърден", "email": user.email}
+    from auth import create_user_token
+    return {"message": "Имейлът е потвърден", "email": user.email,
+            "access_token": create_user_token(user), "token_type": "bearer", "user": user_payload(user)}       # линкът влиза сам
 
 
 @router.post("/resend-verification")
@@ -226,6 +253,27 @@ async def resend_verification(current_user: User = Depends(get_current_user)):
     if not sent:
         raise HTTPException(status_code=502, detail="Не успяхме да изпратим писмото. Опитайте отново след малко.")
     return {"message": "Изпратихме ново писмо за потвърждение", "sent": True}
+
+
+class ResendPublic(BaseModel):
+    email: str = Field(..., max_length=254)
+
+
+@router.post("/resend-verification-public")
+async def resend_verification_public(data: ResendPublic, request: Request):
+    """„Изпрати отново“ преди вход: отговорът е един и същ, за да не се разкрива кои имейли са регистрирани."""
+    enforce(f"resend-pub-ip:{client_ip(request)}", 10, 3600, "Вече изпратихме няколко писма.")
+    email = (data.email or "").strip().lower()
+    enforce(f"resend-pub:{email}", 3, 3600, "Вече изпратихме няколко писма.")
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        user = find_user_by_email(db, email)
+        if user and not user.email_verified and mailer.is_configured():
+            await mailer.send_verification_email(user.email, create_purpose_token("verify", user))
+    finally:
+        db.close()
+    return {"message": "Ако имейлът е регистриран и още не е потвърден, изпратихме ново писмо."}
 
 
 # ---------------------------------------------------------------------------
