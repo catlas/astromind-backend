@@ -153,7 +153,7 @@ class PricingTextTest(unittest.TestCase):
         self.assertIn("5,00\u00a0€", steps[1]["title"])
         self.assertIn("само за основните анализи", steps[1]["text"])
         self.assertIn("от старта на таксуването", steps[1]["text"])
-        self.assertIn("+0,60\u00a0€ за целия период", steps[2]["text"])
+        self.assertIn("допълнително заплащане (предстои)", steps[2]["text"])
         self.assertNotRegex(text.lower(), r"пробен период|безплатен пробен|trial")
 
     def test_after_the_start_the_gift_is_still_limited_and_premium_is_paid_from_deposits(self):
@@ -161,7 +161,7 @@ class PricingTextTest(unittest.TestCase):
         self.assertEqual(len(steps), 3)
         self.assertIn("само за анализи за един човек", steps[0]["text"])
         self.assertIn("само от внесени средства", steps[2]["text"])
-        self.assertIn("+0,60\u00a0€ за целия период", steps[2]["text"])
+        self.assertIn("допълнително заплащане (предстои)", steps[2]["text"])
 
     def test_the_product_block_is_three_real_steps_and_the_check_scope_is_honest(self):
         result = run_node("console.log(JSON.stringify({ steps: H.PRODUCT_STEPS, scope: H.CHECK_SCOPE }));")
@@ -180,7 +180,7 @@ class PricingTextTest(unittest.TestCase):
                 self.assertNotIn("Изчисленията са точни", text, msg=name)
                 self.assertNotIn("<span className=\"text-[#5211d4] block\">Точен.</span>", text, msg=name)
         home = open(os.path.join(SRC, "pages", "Home.jsx"), encoding="utf-8").read()
-        for needle in ("HowItWorks", "PRODUCT_STEPS", "billingSteps", 'id="how-it-works"', "partnerSurchargeText(prices)"):
+        for needle in ("HowItWorks", "PRODUCT_STEPS", "billingSteps", 'id="how-it-works"', "partnerSurchargeSoon()", "PRICE_SOON", "PlanLimits"):
             self.assertIn(needle, home)
         for page in ("Balance.jsx", "Settings.jsx", "Legal.jsx"):
             self.assertIn("<HowItWorks", open(os.path.join(SRC, "pages", page), encoding="utf-8").read(), msg=page)

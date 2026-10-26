@@ -15,7 +15,7 @@ import bg_text
 import engine
 import report_export
 import report_snapshot
-from database import MemoryNote, Profile, Report, User, get_db
+from database import Job, MemoryNote, Profile, Report, User, get_db
 from deps import get_current_user
 from rate_limit import enforce
 
@@ -25,6 +25,8 @@ EXPORT_LIMIT_PER_HOUR = int(os.getenv("EXPORT_RATE_LIMIT_PER_HOUR", "30"))
 
 MAX_PROFILES = 50
 MAX_REPORT_CHARS = 400_000
+# Най-много толкова отчета се пазят на потребител; при нов отчет най-старите над границата се трият автоматично (20.10.2026)
+MAX_REPORTS_PER_USER = max(1, int(os.getenv("MAX_REPORTS_PER_USER", "50")))
 MAX_SETTINGS_BYTES = 20_000
 RELATIONS = {"self", "partner", "spouse", "friend", "child", "relative", "family", "other"}
 REPORT_TYPES = {"general", "health", "career", "money", "love", "karmic"}
@@ -271,7 +273,20 @@ def save_report(db: Session, user: User, *, content: str, report_type: str, prof
     )
     db.add(r)
     db.flush()
+    prune_reports(db, user.id)
     return r
+
+
+def prune_reports(db: Session, user_id: int, keep: Optional[int] = None) -> int:
+    """Пази последните `keep` (по подразбиране MAX_REPORTS_PER_USER) отчета на потребителя; по-старите се трият. Връща колко са изтрити."""
+    keep = MAX_REPORTS_PER_USER if keep is None else keep
+    old_ids = [row[0] for row in db.query(Report.id).filter(Report.user_id == user_id)
+               .order_by(Report.created_at.desc(), Report.id.desc()).offset(keep).all()]
+    if not old_ids:
+        return 0
+    db.query(Job).filter(Job.report_id.in_(old_ids)).update({Job.report_id: None}, synchronize_session=False)
+    db.query(Report).filter(Report.id.in_(old_ids)).delete(synchronize_session=False)
+    return len(old_ids)
 
 
 def _bg_date(value: str) -> str:

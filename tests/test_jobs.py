@@ -365,14 +365,14 @@ class SyncJobsTest(unittest.TestCase):
         blocked = self.client.get("/jobs/limits", headers=h).json()
         self.assertEqual((blocked["hour_remaining"], blocked["can_start"]), (0, False))
 
-    def test_the_default_hourly_limit_is_one_hundred(self):
+    def test_the_default_hourly_limit_is_twenty(self):
         import subprocess, sys, tempfile
         env = {k: v for k, v in os.environ.items() if k not in ("AI_RATE_LIMIT_PER_HOUR", "AI_RATE_LIMIT_PER_DAY")}
         env["DATABASE_URL"] = "sqlite:///" + os.path.join(tempfile.mkdtemp(), "limit.db")
         out = subprocess.run([sys.executable, "-c", "import jobs; print(jobs.AI_LIMIT_PER_HOUR, jobs.AI_LIMIT_PER_DAY)"],
                              cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), env=env, capture_output=True,
                              text=True, timeout=120)
-        self.assertEqual(out.stdout.split()[-2:], ["100", "60"], out.stderr[-500:])
+        self.assertEqual(out.stdout.split()[-2:], ["20", "60"], out.stderr[-500:])
 
     def test_limits_show_what_is_left_before_the_start(self):
         h = register_and_login(self.client, "j-limits@test.bg")

@@ -62,7 +62,7 @@ SWEEP_SECONDS = 60
 MAX_WAIT_SECONDS = 120
 
 # Лимити на AI заявките на потребител. Стойностите могат да се сменят през environment в Render.
-AI_LIMIT_PER_HOUR = int(os.getenv("AI_RATE_LIMIT_PER_HOUR", "100"))
+AI_LIMIT_PER_HOUR = int(os.getenv("AI_RATE_LIMIT_PER_HOUR", "20"))
 AI_LIMIT_PER_DAY = int(os.getenv("AI_RATE_LIMIT_PER_DAY", "60"))
 LIMIT_MESSAGE = "Достигнахте лимита за AI анализи."
 JOB_CREATE_LIMIT_PER_10_MIN = int(os.getenv("JOB_CREATE_RATE_LIMIT_PER_10_MIN", "60"))   # опити за създаване, включително невалидните
