@@ -588,6 +588,8 @@ def start_background() -> None:
     except Exception as exc:
         print(f"⚠️ Възстановяването на задачите не успя ({type(exc).__name__}: {str(exc)[:120]})")
     asyncio.get_running_loop().create_task(sweeper())
+    import daily_transit
+    asyncio.get_running_loop().create_task(daily_transit.worker())
 
 
 # ---------------------------------------------------------------------------

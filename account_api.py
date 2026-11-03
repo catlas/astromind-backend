@@ -40,6 +40,7 @@ def user_payload(user: User) -> dict:
         "onboarding_completed": bool(user.onboarding_completed),
         "memory_enabled": bool(user.memory_enabled),
         "report_view": user.report_view if user.report_view in ("short", "full") else "short",
+        "daily_email": bool(user.daily_email) if user.daily_email is not None else True,
         "terms_accepted": user.terms_version == TERMS_VERSION,
     }
 
@@ -106,6 +107,7 @@ class UpdateMe(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=100)
     email: Optional[str] = Field(default=None, max_length=254)
     report_view: Optional[str] = Field(default=None, max_length=10)
+    daily_email: Optional[bool] = None
 
 
 class ChangePassword(BaseModel):
@@ -131,6 +133,9 @@ async def update_me(data: UpdateMe, background_tasks: BackgroundTasks,
         if data.report_view not in ("short", "full"):
             raise HTTPException(status_code=400, detail="Изглед: кратък или пълен")
         current_user.report_view = data.report_view
+
+    if data.daily_email is not None:
+        current_user.daily_email = bool(data.daily_email)
 
     email_changed = False
     if data.email is not None and normalize_email(data.email) != normalize_email(current_user.email):

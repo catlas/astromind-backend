@@ -53,6 +53,8 @@ class User(Base):
     memory_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     # Изглед на анализите в История и след генерирането: short (по подразбиране) или full. DOCX и Markdown са винаги пълни.
     report_view = Column(String(10), nullable=False, default="short", server_default="short")
+    # Дневен транзит по имейл всяка сутрин (по подразбиране включен; спира се от Настройки или от линка в писмото)
+    daily_email = Column(Boolean, nullable=False, default=True, server_default="1")
     # Коя версия на Общите условия и Политиката за поверителност е приета и кога
     terms_version = Column(String(20), nullable=True)
     terms_accepted_at = Column(DateTime, nullable=True)
@@ -229,6 +231,24 @@ class Event(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class DailyTransit(Base):
+    """Дневният транзит на основния профил за деня (Europe/Sofia, 12:00): само блокът „Обща картина“. Не е отчет: не влиза в История и не се таксува."""
+    __tablename__ = "daily_transits"
+    __table_args__ = (UniqueConstraint("user_id", "day", name="uq_daily_transit_user_day"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    day = Column(String(10), nullable=False, index=True)           # YYYY-MM-DD по българско време
+    profile_name = Column(String(100), nullable=True)
+    status = Column(String(10), nullable=False, default="pending")  # pending | ready | failed
+    text = Column(Text, nullable=True)
+    error = Column(String(200), nullable=True)
+    email_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    emailed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class MemoryNote(Base):
     """
     Бележка, която потребителят иска AI да знае (напр. „работя като учител“).
@@ -249,7 +269,7 @@ class MemoryNote(Base):
 
 
 # Модели с колона user_id: трият се и се експортират заедно с акаунта
-USER_OWNED_MODELS = ["Profile", "Job", "Report", "CoinTransaction", "Purchase", "Event", "MemoryNote"]
+USER_OWNED_MODELS = ["Profile", "Job", "Report", "CoinTransaction", "Purchase", "Event", "MemoryNote", "DailyTransit"]
 
 
 def get_db():
