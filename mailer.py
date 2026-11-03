@@ -129,12 +129,14 @@ def _tls_context() -> ssl.SSLContext:
 # SMTP
 # ---------------------------------------------------------------------------
 
-def _build_message(to: str, subject: str, text: str, html: str) -> EmailMessage:
+def _build_message(to: str, subject: str, text: str, html: str, reply_to: Optional[str] = None) -> EmailMessage:
     # Чисто 7-битово писмо: минава през всеки сървър, без да разчита на 8BITMIME
     msg = EmailMessage(policy=MAIL_POLICY)
     msg["From"] = _smtp_from()
     msg["To"] = to
     msg["Subject"] = subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
     # Date и Message-ID с домейна на подателя: без тях писмата по-лесно стигат до спам
     msg["Date"] = formatdate(usegmt=True)
     msg["Message-ID"] = make_msgid(domain=_from_domain())
@@ -194,8 +196,8 @@ def _authenticate(smtp, user: str, password: str):
         smtp.login(user, password)  # напр. сървър само с CRAM-MD5
 
 
-def _send_smtp(to: str, subject: str, text: str, html: str):
-    msg = _build_message(to, subject, text, html)
+def _send_smtp(to: str, subject: str, text: str, html: str, reply_to: Optional[str] = None):
+    msg = _build_message(to, subject, text, html, reply_to)
     with _smtp_session() as smtp:
         user = _env("SMTP_USER")
         if user:
@@ -256,7 +258,7 @@ def _safe_error_text(exc: Exception) -> str:
 # Изпращане
 # ---------------------------------------------------------------------------
 
-async def send_email(to: str, subject: str, text: str, html: str) -> bool:
+async def send_email(to: str, subject: str, text: str, html: str, reply_to: Optional[str] = None) -> bool:
     provider = "Resend" if _env("RESEND_API_KEY") else None
     try:
         if provider:
@@ -265,13 +267,13 @@ async def send_email(to: str, subject: str, text: str, html: str) -> bool:
                     "https://api.resend.com/emails",
                     headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
                     json={"from": os.getenv("MAIL_FROM", "AstroMind <onboarding@resend.dev>"),
-                          "to": [to], "subject": subject, "text": text, "html": html},
+                          "to": [to], "subject": subject, "text": text, "html": html, **({"reply_to": reply_to} if reply_to else {})},
                 )
                 r.raise_for_status()
             return True
         if _config_problem() is None:
             provider = f"SMTP {_smtp_label()}"
-            await asyncio.to_thread(_send_smtp, to, subject, text, html)
+            await asyncio.to_thread(_send_smtp, to, subject, text, html, reply_to)
             print(f"✉️  Изпратен имейл „{subject}“ през {provider}")
             return True
     except Exception as exc:

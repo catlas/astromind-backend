@@ -33,6 +33,7 @@ import geocode_api
 import mailer
 import deployment
 import admin_api
+import contact_api
 import daily_transit
 import onboarding_api
 from data_api import upsert_profile
@@ -88,6 +89,7 @@ app.include_router(billing_api.router)
 app.include_router(events_api.router)
 app.include_router(admin_api.router)
 app.include_router(daily_transit.router)
+app.include_router(contact_api.router)
 app.include_router(geocode_api.router)
 app.include_router(onboarding_api.router)
 app.include_router(memory_api.router)
