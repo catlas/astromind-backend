@@ -39,6 +39,7 @@ def user_payload(user: User) -> dict:
         "is_admin": _is_admin(user),
         "onboarding_completed": bool(user.onboarding_completed),
         "memory_enabled": bool(user.memory_enabled),
+        "report_view": user.report_view if user.report_view in ("short", "full") else "short",
         "terms_accepted": user.terms_version == TERMS_VERSION,
     }
 
@@ -104,6 +105,7 @@ def queue_verification(background: BackgroundTasks, user: User):
 class UpdateMe(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=100)
     email: Optional[str] = Field(default=None, max_length=254)
+    report_view: Optional[str] = Field(default=None, max_length=10)
 
 
 class ChangePassword(BaseModel):
@@ -124,6 +126,11 @@ async def update_me(data: UpdateMe, background_tasks: BackgroundTasks,
         if not (1 <= len(full_name) <= 100):
             raise HTTPException(status_code=400, detail="Въведете име до 100 символа")
         current_user.full_name = full_name
+
+    if data.report_view is not None:
+        if data.report_view not in ("short", "full"):
+            raise HTTPException(status_code=400, detail="Изглед: кратък или пълен")
+        current_user.report_view = data.report_view
 
     email_changed = False
     if data.email is not None and normalize_email(data.email) != normalize_email(current_user.email):

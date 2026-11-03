@@ -51,6 +51,8 @@ class User(Base):
     onboarding_completed = Column(Boolean, nullable=False, default=False, server_default="0")
     # Потребителят решава дали бележките му се подават на AI
     memory_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Изглед на анализите в История и след генерирането: short (по подразбиране) или full. DOCX и Markdown са винаги пълни.
+    report_view = Column(String(10), nullable=False, default="short", server_default="short")
     # Коя версия на Общите условия и Политиката за поверителност е приета и кога
     terms_version = Column(String(20), nullable=True)
     terms_accepted_at = Column(DateTime, nullable=True)
